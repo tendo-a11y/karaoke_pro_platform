@@ -1,0 +1,218 @@
+:root {
+  --bg: #14161c;
+  --panel: #1d2029;
+  --panel-alt: #242835;
+  --text: #eef0f5;
+  --muted: #8b91a5;
+  --accent: #ffb020;
+  --ok: #2fbf71;
+  --danger: #e5484d;
+  --border: #2c3040;
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+body { margin: 0; background: var(--bg); color: var(--text); }
+
+.app-shell {
+  min-height: 100vh;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 16px 16px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.app-shell.centered {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 8px;
+  padding: 24px;
+}
+
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.app-header h1 { margin: 0; font-size: 20px; }
+.app-header__table {
+  font-size: 13px;
+  color: var(--accent);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px;
+}
+
+.panel h2 {
+  margin: 0 0 12px;
+  font-size: 15px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.panel h3 {
+  margin: 18px 0 8px;
+  font-size: 12px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+input {
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 16px;
+}
+
+input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+button {
+  background: var(--accent);
+  color: #1a1400;
+  border: none;
+  border-radius: 10px;
+  padding: 12px 16px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+button.btn--danger {
+  background: var(--danger);
+  color: #2a0a0b;
+}
+
+.link-btn {
+  background: none;
+  color: var(--accent);
+  padding: 6px 0;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+}
+.link-btn:disabled { opacity: 0.5; }
+
+.banner {
+  margin-top: 10px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 14px;
+}
+.banner--error { background: rgba(229, 72, 77, 0.12); color: var(--danger); }
+.banner--ok { background: rgba(47, 191, 113, 0.12); color: var(--ok); }
+
+.error-text { color: var(--danger); }
+
+.empty-hint { color: var(--muted); margin: 0; font-size: 14px; }
+
+.order-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.order-row {
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.club-list__item { width: 100%; }
+
+.vip-stat-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 15px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+.vip-stat-row:last-child { border-bottom: none; }
+
+.club-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.club-detail__admin-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.kj-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.kj-row__main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.kj-row__name-input { flex: 1; padding: 8px 10px; font-size: 14px; }
+.kj-row__stats { font-size: 12px; color: var(--muted); }
+.kj-row__actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.kj-row__id { font-size: 11px; color: var(--muted); }
+
+.qr-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 10px;
+}
+
+.qr-card {
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+  text-align: center;
+  width: 200px;
+}
+.qr-card__label { font-weight: 700; margin-bottom: 6px; }
+.qr-card img { display: block; margin: 0 auto; border-radius: 6px; background: #fff; padding: 4px; }
+.qr-card__url {
+  margin-top: 6px;
+  font-size: 10px;
+  color: var(--muted);
+  word-break: break-all;
+}
+
+/* Печать листа QR-кодов — убираем шапку/формы, оставляем только сетку кодов. */
+@media print {
+  .app-header, .link-btn, .club-form, .club-detail__admin-actions { display: none; }
+}
