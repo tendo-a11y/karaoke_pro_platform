@@ -400,6 +400,234 @@ function VipPanel({ token, clubId, socket }) {
   );
 }
 
+// Экран категорий песни (доп. ТЗ "KJ Pro", пункты KJ-01/KJ-03/KJ-07) —
+// категория это переиспользованная модель Service ("услуга/тариф"), её же
+// видит гость при заказе (routes/guest.py::list_services, не менялось);
+// здесь роль 2 (KJ) сама ведёт список — добавляет, меняет
+// название/описание/цену, включает "бесплатно" для конкретной категории
+// (галочка is_free — отдельный переключатель, НЕ совпадает с общим клубным
+// "Бесплатным вечером" из KJ-02, тот будет сделан отдельно) и удаляет
+// неиспользуемые. Деньги за категорию по факту не проходят через эту
+// систему как настоящий платёж (решение пользователя) — цена нужна для
+// учёта/отчётности. Если у клуба ещё нет ни одной категории, бэкенд сам
+// подставит набор по умолчанию из реальных данных старого бота (см.
+// backend/services/category_service.py::DEFAULT_CATEGORIES) — экран не
+// должен показывать пустой список при первом открытии.
+function CategoriesPanel({ token, clubId }) {
+  const [categories, setCategories] = useState(null);
+  const [loadError, setLoadError] = useState(null);
+  const [actionError, setActionError] = useState(null);
+  const [busyKey, setBusyKey] = useState(null);
+  const [drafts, setDrafts] = useState({});
+  const [newDraft, setNewDraft] = useState({ name: "", description: "", price: "", isFree: false });
+
+  async function reload() {
+    try {
+      const data = await api.listCategories(token, clubId);
+      setCategories(data);
+      setDrafts({});
+      setLoadError(null);
+    } catch (err) {
+      setLoadError(err instanceof ApiError ? err.message : String(err));
+    }
+  }
+
+  useEffect(() => {
+    reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clubId]);
+
+  function draftFor(category) {
+    return (
+      drafts[category.id] || {
+        name: category.name,
+        description: category.description || "",
+        price: String(category.price),
+        isFree: category.is_free,
+      }
+    );
+  }
+
+  function updateDraft(categoryId, category, patch) {
+    setDrafts((prev) => {
+      const base =
+        prev[categoryId] || {
+          name: category.name,
+          description: category.description || "",
+          price: String(category.price),
+          isFree: category.is_free,
+        };
+      return { ...prev, [categoryId]: { ...base, ...patch } };
+    });
+  }
+
+  async function handleSave(category) {
+    const draft = draftFor(category);
+    setBusyKey(`save-${category.id}`);
+    setActionError(null);
+    try {
+      await api.updateCategory(token, clubId, category.id, {
+        name: draft.name,
+        description: draft.description,
+        price: draft.price,
+        is_free: draft.isFree,
+      });
+      await reload();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  async function handleDelete(categoryId) {
+    setBusyKey(`del-${categoryId}`);
+    setActionError(null);
+    try {
+      await api.deleteCategory(token, clubId, categoryId);
+      await reload();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  async function handleCreate(event) {
+    event.preventDefault();
+    if (!newDraft.name.trim() || newDraft.price === "") return;
+    setBusyKey("create");
+    setActionError(null);
+    try {
+      await api.createCategory(token, clubId, {
+        name: newDraft.name.trim(),
+        description: newDraft.description.trim(),
+        price: newDraft.price,
+        isFree: newDraft.isFree,
+      });
+      setNewDraft({ name: "", description: "", price: "", isFree: false });
+      await reload();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  if (loadError) return <div className="banner banner--error">{loadError}</div>;
+  if (!categories) return <p className="empty-hint">Загрузка…</p>;
+
+  return (
+    <div className="categories-panel">
+      {actionError && <div className="banner banner--error">{actionError}</div>}
+
+      <section>
+        <h2>Категории песни ({categories.length})</h2>
+        <ul className="categories-list">
+          {categories.map((category) => {
+            const draft = draftFor(category);
+            const saving = busyKey === `save-${category.id}`;
+            const deleting = busyKey === `del-${category.id}`;
+            return (
+              <li key={category.id} className="category-row">
+                <input
+                  className="category-row__name"
+                  type="text"
+                  value={draft.name}
+                  onChange={(e) => updateDraft(category.id, category, { name: e.target.value })}
+                  disabled={saving || deleting}
+                />
+                <input
+                  className="category-row__description"
+                  type="text"
+                  placeholder="Описание"
+                  value={draft.description}
+                  onChange={(e) => updateDraft(category.id, category, { description: e.target.value })}
+                  disabled={saving || deleting}
+                />
+                <input
+                  className="category-row__price"
+                  type="number"
+                  min="0"
+                  value={draft.price}
+                  onChange={(e) => updateDraft(category.id, category, { price: e.target.value })}
+                  disabled={saving || deleting}
+                />
+                <label className="category-row__free">
+                  <input
+                    type="checkbox"
+                    checked={draft.isFree}
+                    onChange={(e) => updateDraft(category.id, category, { isFree: e.target.checked })}
+                    disabled={saving || deleting}
+                  />
+                  Бесплатно
+                </label>
+                <div className="category-row__actions">
+                  <button
+                    type="button" className="btn-link" disabled={saving || deleting}
+                    onClick={() => handleSave(category)}
+                  >
+                    {saving ? "Сохраняем…" : "💾 Сохранить"}
+                  </button>
+                  <button
+                    type="button" className="btn btn--reject" disabled={saving || deleting}
+                    onClick={() => handleDelete(category.id)}
+                  >
+                    {deleting ? "Удаляем…" : "🗑 Удалить"}
+                  </button>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      </section>
+
+      <section>
+        <h2>Добавить категорию</h2>
+        <form className="category-add-form" onSubmit={handleCreate}>
+          <input
+            type="text"
+            placeholder="Название"
+            value={newDraft.name}
+            onChange={(e) => setNewDraft((prev) => ({ ...prev, name: e.target.value }))}
+            disabled={busyKey === "create"}
+          />
+          <input
+            type="text"
+            placeholder="Описание (необязательно)"
+            value={newDraft.description}
+            onChange={(e) => setNewDraft((prev) => ({ ...prev, description: e.target.value }))}
+            disabled={busyKey === "create"}
+          />
+          <input
+            type="number"
+            min="0"
+            placeholder="Цена"
+            value={newDraft.price}
+            onChange={(e) => setNewDraft((prev) => ({ ...prev, price: e.target.value }))}
+            disabled={busyKey === "create"}
+          />
+          <label className="category-row__free">
+            <input
+              type="checkbox"
+              checked={newDraft.isFree}
+              onChange={(e) => setNewDraft((prev) => ({ ...prev, isFree: e.target.checked }))}
+              disabled={busyKey === "create"}
+            />
+            Бесплатно
+          </label>
+          <button
+            type="submit" className="btn btn--accent"
+            disabled={busyKey === "create" || !newDraft.name.trim() || newDraft.price === ""}
+          >
+            {busyKey === "create" ? "Добавляем…" : "➕ Добавить категорию"}
+          </button>
+        </form>
+      </section>
+    </div>
+  );
+}
+
 export default function App() {
   const token = useMemo(() => resolveToken(), []);
   const [me, setMe] = useState(null);
@@ -413,7 +641,8 @@ export default function App() {
   const [dropActive, setDropActive] = useState(false);
   const [manualAddBusy, setManualAddBusy] = useState(false);
   const [manualAddError, setManualAddError] = useState(null);
-  // 'orders' | 'vip' — переключение верхнеуровневых экранов (Block D KJ Pro).
+  // 'orders' | 'vip' | 'categories' — переключение верхнеуровневых экранов
+  // (Block D KJ Pro; 'categories' добавлен доп. ТЗ "KJ Pro", KJ-01/03/07).
   const [view, setView] = useState("orders");
   // Реф нужен эффекту ниже (disconnect в cleanup без пересоздания подписок),
   // а socketInstance в state — чтобы VipPanel мог реагировать на появление
@@ -622,15 +851,31 @@ export default function App() {
         <span className={`conn-badge ${connected ? "conn-badge--ok" : "conn-badge--off"}`}>
           {connected ? "● online" : "○ переподключение…"}
         </span>
-        <button type="button" className="btn-link" onClick={() => setView(view === "orders" ? "vip" : "orders")}>
-          {view === "orders" ? "⭐ VIP" : "← Заказы"}
-        </button>
+        <div className="app-header__nav">
+          {view !== "orders" && (
+            <button type="button" className="btn-link" onClick={() => setView("orders")}>
+              ← Заказы
+            </button>
+          )}
+          {view !== "vip" && (
+            <button type="button" className="btn-link" onClick={() => setView("vip")}>
+              ⭐ VIP
+            </button>
+          )}
+          {view !== "categories" && (
+            <button type="button" className="btn-link" onClick={() => setView("categories")}>
+              🎚 Категории
+            </button>
+          )}
+        </div>
       </header>
 
       {actionError && <div className="banner banner--error">{actionError}</div>}
 
       {view === "vip" ? (
         <VipPanel token={token} clubId={me.club_id} socket={socketInstance} />
+      ) : view === "categories" ? (
+        <CategoriesPanel token={token} clubId={me.club_id} />
       ) : (
         <main className="app-main">
           <section>
