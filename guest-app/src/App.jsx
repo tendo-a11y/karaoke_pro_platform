@@ -1,1210 +1,839 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ApiError, api, getMockGoogleCredential, loadStoredSession, storeSession } from "./api";
+import { api, ApiError, resolveToken } from "./api";
+import { connectSocket } from "./socket";
 import "./App.css";
 
+// Фоновый опрос живой очереди VirtualDJ — та же идея, что и POLL_QUEUE_MS в
+// Guest App (guest-app/src/App.jsx): WebSocket ("queue_updated") ловит
+// изменения, сделанные ЧЕРЕЗ наш Backend (confirm_order), но ничего не знает
+// о песне, которую KJ добавил или переставил прямо в самом VirtualDJ, минуя
+// Guest App — такие изменения увидит только опрос. Согласовано с
+// пользователем (план "Шаг 4: добавляем постоянный polling live queue в
+// KJ Pro") — без перезагрузки страницы и без действий KJ.
+const POLL_QUEUE_MS = 2500;
+
 const STATUS_LABELS = {
-  pending: "⏳ Ожидает подтверждения KJ",
+  pending: "⏳ Ожидает",
   processing: "⚙️ Обрабатывается",
-  queued: "🎶 В очереди",
+  queued: "🎶 В очереди VDJ",
   playing: "▶️ Играет",
-  completed: "✅ Спето",
+  completed: "✅ Завершено",
   rejected: "❌ Отклонено",
-  error: "⚠️ Ошибка, обратитесь к KJ",
+  error: "⚠️ Ошибка VDJ",
 };
 
-// Опрос вместо WebSocket — сознательное ограничение первого шага: у
-// Backend пока нет WebSocket-подключения для Guest App (см.
-// backend/sockets.py::handle_connect — принимает только KJ JWT, и
-// комментарий у emit_chat_message о том, что гость видит сообщения через
-// поллинг). Как только появится guest-подключение к сокету — эти интервалы
-// заменяются на socket-события, сам API (api.js) не изменится.
-const POLL_ORDERS_MS = 4000;
-const POLL_QUEUE_MS = 5000;
-const POLL_CHAT_MS = 4000;
-const POLL_ME_MS = 5000;
-const POLL_FAVORITES_MS = 5000;
-const POLL_TABLE_GROUP_MS = 5000;
-const POLL_VIP_TRANSACTIONS_MS = 8000;
-
-// Пикер периода для "Моих заказов" — старое: handlers/vip.py
-// ::vip_order_history (days_map = {"today":1,"week":7,"month":30}, только
-// VIP). Здесь тот же набор периодов, но доступно всем ролям.
-const ORDER_HISTORY_PERIODS = [
-  { label: "Сегодня", days: 1 },
-  { label: "Неделя", days: 7 },
-  { label: "Месяц", days: 30 },
-  { label: "Все", days: null },
-];
-
-// Иконка+знак по типу операции для единой ленты "Финансы" — старое:
-// handlers/vip.py::vip_finances показывал 4 отдельные Telegram-секции по
-// типу с промежуточными итогами; здесь одна хронологическая лента (см.
-// отчёт по Finance/cashback history), но подпись по типу сохраняем.
-const TX_TYPE_META = {
-  topup: { icon: "➕", label: "Начисление", sign: "+" },
-  manual_debit: { icon: "➖", label: "Списание KJ", sign: "−" },
-  order_payment: { icon: "🎵", label: "Оплата заказа", sign: "−" },
-  cashback: { icon: "🎁", label: "Кэшбэк", sign: "+" },
-  order_refund: { icon: "↩️", label: "Возврат", sign: "+" },
-};
-
-// ТЗ п.45 (финальная единая модель входа): QR-код больше никогда не
-// приносит номер стола — сессия всегда создаётся без стола, независимо
-// от того, что зашито в самой ссылке. Отсюда убран разбор table_no/table
-// из URL (старая ветка "стол уже известен из QR" полностью убрана).
-function parseLinkParams() {
-  const url = new URL(window.location.href);
-  const clubIdRaw = url.searchParams.get("club_id") ?? url.searchParams.get("club");
-  const clubId = clubIdRaw != null ? Number(clubIdRaw) : null;
-  return { clubId: Number.isFinite(clubId) ? clubId : null };
+function formatOrderTime(isoString) {
+  if (!isoString) return "";
+  const date = new Date(isoString);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
-function OrderRow({
-  order, onFavorite, favoriteBusy,
-  token, services, isReplacing, onToggleReplace, onReplace, replaceBusy,
-}) {
-  const label = STATUS_LABELS[order.status] || order.status;
-  return (
-    <li className={`order-row status-${order.status}`}>
-      <div className="order-row__song">🎵 {order.song_title}</div>
-      {order.artist && <div className="order-row__artist">🎤 {order.artist}</div>}
-      <div className="order-row__status">{label}</div>
-      {order.error_message && <div className="order-row__error">{order.error_message}</div>}
-      <div className="order-row__actions">
-        {onFavorite && (
-          <button
-            type="button"
-            className="link-btn"
-            disabled={favoriteBusy}
-            onClick={() => onFavorite(order)}
-          >
-            ➕ В избранное
-          </button>
-        )}
-        {/* order.can_replace вычисляется на бэкенде по утверждённой матрице
-        замены песни (см. vdj_service.can_replace_order) — фронтенд не
-        дублирует эту логику, только показывает/прячет кнопку по флагу. */}
-        {order.can_replace && (
-          <button type="button" className="link-btn" onClick={() => onToggleReplace(order.id)}>
-            {isReplacing ? "Свернуть" : "🔁 Заменить песню"}
-          </button>
-        )}
-      </div>
-      {isReplacing && (
-        <ReplaceForm
-          order={order}
-          token={token}
-          services={services}
-          busy={replaceBusy}
-          onSubmit={onReplace}
-          onCancel={() => onToggleReplace(order.id)}
-        />
-      )}
-    </li>
-  );
-}
-
-// VIP-панель (Role 3, аудит п.8-9-10-11): "стать VIP" — это заявка,
-// которую одобряет KJ, ставя статус на постоянный профиль гостя (ТЗ
-// п.45). Старый одноразовый access_code/redeem для входа под VIP на
-// другом устройстве удалён целиком вместе с самим механизмом — постоянство
-// личности теперь целиком держится на Google (см. GuestAccount), новый
-// вход под тем же Google-аккаунтом сам восстанавливает VIP-статус, никакой
-// код для этого предъявлять не нужно.
-function VipPanel({ token, meInfo }) {
-  const [requesting, setRequesting] = useState(false);
-  const [requestSent, setRequestSent] = useState(false);
-  const [error, setError] = useState(null);
-
-  async function handleRequestVip() {
-    setRequesting(true);
-    setError(null);
-    try {
-      await api.requestVip(token);
-      setRequestSent(true);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : String(err));
-    } finally {
-      setRequesting(false);
-    }
-  }
-
-  if (meInfo.is_vip) {
-    return (
-      <section className="panel vip-panel vip-panel--active">
-        <h2>⭐ VIP-профиль</h2>
-        <div className="vip-stat-row">
-          <span>Баланс</span>
-          <strong>{meInfo.vip.balance.toFixed(2)}</strong>
-        </div>
-        <div className="vip-stat-row">
-          <span>Кэшбэк</span>
-          <strong>{meInfo.vip.cashback_percent}%</strong>
-        </div>
-      </section>
-    );
-  }
-
-  return (
-    <section className="panel vip-panel">
-      <h2>⭐ VIP-статус</h2>
-      {error && <div className="banner banner--error">{error}</div>}
-      {meInfo.vip_request_pending || requestSent ? (
-        <p className="empty-hint">Заявка отправлена — ждите решения ведущего.</p>
-      ) : (
-        <button type="button" onClick={handleRequestVip} disabled={requesting}>
-          {requesting ? "Отправляем…" : "🎟 Стать VIP"}
-        </button>
-      )}
-    </section>
-  );
-}
-
-// Финансы/история транзакций (Role 3, старое: handlers/vip.py::vip_finances
-// — там 4 отдельные секции по типу с промежуточными итогами каждая, здесь
-// по принятому решению единая хронологическая лента, см. отчёт по
-// Finance/cashback history). Показываем только VIP-гостям — у обычных
-// гостей эта лента всегда пуста (транзакции существуют только у VIP).
-function VipHistoryPanel({ token }) {
-  const [transactions, setTransactions] = useState([]);
-  const [error, setError] = useState(null);
-  const [loaded, setLoaded] = useState(false);
-
-  const refresh = useCallback(async () => {
-    try {
-      const data = await api.listVipTransactions(token);
-      setTransactions(data);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : String(err));
-    } finally {
-      setLoaded(true);
-    }
-  }, [token]);
-
-  // Поллинг, а не разовая загрузка — баланс/история меняются асинхронно
-  // (ручная корректировка KJ, завершение песни с кэшбэком), у Guest App
-  // нет WebSocket-подключения (см. комментарий у POLL_*_MS выше). Тот же
-  // принятый oxlint "set-state-in-effect" случай, что и в остальных
-  // поллинг-панелях этого файла.
-  useEffect(() => {
-    refresh();
-    const id = setInterval(refresh, POLL_VIP_TRANSACTIONS_MS);
-    return () => clearInterval(id);
-  }, [refresh]);
-
-  if (!loaded) return null;
-
-  return (
-    <section className="panel vip-history-panel">
-      <h2>🧾 Финансы</h2>
-      {error && <div className="banner banner--error">{error}</div>}
-      {transactions.length === 0 ? (
-        <p className="empty-hint">Пока нет операций по счёту.</p>
-      ) : (
-        <ul className="order-list">
-          {transactions.map((tx) => {
-            const meta = TX_TYPE_META[tx.type] || { icon: "•", label: tx.type, sign: "" };
-            return (
-              <li key={tx.id} className="order-row vip-tx-row">
-                <div className="vip-tx-row__main">
-                  <span>{meta.icon} {meta.label}</span>
-                  <strong className={meta.sign === "+" ? "vip-tx-amount--credit" : "vip-tx-amount--debit"}>
-                    {meta.sign}{tx.amount.toFixed(2)}
-                  </strong>
-                </div>
-                {tx.description && <div className="order-row__artist">{tx.description}</div>}
-                <div className="order-row__status">{new Date(tx.created_at).toLocaleString()}</div>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </section>
-  );
-}
-
-function FavoritesPanel({ token, onOrdered, orderingDisabled }) {
-  const [favorites, setFavorites] = useState([]);
-  const [error, setError] = useState(null);
-  const [busyId, setBusyId] = useState(null);
-
-  const refresh = useCallback(async () => {
-    try {
-      const data = await api.listFavorites(token);
-      setFavorites(data);
-    } catch {
-      // Список избранного не критичен для основного потока заказа.
-    }
-  }, [token]);
-
-  // Опрос, а не разовая загрузка: добавление в избранное происходит из
-  // OrderRow в родительском App (кнопка "В избранное" под заказом), у
-  // которого нет прямой ссылки на состояние этой панели — без периодического
-  // опроса свежедобавленная песня не появилась бы в списке до перезагрузки
-  // страницы. Тот же принятый oxlint "set-state-in-effect" случай, что и в
-  // ChatPanel/опросе заказов/очереди/профиля выше (нет WebSocket у Guest App).
-  useEffect(() => {
-    refresh();
-    const id = setInterval(refresh, POLL_FAVORITES_MS);
-    return () => clearInterval(id);
-  }, [refresh]);
-
-  async function handleReorder(favoriteId) {
-    setBusyId(favoriteId);
-    setError(null);
-    try {
-      await api.reorderFavorite(token, favoriteId);
-      await onOrdered();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : String(err));
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  async function handleDelete(favoriteId) {
-    setBusyId(favoriteId);
-    try {
-      await api.deleteFavorite(token, favoriteId);
-      await refresh();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : String(err));
-    } finally {
-      setBusyId(null);
-    }
-  }
-
-  return (
-    <section className="panel">
-      <h2>☆ Избранное</h2>
-      {error && <div className="banner banner--error">{error}</div>}
-      {favorites.length === 0 ? (
-        <p className="empty-hint">Пока пусто — добавляйте песни из "Моих заказов".</p>
-      ) : (
-        <ul className="order-list">
-          {favorites.map((f) => (
-            <li key={f.id} className="order-row">
-              <div className="order-row__song">🎵 {f.song_title}</div>
-              {f.artist && <div className="order-row__artist">🎤 {f.artist}</div>}
-              <div className="favorite-actions">
-                <button
-                  type="button"
-                  disabled={busyId === f.id || orderingDisabled}
-                  onClick={() => handleReorder(f.id)}
-                  title={orderingDisabled ? "Недоступно, пока вы не одобренный участник группового стола" : undefined}
-                >
-                  🔁 Заказать снова
-                </button>
-                <button
-                  type="button"
-                  className="link-btn"
-                  disabled={busyId === f.id}
-                  onClick={() => handleDelete(f.id)}
-                >
-                  🗑 Удалить
-                </button>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
-  );
-}
-
-// Поиск по каталогу клуба (Role 3/4/5, аудит п.1). Каталог заполняется
-// только через CSV-импорт KJ (POST /api/kj/songs/import) — как и в старом
-// боте, синхронизации с VirtualDJ нет. Выбор результата не создаёт заказ
-// сам по себе (в отличие от старого инлайн-поиска Telegram, где выбор
-// вставлял текст в чат) — здесь это просто заполняет форму заказа ниже,
-// потому что в Guest App нет аналога "отправить сообщение в чат боту": сам
-// алгоритм поиска (подстрока/сортировка/лимит 50) перенесён 1:1, а способ
-// передать выбор в форму — необходимая адаptация под веб-UI, не новая
-// бизнес-логика поиска.
+// Drag-and-drop вместо кнопки "Подтвердить" — новое мастер-ТЗ требует
+// управлять очередью перетаскиванием, без confirm-кнопок (карточка
+// заказа перетаскивается в панель "Очередь VirtualDJ", это и есть
+// подтверждение — вызывает тот же PUT /api/kj/order/<id>/confirm, что
+// раньше вызывала кнопка). "Отклонить" остаётся кнопкой: это решение по
+// приёму заказа, а не операция над очередью, ТЗ её не запрещает.
 //
-// РЕШЕНИЕ ПОЛЬЗОВАТЕЛЯ (2026-09): этот компонент больше НЕ показывается
-// гостю нигде в интерфейсе — практика показала, что каталог клуба обычно
-// пуст (пока KJ не загрузит CSV), из-за чего гость видит только "ничего не
-// найдено" и путает это с поломкой. Убрано намеренно только само поле у
-// гостя — сама возможность (поиск по каталогу, импорт CSV у KJ) оставлена
-// в коде на будущее, ничего не удалялось из backend. Компонент оставлен
-// неиспользуемым сознательно (см. предупреждение линтера "не используется"
-// — это ожидаемо), а не забыт.
-const SEARCH_DEBOUNCE_MS = 300;
-
-function SongSearch({ token, onPick }) {
-  const [query, setQuery] = useState("");
-  const [results, setResults] = useState([]);
-  const [searching, setSearching] = useState(false);
-
-  // oxlint "set-state-in-effect" — принятый случай, как и у остальных
-  // опросов выше: этот эффект синхронизирует результаты поиска с внешней
-  // системой (backend), реагируя на изменение query, а не на прямое
-  // событие ввода (нужен debounce через setTimeout, не в обработчике).
-  useEffect(() => {
-    const q = query.trim();
-    if (!q) {
-      setResults([]);
-      setSearching(false);
-      return undefined;
-    }
-    setSearching(true);
-    let cancelled = false;
-    const id = setTimeout(async () => {
-      try {
-        const data = await api.searchSongs(token, q);
-        if (!cancelled) setResults(data);
-      } catch {
-        if (!cancelled) setResults([]);
-      } finally {
-        if (!cancelled) setSearching(false);
-      }
-    }, SEARCH_DEBOUNCE_MS);
-    return () => {
-      cancelled = true;
-      clearTimeout(id);
-    };
-  }, [query, token]);
-
+// Реализовано на нативном HTML5 Drag and Drop API, без новой зависимости
+// — сознательное ограничение первого шага: нативный DnD не работает на
+// touch-устройствах (нет тач-событий), только мышью на десктопе. Если KJ
+// Pro должен открываться с планшета/телефона, здесь потребуется
+// библиотека с pointer-событиями (например dnd-kit) — отдельный шаг.
+function OrderCard({ order, busy, dragging, onReject, onDragStart, onDragEnd }) {
+  const tableLabel = order.table_no == null ? "Без стола" : `Стол ${order.table_no}`;
+  const draggable = order.status === "pending" && !busy;
   return (
-    <div className="song-search">
-      <input
-        type="text"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        placeholder="🔍 Поиск по каталогу клуба"
-      />
-      {searching && <p className="empty-hint">Ищем…</p>}
-      {!searching && query.trim() && results.length === 0 && (
-        <p className="empty-hint">Ничего не найдено в каталоге клуба.</p>
-      )}
-      {results.length > 0 && (
-        <ul className="song-search__results">
-          {results.map((s) => (
-            <li key={s.id}>
-              <button
-                type="button"
-                className="link-btn"
-                onClick={() => {
-                  onPick(s);
-                  setQuery("");
-                  setResults([]);
-                }}
-              >
-                🎵 {s.artist ? `${s.artist} — ${s.title}` : s.title}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
-
-// Поиск песни тремя способами (Role 3/4/5). Раньше это было одно окошко
-// свободного текста (AiSearch) — гость мог вставить туда же ссылку, и
-// backend сам определял, что это ссылка, а не описание (см.
-// backend/services/ai_search_service.py::_looks_like_link/_resolve_link).
-// По просьбе пользователя (2026-09) это теперь явные три кнопки-режима, а
-// не спрятанное автоопределение: гость сам выбирает, чем ищет. "Ссылка" и
-// "ИИ-поиск" отправляют текст в тот же самый эндпоинт api.aiSearchSongs —
-// вся разница только в подсказке и плейсхолдере, backend не поменялся.
-// "Скриншот" — согласованный со пользователем следующий шаг, ещё не
-// реализован (нет пока backend-части, которая читает картинку): кнопка
-// есть, но честно показывает "скоро", ничего не изображая из себя рабочим,
-// пока это не так на самом деле.
-const FINDER_MODES = [
-  { key: "text", label: "🤖 ИИ-поиск" },
-  { key: "link", label: "🔗 Ссылка" },
-  { key: "screenshot", label: "📷 Скриншот" },
-];
-
-function AiSearch({ token, onPick }) {
-  const [mode, setMode] = useState("text");
-  const [text, setText] = useState("");
-  const [results, setResults] = useState([]);
-  const [searching, setSearching] = useState(false);
-  const [searched, setSearched] = useState(false);
-  const [error, setError] = useState(null);
-
-  function switchMode(nextMode) {
-    setMode(nextMode);
-    setText("");
-    setResults([]);
-    setSearched(false);
-    setError(null);
-  }
-
-  async function handleSearch(event) {
-    event.preventDefault();
-    if (!text.trim()) return;
-    setSearching(true);
-    setError(null);
-    setSearched(false);
-    try {
-      const data = await api.aiSearchSongs(token, text.trim());
-      setResults(data);
-      setSearched(true);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : String(err));
-    } finally {
-      setSearching(false);
-    }
-  }
-
-  const placeholder = mode === "link"
-    ? "🔗 Вставьте ссылку на YouTube, Apple Music или Spotify"
-    : "🤖 Опишите песню своими словами";
-  const emptyHint = mode === "link"
-    ? "По этой ссылке не удалось определить песню — проверьте, что это ссылка на конкретный трек."
-    : "Ничего не нашлось по описанию — попробуйте другой режим поиска.";
-
-  return (
-    <div className="ai-search">
-      <div className="finder-modes">
-        {FINDER_MODES.map((m) => (
-          <button
-            key={m.key}
-            type="button"
-            className={`link-btn${mode === m.key ? " finder-modes__active" : ""}`}
-            onClick={() => switchMode(m.key)}
-          >
-            {m.label}
-          </button>
-        ))}
+    <div
+      className={`order-card status-${order.status}${dragging ? " order-card--dragging" : ""}`}
+      draggable={draggable}
+      onDragStart={draggable ? (e) => onDragStart(e, order.id) : undefined}
+      onDragEnd={draggable ? onDragEnd : undefined}
+    >
+      <div className="order-card__table">{tableLabel}</div>
+      <div className="order-card__song">🎵 {order.song_title}</div>
+      {order.artist && <div className="order-card__artist">🎤 {order.artist}</div>}
+      <div className="order-card__meta">
+        <span className="order-card__user">👤 Гость #{order.telegram_user_id}</span>
+        <span className="order-card__time">🕒 {formatOrderTime(order.created_at)}</span>
       </div>
-
-      {mode === "screenshot" ? (
-        <p className="empty-hint">Поиск по скриншоту скоро будет доступен — пока используйте ссылку или ИИ-поиск.</p>
-      ) : (
-        <>
-          <form className="order-form" onSubmit={handleSearch}>
-            <input
-              type="text"
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              placeholder={placeholder}
-              maxLength={300}
-            />
-            <button type="submit" disabled={searching || !text.trim()}>
-              {searching ? "Ищем…" : "Найти"}
-            </button>
-          </form>
-          {error && <div className="banner banner--error">{error}</div>}
-          {searched && !searching && results.length === 0 && (
-            <p className="empty-hint">{emptyHint}</p>
-          )}
-          {results.length > 0 && (
-            <ul className="song-search__results">
-              {results.map((s, idx) => (
-                <li key={idx}>
-                  <button
-                    type="button"
-                    className="link-btn"
-                    onClick={() => {
-                      onPick(s);
-                      setText("");
-                      setResults([]);
-                      setSearched(false);
-                    }}
-                  >
-                    🎵 {s.artist ? `${s.artist} — ${s.title}` : s.title}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </>
+      <div className="order-card__status">{STATUS_LABELS[order.status] || order.status}</div>
+      {order.error_message && <div className="order-card__error">{order.error_message}</div>}
+      {draggable && <div className="order-card__drag-hint">⠿ Перетащите в очередь, чтобы подтвердить</div>}
+      {order.status === "pending" && (
+        <div className="order-card__actions">
+          <button className="btn btn--reject" disabled={busy} onClick={() => onReject(order.id)}>
+            ОТКЛОНИТЬ
+          </button>
+        </div>
       )}
     </div>
   );
 }
 
-// Форма замены песни в уже существующем заказе (согласованная и утверждённая
-// пользователем спецификация замены песни). Переиспользует SongSearch/
-// AiSearch — тот же способ выбрать песню, что и в основной форме заказа
-// выше, без дублирования логики поиска. Разрешённость самой замены (кнопка
-// "Заменить песню" в OrderRow) решается на бэкенде по order.can_replace —
-// эта форма ничего не решает сама, только собирает новые song_title/artist/
-// service_id и вызывает POST /api/guest/order/<id>/replace.
-function ReplaceForm({ order, token, services, busy, onSubmit, onCancel }) {
-  const [songTitle, setSongTitle] = useState(order.song_title);
-  const [artist, setArtist] = useState(order.artist || "");
-  const [serviceId, setServiceId] = useState(order.service_id ? String(order.service_id) : "");
-  const [error, setError] = useState(null);
+// Отличаем два разных случая пустой колонки "Стол" (согласовано с
+// пользователем, минимальный вариант без выдумывания нового поведения):
+// order_id есть, а table_no пуст -> легитимный заказ гостя без стола
+// ("Без стола"); order_id вообще нет -> позиция в очереди VirtualDJ не
+// соответствует ни одному известному заказу (KJ добавил/переставил песню
+// прямо в VirtualDJ) -> "без заказа". Новый заказ в базе для такой песни
+// автоматически НЕ создаётся.
+function tableCellLabel(item) {
+  if (item.order_id == null) return "без заказа";
+  return item.table_no == null ? "Без стола" : item.table_no;
+}
+
+function QueueTable({ queue, dropActive, onDragOver, onDragLeave, onDrop }) {
+  return (
+    <div
+      className={`queue-dropzone${dropActive ? " queue-dropzone--active" : ""}`}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+    >
+      {queue.length === 0 ? (
+        <p className="empty-hint">Очередь VirtualDJ пуста. Перетащите сюда карточку заказа.</p>
+      ) : (
+        <table className="queue-table">
+          <thead>
+            <tr>
+              <th>№</th>
+              <th>Песня</th>
+              <th>Исполнитель</th>
+              <th>Стол</th>
+            </tr>
+          </thead>
+          <tbody>
+            {queue.map((item, idx) => (
+              <tr key={item.vdj_item_id ?? `no-id-${idx}`}>
+                <td>{idx + 1}</td>
+                <td>{item.song_title}</td>
+                <td>{item.artist || "—"}</td>
+                <td>{tableCellLabel(item)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
+// KJ Pro, экран "Добавить песню" — KJ сам находит песню и указывает стол,
+// минуя гостя и экран "Заказы" целиком (полное обоснование решений — см.
+// add_manual_song() в backend/services/vdj_service.py). Сейчас это просто
+// поля названия/исполнителя, введённые вручную, той же цепочкой, что уже
+// сегодня добавляет песню по гостевому заказу (поиск в файлах VirtualDJ ->
+// добавление). Список из нескольких найденных вариантов на выбор — то, о
+// чём просил пользователь — здесь сознательно НЕ сделан: сначала нужно
+// вживую проверить, умеет ли VirtualDJ вообще отдавать больше одного
+// найденного файла за раз (открытый вопрос, ещё не проверен).
+function AddManualSongForm({ onSubmit, busy, error }) {
+  const [songTitle, setSongTitle] = useState("");
+  const [artist, setArtist] = useState("");
+  const [tableNo, setTableNo] = useState("");
 
   async function handleSubmit(event) {
     event.preventDefault();
-    if (!songTitle.trim()) return;
-    setError(null);
-    try {
-      await onSubmit(order.id, songTitle.trim(), artist.trim() || null, serviceId ? Number(serviceId) : null);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : String(err));
+    const parsedTable = Number(tableNo);
+    if (!songTitle.trim() || !Number.isFinite(parsedTable) || parsedTable <= 0) return;
+
+    const ok = await onSubmit({ songTitle: songTitle.trim(), artist: artist.trim(), tableNo: parsedTable });
+    if (ok) {
+      setSongTitle("");
+      setArtist("");
+      setTableNo("");
     }
   }
 
   return (
-    <div className="replace-form">
-      <AiSearch
-        token={token}
-        onPick={(song) => {
-          setSongTitle(song.title);
-          setArtist(song.artist || "");
-        }}
+    <form className="manual-add-form" onSubmit={handleSubmit}>
+      <input
+        type="text"
+        placeholder="Название песни"
+        value={songTitle}
+        onChange={(e) => setSongTitle(e.target.value)}
+        disabled={busy}
       />
-      <form className="order-form" onSubmit={handleSubmit}>
-        <input
-          type="text"
-          value={songTitle}
-          onChange={(e) => setSongTitle(e.target.value)}
-          placeholder="Название песни"
-          maxLength={200}
-          required
-        />
-        <input
-          type="text"
-          value={artist}
-          onChange={(e) => setArtist(e.target.value)}
-          placeholder="Исполнитель (необязательно)"
-          maxLength={200}
-        />
-        {services.length > 0 && (
-          <select value={serviceId} onChange={(e) => setServiceId(e.target.value)}>
-            <option value="">Без тарифа</option>
-            {services.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}{s.is_free ? " (бесплатно)" : ` — ${s.price}`}
-              </option>
-            ))}
-          </select>
-        )}
-        <div className="replace-form__buttons">
-          <button type="submit" disabled={busy || !songTitle.trim()}>
-            {busy ? "Сохраняем…" : "✅ Сохранить замену"}
-          </button>
-          <button type="button" className="link-btn" onClick={onCancel} disabled={busy}>
-            Отмена
-          </button>
-        </div>
-      </form>
+      <input
+        type="text"
+        placeholder="Исполнитель (необязательно)"
+        value={artist}
+        onChange={(e) => setArtist(e.target.value)}
+        disabled={busy}
+      />
+      <input
+        type="number"
+        min="1"
+        placeholder="Стол"
+        value={tableNo}
+        onChange={(e) => setTableNo(e.target.value)}
+        disabled={busy}
+        className="manual-add-form__table"
+      />
+      <button
+        type="submit"
+        className="btn btn--accent"
+        disabled={busy || !songTitle.trim() || !tableNo}
+      >
+        {busy ? "Добавляем…" : "➕ Добавить в очередь"}
+      </button>
       {error && <div className="banner banner--error">{error}</div>}
-    </div>
+    </form>
   );
 }
 
-// Групповой стол (Role 3/4/5) — утверждённая пользователем спецификация,
-// вариант А: полноценный шлюз (backend/services/table_group_service.py).
-// Компонент сам опрашивает своё состояние (тот же паттерн, что и
-// FavoritesPanel/ChatPanel выше — нет WebSocket у Guest App), а не получает
-// его через props — это позволяет ему обновляться независимо от остальной
-// страницы, но onGroupChanged даёт родителю знать, когда стоит немедленно
-// перечитать /me (одобрили/выгнали/приняты права), не дожидаясь общего опроса.
-function TableGroupPanel({ token, guestId, hasTable, status, onGroupChanged }) {
-  const [view, setView] = useState(null);
-  const [error, setError] = useState(null);
+// Block D KJ Pro — заявки на VIP-статус (аудит handlers/kj.py:1291-1401,
+// vip_request_approve/reject) + список VIP-клиентов с ручными операциями
+// над балансом/кэшбэком (kj.py:2133-2229). ТЗ п.45 (финальная единая
+// модель входа): ручное назначение VIP "из ничего" без заявки гостя, и
+// одноразовый access_code, который оно выдавало, — удалены целиком вместе
+// со всем механизмом access_code/redeem (см. отчёт по п.45 и routes/kj.py
+// ::list_vip_clients). VIP теперь появляется только через заявку гостя,
+// уже подтвердившего личность через Google, + одобрение здесь.
+function VipPanel({ token, clubId, socket }) {
+  const [pending, setPending] = useState(null);
+  const [clients, setClients] = useState(null);
+  const [loadError, setLoadError] = useState(null);
+  const [actionError, setActionError] = useState(null);
   const [busyKey, setBusyKey] = useState(null);
-  const [requestingJoin, setRequestingJoin] = useState(false);
+  const [amountDrafts, setAmountDrafts] = useState({});
+  const [cashbackDrafts, setCashbackDrafts] = useState({});
 
-  const refresh = useCallback(async () => {
+  async function reload() {
     try {
-      const data = await api.getTableGroup(token);
-      setView(data);
-    } catch {
-      // Временный сбой опроса группы — не критично, следующий тик подтянет.
-    }
-  }, [token]);
-
-  // oxlint "set-state-in-effect" — тот же принятый случай опроса внешнего
-  // состояния, что и у остальных польщиков в этом файле (нет WebSocket).
-  useEffect(() => {
-    if (!hasTable) return undefined;
-    refresh();
-    const id = setInterval(refresh, POLL_TABLE_GROUP_MS);
-    return () => clearInterval(id);
-  }, [hasTable, refresh]);
-
-  async function runAction(key, action) {
-    setBusyKey(key);
-    setError(null);
-    try {
-      await action();
-      await refresh();
-      await onGroupChanged();
+      const [pendingData, clientsData] = await Promise.all([
+        api.listVipRequests(token, clubId, "pending"),
+        api.listVipClients(token, clubId),
+      ]);
+      setPending(pendingData);
+      setClients(clientsData);
+      setLoadError(null);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : String(err));
+      setLoadError(err instanceof ApiError ? err.message : String(err));
+    }
+  }
+
+  useEffect(() => {
+    reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clubId]);
+
+  useEffect(() => {
+    if (!socket) return undefined;
+    const onCreated = (vipRequest) => {
+      setPending((prev) => {
+        const list = prev || [];
+        return list.some((r) => r.id === vipRequest.id) ? list : [...list, vipRequest];
+      });
+    };
+    socket.on("vip_request_created", onCreated);
+    return () => {
+      socket.off("vip_request_created", onCreated);
+    };
+  }, [socket]);
+
+  async function handleApprove(requestId) {
+    setBusyKey(`req-${requestId}`);
+    setActionError(null);
+    try {
+      await api.approveVipRequest(token, requestId);
+      await reload();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
     } finally {
       setBusyKey(null);
     }
   }
 
-  async function handleRequestJoin() {
-    setRequestingJoin(true);
-    setError(null);
+  async function handleReject(requestId) {
+    setBusyKey(`req-${requestId}`);
+    setActionError(null);
     try {
-      await api.requestTableGroupJoin(token);
-      await refresh();
-      await onGroupChanged();
+      await api.rejectVipRequest(token, requestId);
+      await reload();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : String(err));
+      setActionError(err instanceof ApiError ? err.message : String(err));
     } finally {
-      setRequestingJoin(false);
+      setBusyKey(null);
     }
   }
 
-  if (!hasTable) return null;
+  async function handleTopup(vipClientId) {
+    const amount = Number(amountDrafts[vipClientId]);
+    if (!amount || amount <= 0) return;
+    setBusyKey(`amt-${vipClientId}`);
+    setActionError(null);
+    try {
+      await api.topupVipBalance(token, vipClientId, amount);
+      await reload();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusyKey(null);
+    }
+  }
 
-  // status приходит из /api/guest/me (см. routes/guest.py::me) — источник
-  // истины для "могу ли я сейчас заказывать", а не наличие/отсутствие
-  // group.id здесь: группа продолжает существовать даже когда ЭТОТ гость
-  // из неё вышел/кикнут — get_table_group у неё же и спрашиваем, поэтому
-  // ветвим именно по status, а не по view.group.
-  const isMember = status === "admin" || status === "member";
+  async function handleDebit(vipClientId) {
+    const amount = Number(amountDrafts[vipClientId]);
+    if (!amount || amount <= 0) return;
+    setBusyKey(`amt-${vipClientId}`);
+    setActionError(null);
+    try {
+      await api.debitVipBalance(token, vipClientId, amount);
+      await reload();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  async function handleSetBalance(vipClientId) {
+    const amount = Number(amountDrafts[vipClientId]);
+    if (!Number.isFinite(amount) || amount < 0) return;
+    setBusyKey(`amt-${vipClientId}`);
+    setActionError(null);
+    try {
+      await api.setVipBalance(token, vipClientId, amount);
+      await reload();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  async function handleUpdateCashback(vipClientId) {
+    const value = Number(cashbackDrafts[vipClientId]);
+    if (!Number.isFinite(value) || value < 0 || value > 100) return;
+    setBusyKey(`cb-${vipClientId}`);
+    setActionError(null);
+    try {
+      await api.updateVipCashback(token, vipClientId, value);
+      await reload();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  if (loadError) return <div className="banner banner--error">{loadError}</div>;
+  if (!pending || !clients) return <p className="empty-hint">Загрузка…</p>;
 
   return (
-    <section className="panel table-group-panel">
-      <h2>👥 Групповой стол</h2>
-      {error && <div className="banner banner--error">{error}</div>}
+    <div className="vip-panel">
+      {actionError && <div className="banner banner--error">{actionError}</div>}
 
-      {status === "pending" && (
-        <p className="empty-hint">⏳ Заявка отправлена — ждите одобрения админа стола.</p>
-      )}
-      {status === "not_joined" && (
-        <>
-          <p className="empty-hint">Вы не состоите в группе этого стола.</p>
-          <button type="button" onClick={handleRequestJoin} disabled={requestingJoin}>
-            {requestingJoin ? "Отправляем…" : "🙋 Запросить присоединение"}
+      <section>
+        <h2>Заявки на VIP ({pending.length})</h2>
+        {pending.length === 0 && <p className="empty-hint">Новых заявок нет.</p>}
+        <ul className="vip-list">
+          {pending.map((r) => (
+            <li key={r.id} className="vip-row">
+              <span>Стол {r.table_no ?? "—"} · гость #{r.telegram_user_id}</span>
+              <span className="vip-row__actions">
+                <button
+                  type="button" className="btn btn--accent" disabled={busyKey === `req-${r.id}`}
+                  onClick={() => handleApprove(r.id)}
+                >
+                  Одобрить
+                </button>
+                <button
+                  type="button" className="btn btn--reject" disabled={busyKey === `req-${r.id}`}
+                  onClick={() => handleReject(r.id)}
+                >
+                  Отклонить
+                </button>
+              </span>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section>
+        <h2>VIP-клиенты ({clients.length})</h2>
+        {clients.length === 0 && <p className="empty-hint">VIP-клиентов пока нет.</p>}
+        <ul className="vip-list">
+          {clients.map((c) => (
+            <li key={c.id} className="vip-row vip-row--client">
+              <div>
+                Гость #{c.telegram_user_id} · баланс <strong>{c.balance} MDL</strong>
+              </div>
+              <div className="vip-row__actions">
+                <input
+                  className="vip-amount-input"
+                  type="number"
+                  placeholder="Сумма"
+                  value={amountDrafts[c.id] ?? ""}
+                  onChange={(e) => setAmountDrafts((prev) => ({ ...prev, [c.id]: e.target.value }))}
+                />
+                <button type="button" className="btn-link" disabled={busyKey === `amt-${c.id}`} onClick={() => handleTopup(c.id)}>
+                  ➕ Начислить
+                </button>
+                <button type="button" className="btn-link" disabled={busyKey === `amt-${c.id}`} onClick={() => handleDebit(c.id)}>
+                  ➖ Списать
+                </button>
+                <button type="button" className="btn-link" disabled={busyKey === `amt-${c.id}`} onClick={() => handleSetBalance(c.id)}>
+                  🔄 Установить
+                </button>
+              </div>
+              <div className="vip-row__actions">
+                <input
+                  className="vip-amount-input"
+                  type="number"
+                  placeholder="Кэшбэк %"
+                  value={cashbackDrafts[c.id] ?? c.cashback_percent}
+                  onChange={(e) => setCashbackDrafts((prev) => ({ ...prev, [c.id]: e.target.value }))}
+                />
+                <button type="button" className="btn-link" disabled={busyKey === `cb-${c.id}`} onClick={() => handleUpdateCashback(c.id)}>
+                  Сохранить кэшбэк
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </section>
+    </div>
+  );
+}
+
+// Экран категорий песни (доп. ТЗ "KJ Pro", пункты KJ-01/KJ-03/KJ-07) —
+// категория это переиспользованная модель Service ("услуга/тариф"), её же
+// видит гость при заказе (routes/guest.py::list_services, не менялось);
+// здесь роль 2 (KJ) сама ведёт список — добавляет, меняет
+// название/описание/цену, включает "бесплатно" для конкретной категории
+// (галочка is_free — отдельный переключатель, НЕ совпадает с общим клубным
+// "Бесплатным вечером" из KJ-02, тот будет сделан отдельно) и удаляет
+// неиспользуемые. Деньги за категорию по факту не проходят через эту
+// систему как настоящий платёж (решение пользователя) — цена нужна для
+// учёта/отчётности. Если у клуба ещё нет ни одной категории, бэкенд сам
+// подставит набор по умолчанию из реальных данных старого бота (см.
+// backend/services/category_service.py::DEFAULT_CATEGORIES) — экран не
+// должен показывать пустой список при первом открытии.
+function CategoriesPanel({ token, clubId }) {
+  const [categories, setCategories] = useState(null);
+  const [loadError, setLoadError] = useState(null);
+  const [actionError, setActionError] = useState(null);
+  const [busyKey, setBusyKey] = useState(null);
+  const [drafts, setDrafts] = useState({});
+  const [newDraft, setNewDraft] = useState({ name: "", description: "", price: "", isFree: false });
+
+  async function reload() {
+    try {
+      const data = await api.listCategories(token, clubId);
+      setCategories(data);
+      setDrafts({});
+      setLoadError(null);
+    } catch (err) {
+      setLoadError(err instanceof ApiError ? err.message : String(err));
+    }
+  }
+
+  useEffect(() => {
+    reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clubId]);
+
+  function draftFor(category) {
+    return (
+      drafts[category.id] || {
+        name: category.name,
+        description: category.description || "",
+        price: String(category.price),
+        isFree: category.is_free,
+      }
+    );
+  }
+
+  function updateDraft(categoryId, category, patch) {
+    setDrafts((prev) => {
+      const base =
+        prev[categoryId] || {
+          name: category.name,
+          description: category.description || "",
+          price: String(category.price),
+          isFree: category.is_free,
+        };
+      return { ...prev, [categoryId]: { ...base, ...patch } };
+    });
+  }
+
+  async function handleSave(category) {
+    const draft = draftFor(category);
+    setBusyKey(`save-${category.id}`);
+    setActionError(null);
+    try {
+      await api.updateCategory(token, clubId, category.id, {
+        name: draft.name,
+        description: draft.description,
+        price: draft.price,
+        is_free: draft.isFree,
+      });
+      await reload();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  async function handleDelete(categoryId) {
+    setBusyKey(`del-${categoryId}`);
+    setActionError(null);
+    try {
+      await api.deleteCategory(token, clubId, categoryId);
+      await reload();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  async function handleCreate(event) {
+    event.preventDefault();
+    if (!newDraft.name.trim() || newDraft.price === "") return;
+    setBusyKey("create");
+    setActionError(null);
+    try {
+      await api.createCategory(token, clubId, {
+        name: newDraft.name.trim(),
+        description: newDraft.description.trim(),
+        price: newDraft.price,
+        isFree: newDraft.isFree,
+      });
+      setNewDraft({ name: "", description: "", price: "", isFree: false });
+      await reload();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  if (loadError) return <div className="banner banner--error">{loadError}</div>;
+  if (!categories) return <p className="empty-hint">Загрузка…</p>;
+
+  return (
+    <div className="categories-panel">
+      {actionError && <div className="banner banner--error">{actionError}</div>}
+
+      <section>
+        <h2>Категории песни ({categories.length})</h2>
+        <ul className="categories-list">
+          {categories.map((category) => {
+            const draft = draftFor(category);
+            const saving = busyKey === `save-${category.id}`;
+            const deleting = busyKey === `del-${category.id}`;
+            return (
+              <li key={category.id} className="category-row">
+                <input
+                  className="category-row__name"
+                  type="text"
+                  value={draft.name}
+                  onChange={(e) => updateDraft(category.id, category, { name: e.target.value })}
+                  disabled={saving || deleting}
+                />
+                <input
+                  className="category-row__description"
+                  type="text"
+                  placeholder="Описание"
+                  value={draft.description}
+                  onChange={(e) => updateDraft(category.id, category, { description: e.target.value })}
+                  disabled={saving || deleting}
+                />
+                <input
+                  className="category-row__price"
+                  type="number"
+                  min="0"
+                  value={draft.price}
+                  onChange={(e) => updateDraft(category.id, category, { price: e.target.value })}
+                  disabled={saving || deleting}
+                />
+                <label className="category-row__free">
+                  <input
+                    type="checkbox"
+                    checked={draft.isFree}
+                    onChange={(e) => updateDraft(category.id, category, { isFree: e.target.checked })}
+                    disabled={saving || deleting}
+                  />
+                  Бесплатно
+                </label>
+                <div className="category-row__actions">
+                  <button
+                    type="button" className="btn-link" disabled={saving || deleting}
+                    onClick={() => handleSave(category)}
+                  >
+                    {saving ? "Сохраняем…" : "💾 Сохранить"}
+                  </button>
+                  <button
+                    type="button" className="btn btn--reject" disabled={saving || deleting}
+                    onClick={() => handleDelete(category.id)}
+                  >
+                    {deleting ? "Удаляем…" : "🗑 Удалить"}
+                  </button>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      </section>
+
+      <section>
+        <h2>Добавить категорию</h2>
+        <form className="category-add-form" onSubmit={handleCreate}>
+          <input
+            type="text"
+            placeholder="Название"
+            value={newDraft.name}
+            onChange={(e) => setNewDraft((prev) => ({ ...prev, name: e.target.value }))}
+            disabled={busyKey === "create"}
+          />
+          <input
+            type="text"
+            placeholder="Описание (необязательно)"
+            value={newDraft.description}
+            onChange={(e) => setNewDraft((prev) => ({ ...prev, description: e.target.value }))}
+            disabled={busyKey === "create"}
+          />
+          <input
+            type="number"
+            min="0"
+            placeholder="Цена"
+            value={newDraft.price}
+            onChange={(e) => setNewDraft((prev) => ({ ...prev, price: e.target.value }))}
+            disabled={busyKey === "create"}
+          />
+          <label className="category-row__free">
+            <input
+              type="checkbox"
+              checked={newDraft.isFree}
+              onChange={(e) => setNewDraft((prev) => ({ ...prev, isFree: e.target.checked }))}
+              disabled={busyKey === "create"}
+            />
+            Бесплатно
+          </label>
+          <button
+            type="submit" className="btn btn--accent"
+            disabled={busyKey === "create" || !newDraft.name.trim() || newDraft.price === ""}
+          >
+            {busyKey === "create" ? "Добавляем…" : "➕ Добавить категорию"}
           </button>
-        </>
-      )}
-
-      {!view ? (
-        <p className="empty-hint">Загрузка…</p>
-      ) : (
-        <>
-          {view.members.length > 0 && (
-            <ul className="order-list table-group-members">
-              {view.members.map((m) => (
-                <li key={m.guest_id} className="order-row table-group-member">
-                  <span>
-                    {m.is_admin ? "👑 " : "🙂 "}
-                    {m.guest_id === guestId ? "Вы" : `Гость ${m.guest_id}`}
-                  </span>
-                  {view.is_admin && !m.is_admin && (
-                    <div className="favorite-actions">
-                      <button
-                        type="button"
-                        className="link-btn"
-                        disabled={busyKey === `kick-${m.guest_id}`}
-                        onClick={() => runAction(`kick-${m.guest_id}`, () => api.kickTableGroupMember(token, m.guest_id))}
-                      >
-                        🚪 Выгнать
-                      </button>
-                      <button
-                        type="button"
-                        className="link-btn"
-                        disabled={busyKey === `transfer-${m.guest_id}`}
-                        onClick={() => runAction(`transfer-${m.guest_id}`, () => api.transferTableGroupAdmin(token, m.guest_id))}
-                      >
-                        👑 Передать права
-                      </button>
-                    </div>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-
-          {view.is_admin && view.pending_requests.length > 0 && (
-            <div className="table-group-requests">
-              <h3>Заявки на присоединение</h3>
-              <ul className="order-list">
-                {view.pending_requests.map((r) => (
-                  <li key={r.id} className="order-row table-group-member">
-                    <span>Гость {r.guest_id}</span>
-                    <div className="favorite-actions">
-                      <button
-                        type="button"
-                        disabled={busyKey === `approve-${r.id}`}
-                        onClick={() => runAction(`approve-${r.id}`, () => api.approveJoinRequest(token, r.id))}
-                      >
-                        ✅ Принять
-                      </button>
-                      <button
-                        type="button"
-                        className="link-btn"
-                        disabled={busyKey === `reject-${r.id}`}
-                        onClick={() => runAction(`reject-${r.id}`, () => api.rejectJoinRequest(token, r.id))}
-                      >
-                        ❌ Отклонить
-                      </button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {isMember && (
-            <button
-              type="button"
-              className="link-btn"
-              disabled={busyKey === "leave"}
-              onClick={() => runAction("leave", () => api.leaveTableGroup(token))}
-            >
-              🚪 Покинуть стол
-            </button>
-          )}
-        </>
-      )}
-    </section>
-  );
-}
-
-function ChatPanel({ token }) {
-  const [messages, setMessages] = useState([]);
-  const [draft, setDraft] = useState("");
-  const [sending, setSending] = useState(false);
-  const [error, setError] = useState(null);
-  const listEndRef = useRef(null);
-
-  const refresh = useCallback(async () => {
-    try {
-      const data = await api.listChat(token);
-      setMessages(data);
-    } catch {
-      // Молча пропускаем один неудачный опрос чата — не хотим перекрывать
-      // основной интерфейс заказа баннером ошибки из-за временного сбоя сети.
-    }
-  }, [token]);
-
-  // oxlint предупреждает "set-state-in-effect" здесь — это ожидаемо и
-  // осознанно: это опрос чата (нет WebSocket для Guest App, см. комментарий
-  // у POLL_*_MS выше в этом файле), а не побочный эффект от рендера,
-  // который надо было бы вычислить иначе.
-  useEffect(() => {
-    refresh();
-    const id = setInterval(refresh, POLL_CHAT_MS);
-    return () => clearInterval(id);
-  }, [refresh]);
-
-  useEffect(() => {
-    listEndRef.current?.scrollIntoView({ block: "nearest" });
-  }, [messages.length]);
-
-  async function handleSend(event) {
-    event.preventDefault();
-    const text = draft.trim();
-    if (!text) return;
-    setSending(true);
-    setError(null);
-    try {
-      await api.sendChatMessage(token, text);
-      setDraft("");
-      await refresh();
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : String(err));
-    } finally {
-      setSending(false);
-    }
-  }
-
-  return (
-    <section className="panel chat-panel">
-      <h2>💬 Чат с ведущим</h2>
-      <ul className="chat-list">
-        {messages.length === 0 && <li className="empty-hint">Сообщений пока нет.</li>}
-        {messages.map((m) => (
-          <li key={m.id} className={`chat-message ${m.from_guest ? "chat-message--mine" : "chat-message--kj"}`}>
-            <span className="chat-message__author">{m.from_guest ? "Вы" : "KJ"}</span>
-            <span className="chat-message__text">{m.message_text}</span>
-          </li>
-        ))}
-        <li ref={listEndRef} />
-      </ul>
-      {error && <div className="banner banner--error">{error}</div>}
-      <form className="chat-form" onSubmit={handleSend}>
-        <input
-          type="text"
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          placeholder="Написать ведущему…"
-          maxLength={500}
-        />
-        <button type="submit" disabled={sending || !draft.trim()}>
-          Отправить
-        </button>
-      </form>
-    </section>
-  );
-}
-
-// ТЗ п.45 (финальная единая модель входа) — единственный способ стать
-// Role 4: гость вводит номер своего стола и подтверждает личность через
-// Google одним действием (см. api.linkGoogle). До этого он мог только
-// смотреть очередь и заполнить форму заказа (Role 5) — именно попытка
-// нажать "Заказать" открывает этот экран (см. App::handleSubmitOrder), а
-// не отдельная навигация. Google в этом экране — не настоящая кнопка
-// Google Identity Services: пока нет боевого Client ID (см. docstring
-// backend/services/google_auth_service.py), фронтенд сам формирует
-// подтверждение в фоне (getMockGoogleCredential) — гость ничего для этого
-// не вводит и не видит, только номер стола.
-function ActivationPanel({ token, onActivated, onCancel }) {
-  const [tableNo, setTableNo] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(null);
-  const panelRef = useRef(null);
-
-  // Живой тест показал: гость нажимал "Заказать", этот экран появлялся
-  // ниже видимой части страницы, гость его не замечал и решал, что кнопка
-  // вообще не сработала (не видел ни ошибки, ни сообщения об отправке).
-  // Раз без этого экрана заказ не может уйти дальше, при появлении он сам
-  // прокручивается в поле зрения и ненадолго подсвечивается рамкой — см.
-  // анимацию .activation-panel в App.css.
-  useEffect(() => {
-    panelRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
-  }, []);
-
-  const parsedTableNo = Number(tableNo);
-  const tableNoValid = tableNo.trim() !== "" && Number.isInteger(parsedTableNo) && parsedTableNo > 0;
-
-  async function handleActivate(event) {
-    event.preventDefault();
-    if (!tableNoValid) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const credential = getMockGoogleCredential();
-      const result = await api.linkGoogle(token, parsedTableNo, credential);
-      await onActivated(result);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : String(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <section ref={panelRef} className="panel activation-panel">
-      <h2>Выберите стол и войдите через Google</h2>
-      <p className="empty-hint">
-        Укажите номер своего стола и войдите через Google одним действием — это нужно один раз,
-        дальше ваш стол, история заказов и избранное сохранятся.
-      </p>
-      {error && <div className="banner banner--error">{error}</div>}
-      <form className="order-form" onSubmit={handleActivate}>
-        <input
-          type="number"
-          min="1"
-          value={tableNo}
-          onChange={(e) => setTableNo(e.target.value)}
-          placeholder="Номер стола"
-          required
-        />
-        <button type="submit" disabled={busy || !tableNoValid}>
-          {busy ? "Входим…" : "Войти через Google"}
-        </button>
-        <button type="button" className="link-btn" onClick={onCancel} disabled={busy}>
-          Отмена
-        </button>
-      </form>
-    </section>
+        </form>
+      </section>
+    </div>
   );
 }
 
 export default function App() {
-  const { clubId } = useMemo(() => parseLinkParams(), []);
-
-  const [session, setSession] = useState(null);
-  const [meInfo, setMeInfo] = useState(null);
-  // !clubId — не результат асинхронной операции, а сразу известное по URL
-  // состояние, поэтому это часть рендера, а не setState в эффекте.
-  const linkInvalid = !clubId;
-  const [initError, setInitError] = useState(null);
-
-  const [songTitle, setSongTitle] = useState("");
-  const [artist, setArtist] = useState("");
-  const [serviceId, setServiceId] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState(null);
-  const [submitOk, setSubmitOk] = useState(false);
-
+  const token = useMemo(() => resolveToken(), []);
+  const [me, setMe] = useState(null);
   const [orders, setOrders] = useState([]);
-  // null = "Все", иначе количество дней (см. ORDER_HISTORY_PERIODS ниже) —
-  // старое: handlers/vip.py::vip_order_history, только для VIP; здесь
-  // доступно всем ролям (аудит по "Фильтрация истории заказов").
-  const [orderHistoryDays, setOrderHistoryDays] = useState(null);
   const [queue, setQueue] = useState([]);
-  const [services, setServices] = useState([]);
-  const [favoriteBusyOrderId, setFavoriteBusyOrderId] = useState(null);
-  const [favoriteMessage, setFavoriteMessage] = useState(null);
-  const [replacingOrderId, setReplacingOrderId] = useState(null);
-  const [replaceBusyOrderId, setReplaceBusyOrderId] = useState(null);
-  // ТЗ п.45 (финальная единая модель входа) — показывает ли экран "стол +
-  // Google" прямо сейчас; открывается попыткой заказать, будучи Role 5
-  // (см. handleSubmitOrder), закрывается после успешной активации (см.
-  // handleActivated) или если гость сам передумал.
-  const [showActivation, setShowActivation] = useState(false);
+  const [loadError, setLoadError] = useState(null);
+  const [actionError, setActionError] = useState(null);
+  const [busyOrderId, setBusyOrderId] = useState(null);
+  const [connected, setConnected] = useState(false);
+  const [draggingOrderId, setDraggingOrderId] = useState(null);
+  const [dropActive, setDropActive] = useState(false);
+  const [manualAddBusy, setManualAddBusy] = useState(false);
+  const [manualAddError, setManualAddError] = useState(null);
+  // 'orders' | 'vip' | 'categories' — переключение верхнеуровневых экранов
+  // (Block D KJ Pro; 'categories' добавлен доп. ТЗ "KJ Pro", KJ-01/03/07).
+  const [view, setView] = useState("orders");
+  // Реф нужен эффекту ниже (disconnect в cleanup без пересоздания подписок),
+  // а socketInstance в state — чтобы VipPanel мог реагировать на появление
+  // сокета как на обычный проп (читать socketRef.current прямо в JSX во
+  // время рендера запрещено правилами React — оно не гарантирует ре-рендер).
+  const socketRef = useRef(null);
+  const [socketInstance, setSocketInstance] = useState(null);
 
-  // Шаг 1: получить/создать гостевую сессию для этого клуба (ТЗ: аналог
-  // старого deep-link venue{id}_table{n} — сама возможность открыть
-  // ссылку с club_id и есть право заказывать за этим столом, см.
-  // backend/routes/guest.py::create_session).
-  //
-  // bootstrapPromiseRef — React 18 StrictMode в dev-режиме намеренно
-  // монтирует этот эффект дважды подряд (mount -> cleanup -> mount), чтобы
-  // ловить именно такой класс багов. Раньше повторный POST
-  // /api/guest/session был безобиден — оба вызова создавали одинаково
-  // валидную независимую гостевую сессию, лишняя просто не использовалась.
-  // С групповым столом (утверждённая спецификация) это уже НЕ безобидно:
-  // два реальных запроса для одного и того же стола — это два разных
-  // guest_id, и только один может стать админом, второй попадёт в pending
-  // — а применённым в состоянии React мог оказаться именно "проигравший".
-  // Найдено живым Playwright-тестом на реальном Vite dev server (там
-  // StrictMode активен). Фикс — расшарить сам промис между обоими вызовами
-  // эффекта через ref: реальный сетевой запрос уходит только один раз, а
-  // применяет результат тот вызов эффекта, который не будет отменён
-  // (в паре StrictMode это второй — его cleanup сработает только при
-  // настоящем размонтировании).
-  const bootstrapPromiseRef = useRef(null);
   useEffect(() => {
-    if (linkInvalid) return undefined;
+    if (!token) return;
 
     let cancelled = false;
 
-    async function loadOrCreateSession() {
-      const stored = loadStoredSession(clubId);
-      if (stored?.token) {
-        try {
-          const me = await api.me(stored.token);
-          return { session: stored, meInfo: me };
-        } catch {
-          // Токен истёк/невалиден — создаём новую сессию ниже, как будто
-          // гость открыл ссылку впервые.
-        }
-      }
-      const created = await api.createSession(clubId);
-      storeSession(clubId, created);
-      const me = await api.me(created.token);
-      return { session: created, meInfo: me };
-    }
-
     async function bootstrap() {
-      if (!bootstrapPromiseRef.current) {
-        bootstrapPromiseRef.current = loadOrCreateSession();
-      }
       try {
-        const result = await bootstrapPromiseRef.current;
+        const meData = await api.me(token);
         if (cancelled) return;
-        setSession(result.session);
-        setMeInfo(result.meInfo);
+        setMe(meData);
+
+        const [ordersData, queueData] = await Promise.all([
+          api.listOrders(token, meData.club_id, "pending"),
+          api.getQueue(token, meData.club_id),
+        ]);
+        if (cancelled) return;
+        setOrders(ordersData);
+        setQueue(queueData);
       } catch (err) {
-        if (!cancelled) {
-          setInitError(err instanceof ApiError ? err.message : String(err));
-        }
+        if (!cancelled) setLoadError(err instanceof ApiError ? err.message : String(err));
       }
     }
 
     bootstrap();
+
+    const socket = connectSocket(token);
+    socketRef.current = socket;
+
+    socket.on("connect", () => {
+      setConnected(true);
+      // Публикуем инстанс в state здесь, а не синхронно в теле эффекта —
+      // избегаем каскадного ре-рендера прямо во время монтирования
+      // (oxlint react(set-state-in-effect)); VipPanel в любом случае не
+      // рендерится раньше первого успешного connect.
+      setSocketInstance(socket);
+    });
+    socket.on("disconnect", () => setConnected(false));
+
+    socket.on("order_created", (order) => {
+      setOrders((prev) => (prev.some((o) => o.id === order.id) ? prev : [...prev, order]));
+    });
+
+    const upsertOrRemove = (order) => {
+      setOrders((prev) => {
+        if (order.status !== "pending") {
+          return prev.filter((o) => o.id !== order.id);
+        }
+        return prev.map((o) => (o.id === order.id ? order : o));
+      });
+    };
+
+    socket.on("order_updated", upsertOrRemove);
+    socket.on("order_confirmed", upsertOrRemove);
+    socket.on("order_rejected", upsertOrRemove);
+
+    socket.on("queue_updated", (payload) => {
+      setQueue(payload.queue || []);
+    });
+
     return () => {
       cancelled = true;
+      socket.disconnect();
+      setSocketInstance(null);
     };
-  }, [clubId, linkInvalid]);
-
-  const refreshOrders = useCallback(async () => {
-    if (!session) return;
-    try {
-      const data = await api.listMyOrders(session.token, orderHistoryDays);
-      setOrders(data);
-    } catch {
-      // Временный сбой поллинга — не блокируем форму заказа баннером.
-    }
-  }, [session, orderHistoryDays]);
+  }, [token]);
 
   const refreshQueue = useCallback(async () => {
-    if (!session) return;
+    if (!me) return;
     try {
-      const data = await api.getQueue(session.token);
-      setQueue(data);
+      const queueData = await api.getQueue(token, me.club_id);
+      setQueue(queueData);
     } catch {
-      // Живая очередь — не критично, если один опрос не удался.
+      // Живая очередь — не критично, если один опрос не удался, следующий
+      // тик через POLL_QUEUE_MS подтянет актуальное состояние (тот же
+      // подход, что и в Guest App).
     }
-  }, [session]);
-
-  // Баланс/кэшбэк VIP меняются на бэкенде асинхронно — в момент
-  // charge_at_completion(), т.е. когда песня реально доиграна в VirtualDJ,
-  // а не по действию самого гостя в этой вкладке. Без отдельного опроса
-  // meInfo обновлялся бы только один раз при входе и оставался бы
-  // "замороженным" на старом балансе до перезагрузки страницы — гость не
-  // увидел бы списание/кэшбэк за уже спетую песню. Найдено и исправлено
-  // по итогам live-теста (см. финальный отчёт, п. VIP balance).
-  const refreshMe = useCallback(async () => {
-    if (!session) return;
-    try {
-      const data = await api.me(session.token);
-      setMeInfo(data);
-    } catch {
-      // Временный сбой опроса баланса — не критично, следующий тик подтянет.
-    }
-  }, [session]);
-
-  // oxlint: "set-state-in-effect" ожидаемо и здесь, и в следующих эффектах —
-  // то же самое опросное обновление внешнего состояния (заказов/очереди/
-  // профиля), что и в ChatPanel выше, по той же причине (нет WebSocket у
-  // Guest App).
-  useEffect(() => {
-    if (!session) return undefined;
-    refreshOrders();
-    const id = setInterval(refreshOrders, POLL_ORDERS_MS);
-    return () => clearInterval(id);
-  }, [session, refreshOrders]);
+  }, [token, me]);
 
   useEffect(() => {
-    if (!session) return undefined;
-    refreshQueue();
+    if (!me) return undefined;
     const id = setInterval(refreshQueue, POLL_QUEUE_MS);
     return () => clearInterval(id);
-  }, [session, refreshQueue]);
+  }, [me, refreshQueue]);
 
-  useEffect(() => {
-    if (!session) return undefined;
-    const id = setInterval(refreshMe, POLL_ME_MS);
-    return () => clearInterval(id);
-  }, [session, refreshMe]);
-
-  // Тарифы клуба — статичны на время сессии, опрос не нужен, достаточно
-  // загрузить один раз после готовности сессии (аудит Role 3/4/5, п.12).
-  useEffect(() => {
-    if (!session) return;
-    api.listServices(session.token).then(setServices).catch(() => {});
-  }, [session]);
-
-  // Вынесено из handleSubmitOrder, чтобы этим же кодом мог воспользоваться
-  // handleActivated выше — после единственного экрана "стол + Google"
-  // нужно закончить то же самое действие уже настоящим (новым) токеном, а
-  // не токеном, который был в session на момент нажатия "Заказать".
-  async function submitOrderWithToken(token) {
-    setSubmitting(true);
-    setSubmitError(null);
-    setSubmitOk(false);
+  async function handleAddManualSong({ songTitle, artist, tableNo }) {
+    setManualAddBusy(true);
+    setManualAddError(null);
     try {
-      await api.createOrder(
-        token, songTitle.trim(), artist.trim() || null,
-        serviceId ? Number(serviceId) : null,
-      );
-      setSongTitle("");
-      setArtist("");
-      setServiceId("");
-      setSubmitOk(true);
-      await refreshOrders();
+      // Сокет "queue_updated" (см. emit_queue_updated в add_manual_song(),
+      // backend/services/vdj_service.py) обновит очередь сам, почти сразу
+      // после ответа сервера — отдельно перерисовывать её здесь не нужно.
+      await api.addManualOrder(token, { songTitle, artist, tableNo });
+      return true;
     } catch (err) {
-      setSubmitError(err instanceof ApiError ? err.message : String(err));
+      setManualAddError(err instanceof ApiError ? err.message : String(err));
+      return false;
     } finally {
-      setSubmitting(false);
+      setManualAddBusy(false);
     }
   }
 
-  async function handleSubmitOrder(event) {
+  async function handleConfirm(orderId) {
+    setBusyOrderId(orderId);
+    setActionError(null);
+    try {
+      await api.confirmOrder(token, orderId);
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+      if (me) {
+        const fresh = await api.listOrders(token, me.club_id, "pending");
+        setOrders(fresh);
+      }
+    } finally {
+      setBusyOrderId(null);
+    }
+  }
+
+  async function handleReject(orderId) {
+    setBusyOrderId(orderId);
+    setActionError(null);
+    try {
+      await api.rejectOrder(token, orderId);
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+      if (me) {
+        const fresh = await api.listOrders(token, me.club_id, "pending");
+        setOrders(fresh);
+      }
+    } finally {
+      setBusyOrderId(null);
+    }
+  }
+
+  function handleDragStart(event, orderId) {
+    event.dataTransfer.setData("text/plain", String(orderId));
+    event.dataTransfer.effectAllowed = "move";
+    setDraggingOrderId(orderId);
+  }
+
+  function handleDragEnd() {
+    setDraggingOrderId(null);
+    setDropActive(false);
+  }
+
+  function handleQueueDragOver(event) {
+    if (draggingOrderId == null) return;
     event.preventDefault();
-    if (!session || !songTitle.trim()) return;
-
-    // ТЗ п.45 (финальная единая модель входа): до выбора стола и входа
-    // через Google заказ фактически не отправляется — вместо запроса
-    // открывается единственный экран активации (см. ActivationPanel и
-    // handleActivated выше), который сам довершит именно это действие.
-    if (!activated) {
-      setSubmitError(null);
-      setShowActivation(true);
-      return;
-    }
-
-    await submitOrderWithToken(session.token);
+    event.dataTransfer.dropEffect = "move";
+    setDropActive(true);
   }
 
-  async function handleAddFavorite(order) {
-    setFavoriteBusyOrderId(order.id);
-    setFavoriteMessage(null);
-    try {
-      await api.addFavorite(session.token, order.song_title, order.artist, order.service_id);
-      setFavoriteMessage("Добавлено в избранное");
-    } catch (err) {
-      setFavoriteMessage(err instanceof ApiError ? err.message : String(err));
-    } finally {
-      setFavoriteBusyOrderId(null);
-    }
+  function handleQueueDragLeave() {
+    setDropActive(false);
   }
 
-  function handleToggleReplace(orderId) {
-    setReplacingOrderId((prev) => (prev === orderId ? null : orderId));
+  async function handleQueueDrop(event) {
+    event.preventDefault();
+    setDropActive(false);
+    const orderId = Number(event.dataTransfer.getData("text/plain"));
+    setDraggingOrderId(null);
+    if (!Number.isFinite(orderId)) return;
+    await handleConfirm(orderId);
   }
 
-  // Ошибка (например, гонка: заказ как раз перешёл в processing/rank 1-2
-  // между опросом списка и нажатием "Сохранить") намеренно НЕ перехватывается
-  // здесь — она пробрасывается наверх, в ReplaceForm.handleSubmit, чтобы
-  // показаться прямо рядом с формой замены, а не общим баннером страницы.
-  async function handleReplaceOrder(orderId, songTitle, artist, serviceId) {
-    setReplaceBusyOrderId(orderId);
-    try {
-      await api.replaceOrder(session.token, orderId, songTitle, artist, serviceId);
-      setReplacingOrderId(null);
-      await refreshOrders();
-    } finally {
-      setReplaceBusyOrderId(null);
-    }
-  }
-
-  // ТЗ п.45 (финальная единая модель входа): вызывается один раз, сразу
-  // после успешного "стол + Google" в ActivationPanel — единственного
-  // способа стать Role 4. Не переиспользуем refreshOrders/refreshMe-
-  // замыкания старой сессии — редкий случай "уже входил с другого
-  // устройства" меняет guest_id, поэтому запросы явно делаются с НОВЫМ
-  // токеном, а не через стейт предыдущего рендера (существующие данные
-  // гостя — избранное/заказы — при этом никуда не деваются, см. отчёт по
-  // п.45: они уже записаны на постоянный номер).
-  async function handleActivated(result) {
-    const activatedSession = { guest_id: result.guest_id, club_id: result.club_id, table_no: result.table_no, token: result.token };
-    storeSession(clubId, activatedSession);
-    setSession(activatedSession);
-    setShowActivation(false);
-    try {
-      const me = await api.me(result.token);
-      setMeInfo(me);
-    } catch {
-      // следующий опрос подтянет актуальное состояние
-    }
-    // Гость уже нажимал «Заказать» до того, как открылся этот экран
-    // (иначе он бы не открылся, см. handleSubmitOrder) — значит форма
-    // заказа уже заполнена, и после активации нужно сразу закончить то же
-    // самое действие, а не заставлять нажимать «Заказать» второй раз.
-    if (songTitle.trim()) {
-      await submitOrderWithToken(result.token);
-    } else {
-      await refreshOrders();
-    }
-  }
-
-  if (linkInvalid) {
+  if (!token) {
     return (
       <div className="app-shell centered">
-        <h1>🎤 Karaoke</h1>
-        <p className="error-text">
-          Ссылка недействительна — не указан клуб. Отсканируйте QR-код на столе ещё раз.
-        </p>
+        <h1>KJ Panel</h1>
+        <p>Ссылка без токена доступа. Откройте панель по ссылке, которую выдаёт бот команде /kj.</p>
       </div>
     );
   }
 
-  if (initError) {
+  if (loadError) {
     return (
       <div className="app-shell centered">
-        <h1>🎤 Karaoke</h1>
-        <p className="error-text">{initError}</p>
+        <h1>KJ Panel</h1>
+        <p className="error-text">{loadError}</p>
       </div>
     );
   }
 
-  if (!session || !meInfo) {
+  if (!me) {
     return (
       <div className="app-shell centered">
         <p>Загрузка…</p>
@@ -1212,168 +841,82 @@ export default function App() {
     );
   }
 
-  // ТЗ п.45 (финальная единая модель входа): гость может заказать только
-  // пройдя единственный экран "стол + Google" — до этого он Role 5
-  // (смотрит очередь, выбирает песню в форму, но не заказывает). Источник
-  // истины — те же две проверки, что и на бэкенде в create_order
-  // (TABLE_REQUIRED, затем GOOGLE_LINK_REQUIRED); это чисто UI-отражение,
-  // а не отдельное правило.
-  const activated = meInfo.table_no != null && meInfo.has_permanent_profile;
-
-  // Групповой стол (утверждённая спецификация, вариант А — полноценный
-  // шлюз): без стола эта механика не действует вообще; со столом —
-  // заказывать можно, только пока сервер считает гостя admin/member
-  // (табличная проверка в create_order — источник истины, это чисто
-  // UI-отражение того же самого условия, а не отдельное правило).
-  const hasTable = meInfo.table_no != null;
-  const groupOk = !hasTable || meInfo.table_group_status === "admin" || meInfo.table_group_status === "member";
-  const canOrder = activated && groupOk;
-
   return (
     <div className="app-shell">
       <header className="app-header">
-        <h1>🎤 {meInfo.club_name || "Karaoke"}</h1>
-        <span className="app-header__table">
-          {meInfo.table_no != null ? `Стол ${meInfo.table_no}` : "Без стола"}
+        <div>
+          <h1>{me.club_name || `Клуб #${me.club_id}`}</h1>
+          <span className="app-header__subtitle">{me.display_name || "KJ"}</span>
+        </div>
+        <span className={`conn-badge ${connected ? "conn-badge--ok" : "conn-badge--off"}`}>
+          {connected ? "● online" : "○ переподключение…"}
         </span>
+        <div className="app-header__nav">
+          {view !== "orders" && (
+            <button type="button" className="btn-link" onClick={() => setView("orders")}>
+              ← Заказы
+            </button>
+          )}
+          {view !== "vip" && (
+            <button type="button" className="btn-link" onClick={() => setView("vip")}>
+              ⭐ VIP
+            </button>
+          )}
+          {view !== "categories" && (
+            <button type="button" className="btn-link" onClick={() => setView("categories")}>
+              🎚 Категории
+            </button>
+          )}
+        </div>
       </header>
 
-      <VipPanel token={session.token} meInfo={meInfo} />
+      {actionError && <div className="banner banner--error">{actionError}</div>}
 
-      {meInfo.is_vip && <VipHistoryPanel token={session.token} />}
+      {view === "vip" ? (
+        <VipPanel token={token} clubId={me.club_id} socket={socketInstance} />
+      ) : view === "categories" ? (
+        <CategoriesPanel token={token} clubId={me.club_id} />
+      ) : (
+        <main className="app-main">
+          <section>
+            <h2>Заказы ({orders.length})</h2>
+            {orders.length === 0 && <p className="empty-hint">Новых заказов нет.</p>}
+            <div className="orders-grid">
+              {orders.map((order) => (
+                <OrderCard
+                  key={order.id}
+                  order={order}
+                  busy={busyOrderId === order.id}
+                  dragging={draggingOrderId === order.id}
+                  onReject={handleReject}
+                  onDragStart={handleDragStart}
+                  onDragEnd={handleDragEnd}
+                />
+              ))}
+            </div>
+          </section>
 
-      <TableGroupPanel
-        token={session.token}
-        guestId={session.guest_id}
-        hasTable={hasTable}
-        status={meInfo.table_group_status}
-        onGroupChanged={refreshMe}
-      />
-
-      <section className="panel order-form-panel">
-        <h2>Заказать песню</h2>
-        {/* ТЗ п.45 (финальная единая модель входа): очередь и выбор песни
-        доступны всегда, даже до активации (Role 5) — форма ниже видна
-        независимо от activated. Единственное, что остаётся закрытым уже
-        ПОСЛЕ активации — членство в групповом столе (groupOk), это другая,
-        не связанная с Google проверка. */}
-        {activated && !groupOk ? (
-          <p className="empty-hint">
-            Пока вы не одобренный участник группового стола — см. панель «Групповой стол» выше.
-          </p>
-        ) : (
-          <>
-            <AiSearch
-              token={session.token}
-              onPick={(song) => {
-                setSongTitle(song.title);
-                setArtist(song.artist || "");
-              }}
+          <section>
+            <h2>Добавить песню</h2>
+            <AddManualSongForm
+              onSubmit={handleAddManualSong}
+              busy={manualAddBusy}
+              error={manualAddError}
             />
-            <form className="order-form" onSubmit={handleSubmitOrder}>
-              <input
-                type="text"
-                value={songTitle}
-                onChange={(e) => setSongTitle(e.target.value)}
-                placeholder="Название песни"
-                maxLength={200}
-                required
-              />
-              <input
-                type="text"
-                value={artist}
-                onChange={(e) => setArtist(e.target.value)}
-                placeholder="Исполнитель (необязательно)"
-                maxLength={200}
-              />
-              {services.length > 0 && (
-                <select value={serviceId} onChange={(e) => setServiceId(e.target.value)}>
-                  <option value="">Без тарифа</option>
-                  {services.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}{s.is_free ? " (бесплатно)" : ` — ${s.price}`}
-                    </option>
-                  ))}
-                </select>
-              )}
-              <button type="submit" disabled={submitting || !songTitle.trim()}>
-                {submitting ? "Отправляем…" : "🎶 Заказать"}
-              </button>
-            </form>
-            {submitError && <div className="banner banner--error">{submitError}</div>}
-            {submitOk && <div className="banner banner--ok">Заказ отправлен! Ждите подтверждения KJ.</div>}
-            {/* ТЗ п.45: единственный способ стать Role 4 — эта попытка
-            заказать (будучи ещё Role 5) и открывает данный экран, см.
-            handleSubmitOrder/handleActivated выше. */}
-            {showActivation && (
-              <ActivationPanel
-                token={session.token}
-                onActivated={handleActivated}
-                onCancel={() => setShowActivation(false)}
-              />
-            )}
-          </>
-        )}
-      </section>
+          </section>
 
-      <section className="panel">
-        <h2>Мои заказы</h2>
-        <div className="order-history-periods">
-          {ORDER_HISTORY_PERIODS.map((p) => (
-            <button
-              key={p.label}
-              type="button"
-              className={`link-btn${orderHistoryDays === p.days ? " order-history-periods__active" : ""}`}
-              onClick={() => setOrderHistoryDays(p.days)}
-            >
-              {p.label}
-            </button>
-          ))}
-        </div>
-        {favoriteMessage && <div className="banner banner--ok">{favoriteMessage}</div>}
-        {orders.length === 0 ? (
-          <p className="empty-hint">
-            {orderHistoryDays === null ? "Заказов пока нет." : "Заказов за этот период нет."}
-          </p>
-        ) : (
-          <ul className="order-list">
-            {orders.map((o) => (
-              <OrderRow
-                key={o.id}
-                order={o}
-                onFavorite={handleAddFavorite}
-                favoriteBusy={favoriteBusyOrderId === o.id}
-                token={session.token}
-                services={services}
-                isReplacing={replacingOrderId === o.id}
-                onToggleReplace={handleToggleReplace}
-                onReplace={handleReplaceOrder}
-                replaceBusy={replaceBusyOrderId === o.id}
-              />
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <FavoritesPanel token={session.token} onOrdered={refreshOrders} orderingDisabled={!canOrder} />
-
-      <section className="panel">
-        <h2>Живая очередь</h2>
-        {queue.length === 0 ? (
-          <p className="empty-hint">Очередь пуста.</p>
-        ) : (
-          <ol className="queue-list">
-            {queue.map((item) => (
-              <li key={item.vdj_item_id}>
-                🎵 {item.song_title}
-                {item.artist ? ` — ${item.artist}` : ""}
-              </li>
-            ))}
-          </ol>
-        )}
-      </section>
-
-      {meInfo.chat_enabled && <ChatPanel token={session.token} />}
+          <section>
+            <h2>Живая очередь VirtualDJ</h2>
+            <QueueTable
+              queue={queue}
+              dropActive={dropActive}
+              onDragOver={handleQueueDragOver}
+              onDragLeave={handleQueueDragLeave}
+              onDrop={handleQueueDrop}
+            />
+          </section>
+        </main>
+      )}
     </div>
   );
 }
