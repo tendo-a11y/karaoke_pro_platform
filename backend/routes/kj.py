@@ -5,7 +5,7 @@ from flask import Blueprint, g, jsonify, request
 from auth import require_kj
 from errors import api_error, api_ok
 from extensions import db
-from models import ChatMessage, Order, VipClient, VipRequest
+from models import ChatMessage, Club, Order, VipClient, VipRequest
 from services import category_service, song_service, vip_service
 from services.category_service import CategoryServiceError
 from services.vdj_service import add_manual_song, confirm_order, get_kj_queue_view, reject_order
@@ -412,6 +412,16 @@ def add_manual_order():
     if not isinstance(table_no, int) or isinstance(table_no, bool) or table_no <= 0:
         return api_error(400, "VALIDATION_ERROR", "table_no обязателен и должен быть положительным числом")
 
+    # KJ-04: то же ограничение по количеству столов клуба, что и у гостя в
+    # routes/guest.py::link_google — иначе KJ мог бы вручную создать заказ на
+    # несуществующий стол, пока для гостя этот же номер уже недоступен.
+    club = db.session.get(Club, g.club_id)
+    if club is not None and club.table_count is not None and table_no > club.table_count:
+        return api_error(
+            400, "TABLE_OUT_OF_RANGE",
+            f"В этом клубе {club.table_count} столов — выберите номер от 1 до {club.table_count}",
+        )
+
     order, outcome = add_manual_song(g.kj, song_title, artist, table_no)
 
     if outcome == "queued":
@@ -484,3 +494,49 @@ def delete_category(club_id, category_id):
         status = 404 if exc.code == "NOT_FOUND" else 409
         return api_error(status, exc.code, exc.message)
     return api_ok({"deleted": True})
+
+
+# --- Настройки столов (доп. ТЗ "KJ Pro", KJ-04) ---
+# В старом боте это была настройка самого KJ, не админа (handlers/kj.py:
+# tables_count_edit/tables_settings_save, FSM TableSettingsForm ->
+# database.py::update_venue_settings(venue_id, table_count=...), с проверкой
+# int(text) >= 1). У клубов разное число столов — это Club.table_count,
+# поле уже существует в модели (models.py) и уже используется для Admin App
+# (services/club_service.py::create_club/update_club, там же
+# _validate_table_count) и для генерации QR — здесь просто даём это же поле
+# в руки KJ напрямую, отдельным эндпоинтом, а не через Admin App (KJ не
+# имеет доступа к admin-эндпоинтам). None означает "не ограничено" — старое
+# поведение по умолчанию, пока KJ явно не задал число.
+@bp.get("/table-settings/<int:club_id>")
+@require_kj
+def get_table_settings(club_id):
+    denied = _ensure_own_club(club_id)
+    if denied:
+        return denied
+    club = db.session.get(Club, club_id)
+    if club is None:
+        return api_error(404, "CLUB_NOT_FOUND", "Клуб не найден")
+    return api_ok({"table_count": club.table_count})
+
+
+@bp.put("/table-settings/<int:club_id>")
+@require_kj
+def update_table_settings(club_id):
+    denied = _ensure_own_club(club_id)
+    if denied:
+        return denied
+    payload = request.get_json(silent=True) or {}
+    table_count = payload.get("table_count")
+    if table_count is not None and (
+        isinstance(table_count, bool) or not isinstance(table_count, int) or table_count < 1
+    ):
+        return api_error(
+            400, "VALIDATION_ERROR",
+            "table_count должен быть положительным целым числом, либо null (без ограничения)",
+        )
+    club = db.session.get(Club, club_id)
+    if club is None:
+        return api_error(404, "CLUB_NOT_FOUND", "Клуб не найден")
+    club.table_count = table_count
+    db.session.commit()
+    return api_ok({"table_count": club.table_count})
