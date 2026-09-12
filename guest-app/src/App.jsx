@@ -854,6 +854,17 @@ function ActivationPanel({ token, onActivated, onCancel }) {
   const [tableNo, setTableNo] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  const panelRef = useRef(null);
+
+  // Живой тест показал: гость нажимал "Заказать", этот экран появлялся
+  // ниже видимой части страницы, гость его не замечал и решал, что кнопка
+  // вообще не сработала (не видел ни ошибки, ни сообщения об отправке).
+  // Раз без этого экрана заказ не может уйти дальше, при появлении он сам
+  // прокручивается в поле зрения и ненадолго подсвечивается рамкой — см.
+  // анимацию .activation-panel в App.css.
+  useEffect(() => {
+    panelRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, []);
 
   const parsedTableNo = Number(tableNo);
   const tableNoValid = tableNo.trim() !== "" && Number.isInteger(parsedTableNo) && parsedTableNo > 0;
@@ -875,7 +886,7 @@ function ActivationPanel({ token, onActivated, onCancel }) {
   }
 
   return (
-    <section className="panel activation-panel">
+    <section ref={panelRef} className="panel activation-panel">
       <h2>Выберите стол и войдите через Google</h2>
       <p className="empty-hint">
         Укажите номер своего стола и войдите через Google одним действием — это нужно один раз,
