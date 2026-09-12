@@ -402,18 +402,39 @@ function SongSearch({ token, onPick }) {
   );
 }
 
-// AI-поиск по свободному описанию (Role 3/4/5, аудит п.2). Старое: команда
-// /ai — гость явно отправляет описание, а не ищет "на лету" по мере ввода
-// (в отличие от поиска по каталогу выше) — это внешние платные API
-// (Claude + Genius), а не локальная БД, поэтому здесь сознательно оставлен
-// явный сабмит, а не debounce-автопоиск: это сохраняет старую UX-модель
-// команды, а не изобретает новую.
+// Поиск песни тремя способами (Role 3/4/5). Раньше это было одно окошко
+// свободного текста (AiSearch) — гость мог вставить туда же ссылку, и
+// backend сам определял, что это ссылка, а не описание (см.
+// backend/services/ai_search_service.py::_looks_like_link/_resolve_link).
+// По просьбе пользователя (2026-09) это теперь явные три кнопки-режима, а
+// не спрятанное автоопределение: гость сам выбирает, чем ищет. "Ссылка" и
+// "ИИ-поиск" отправляют текст в тот же самый эндпоинт api.aiSearchSongs —
+// вся разница только в подсказке и плейсхолдере, backend не поменялся.
+// "Скриншот" — согласованный со пользователем следующий шаг, ещё не
+// реализован (нет пока backend-части, которая читает картинку): кнопка
+// есть, но честно показывает "скоро", ничего не изображая из себя рабочим,
+// пока это не так на самом деле.
+const FINDER_MODES = [
+  { key: "text", label: "🤖 ИИ-поиск" },
+  { key: "link", label: "🔗 Ссылка" },
+  { key: "screenshot", label: "📷 Скриншот" },
+];
+
 function AiSearch({ token, onPick }) {
+  const [mode, setMode] = useState("text");
   const [text, setText] = useState("");
   const [results, setResults] = useState([]);
   const [searching, setSearching] = useState(false);
   const [searched, setSearched] = useState(false);
   const [error, setError] = useState(null);
+
+  function switchMode(nextMode) {
+    setMode(nextMode);
+    setText("");
+    setResults([]);
+    setSearched(false);
+    setError(null);
+  }
 
   async function handleSearch(event) {
     event.preventDefault();
@@ -432,43 +453,69 @@ function AiSearch({ token, onPick }) {
     }
   }
 
+  const placeholder = mode === "link"
+    ? "🔗 Вставьте ссылку на YouTube, Apple Music или Spotify"
+    : "🤖 Опишите песню своими словами";
+  const emptyHint = mode === "link"
+    ? "По этой ссылке не удалось определить песню — проверьте, что это ссылка на конкретный трек."
+    : "Ничего не нашлось по описанию — попробуйте другой режим поиска.";
+
   return (
     <div className="ai-search">
-      <form className="order-form" onSubmit={handleSearch}>
-        <input
-          type="text"
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          placeholder="🤖 Опишите песню своими словами"
-          maxLength={300}
-        />
-        <button type="submit" disabled={searching || !text.trim()}>
-          {searching ? "Ищем…" : "Найти с помощью AI"}
-        </button>
-      </form>
-      {error && <div className="banner banner--error">{error}</div>}
-      {searched && !searching && results.length === 0 && (
-        <p className="empty-hint">Ничего не нашлось по описанию — попробуйте обычный поиск выше.</p>
-      )}
-      {results.length > 0 && (
-        <ul className="song-search__results">
-          {results.map((s, idx) => (
-            <li key={idx}>
-              <button
-                type="button"
-                className="link-btn"
-                onClick={() => {
-                  onPick(s);
-                  setText("");
-                  setResults([]);
-                  setSearched(false);
-                }}
-              >
-                🎵 {s.artist ? `${s.artist} — ${s.title}` : s.title}
-              </button>
-            </li>
-          ))}
-        </ul>
+      <div className="finder-modes">
+        {FINDER_MODES.map((m) => (
+          <button
+            key={m.key}
+            type="button"
+            className={`link-btn${mode === m.key ? " finder-modes__active" : ""}`}
+            onClick={() => switchMode(m.key)}
+          >
+            {m.label}
+          </button>
+        ))}
+      </div>
+
+      {mode === "screenshot" ? (
+        <p className="empty-hint">Поиск по скриншоту скоро будет доступен — пока используйте ссылку или ИИ-поиск.</p>
+      ) : (
+        <>
+          <form className="order-form" onSubmit={handleSearch}>
+            <input
+              type="text"
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              placeholder={placeholder}
+              maxLength={300}
+            />
+            <button type="submit" disabled={searching || !text.trim()}>
+              {searching ? "Ищем…" : "Найти"}
+            </button>
+          </form>
+          {error && <div className="banner banner--error">{error}</div>}
+          {searched && !searching && results.length === 0 && (
+            <p className="empty-hint">{emptyHint}</p>
+          )}
+          {results.length > 0 && (
+            <ul className="song-search__results">
+              {results.map((s, idx) => (
+                <li key={idx}>
+                  <button
+                    type="button"
+                    className="link-btn"
+                    onClick={() => {
+                      onPick(s);
+                      setText("");
+                      setResults([]);
+                      setSearched(false);
+                    }}
+                  >
+                    🎵 {s.artist ? `${s.artist} — ${s.title}` : s.title}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
       )}
     </div>
   );
