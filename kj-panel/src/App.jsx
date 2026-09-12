@@ -514,12 +514,50 @@ function CategoriesPanel({ token, clubId }) {
     }
   }
 
+  // KJ-02 "Бесплатный вечер" — по решению пользователя реализовано здесь же,
+  // одной кнопкой поверх уже существующих галочек "бесплатно" у каждой
+  // категории (is_free, KJ-07): "Выбрать все" одним действием проставляет
+  // (или снимает) is_free сразу всем категориям клуба — так роль 2 включает
+  // "весь вечер бесплатно" и выключает обратно, без отдельного клубного
+  // переключателя.
+  const allFree = categories != null && categories.length > 0 && categories.every((c) => c.is_free);
+
+  async function handleToggleAllFree(checked) {
+    setBusyKey("free-evening");
+    setActionError(null);
+    try {
+      await Promise.all(
+        categories
+          .filter((c) => c.is_free !== checked)
+          .map((c) => api.updateCategory(token, clubId, c.id, { is_free: checked }))
+      );
+      await reload();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
   if (loadError) return <div className="banner banner--error">{loadError}</div>;
   if (!categories) return <p className="empty-hint">Загрузка…</p>;
 
   return (
     <div className="categories-panel">
       {actionError && <div className="banner banner--error">{actionError}</div>}
+
+      <section className="free-evening-banner">
+        <h2>🎉 Бесплатный вечер</h2>
+        <label className="category-row__free">
+          <input
+            type="checkbox"
+            checked={allFree}
+            disabled={busyKey === "free-evening"}
+            onChange={(e) => handleToggleAllFree(e.target.checked)}
+          />
+          {busyKey === "free-evening" ? "Применяем…" : "Выбрать все — сделать все категории бесплатными"}
+        </label>
+      </section>
 
       <section>
         <h2>Категории песни ({categories.length})</h2>
