@@ -1,18 +1,13 @@
-/* Цветовая палитра под фирменный логотип "KARAOKE PRO" (золото/бронза на
-   тёмно-кремовом фоне) — цвета сняты напрямую с присланного лого, а не
-   придуманы заново: --accent и --border это реальные оттенки золота с
-   картинки, --bg/--panel — её кремовый фон, --text — тёмный тон из
-   градиента в верхней части лого. */
 :root {
-  --bg: #f2e8d8;
-  --panel: #fbf3e6;
-  --panel-alt: #f0e2cc;
-  --text: #241c11;
-  --muted: #8a7658;
-  --accent: #c9974f;
-  --ok: #2f9e5c;
-  --danger: #c23b3f;
-  --border: #d9c7a8;
+  --bg: #14161c;
+  --panel: #1d2029;
+  --panel-alt: #242835;
+  --text: #eef0f5;
+  --muted: #8b91a5;
+  --accent: #ffb020;
+  --ok: #2fbf71;
+  --danger: #e5484d;
+  --border: #2c3040;
   font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
 }
 
@@ -111,8 +106,8 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   border-radius: 8px;
   font-size: 14px;
 }
-.banner--error { background: rgba(194, 59, 63, 0.12); color: var(--danger); }
-.banner--ok { background: rgba(47, 158, 92, 0.12); color: var(--ok); }
+.banner--error { background: rgba(229, 72, 77, 0.12); color: var(--danger); }
+.banner--ok { background: rgba(47, 191, 113, 0.12); color: var(--ok); }
 
 .error-text { color: var(--danger); }
 
@@ -160,7 +155,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 }
 .chat-message--mine {
   align-self: flex-end;
-  background: rgba(201, 151, 79, 0.15);
+  background: rgba(255, 176, 32, 0.15);
 }
 .chat-message--kj {
   align-self: flex-start;
@@ -193,7 +188,7 @@ select {
 
 .vip-panel--active {
   border-color: var(--accent);
-  background: linear-gradient(135deg, rgba(201, 151, 79, 0.1), var(--panel));
+  background: linear-gradient(135deg, rgba(255, 176, 32, 0.1), var(--panel));
 }
 
 .vip-stat-row {
@@ -238,8 +233,8 @@ select {
 }
 
 @keyframes activation-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(201, 151, 79, 0.55); }
-  50% { box-shadow: 0 0 0 12px rgba(201, 151, 79, 0); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 176, 32, 0.55); }
+  50% { box-shadow: 0 0 0 12px rgba(255, 176, 32, 0); }
 }
 
 .song-search__results {
