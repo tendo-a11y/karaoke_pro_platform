@@ -113,6 +113,21 @@ def test_vdj_failure_does_not_create_order(client, db, club, kj, app):
     assert after == before
 
 
+def test_table_no_bounded_by_club_table_count(client, db, club, kj):
+    """KJ-04 доп. ТЗ "KJ Pro": тот же лимит по количеству столов клуба, что
+    и у гостя (test_guest_identity.py::test_link_google_table_out_of_range_rejected)
+    — иначе KJ мог бы вручную создать заказ на несуществующий стол."""
+    club.table_count = 5
+    db.session.commit()
+
+    resp = _add_manual(client, kj, table_no=6)
+    assert resp.status_code == 400
+    assert resp.get_json()["error"] == "TABLE_OUT_OF_RANGE"
+
+    ok = _add_manual(client, kj, table_no=5)
+    assert ok.status_code == 201
+
+
 def test_kj_cannot_add_for_other_club(client, db, club, other_club, kj, other_kj):
     """club_id всегда берётся из токена KJ (g.club_id), а не из тела запроса —
     подделать чужой club_id через payload здесь просто нечем (в отличие от
