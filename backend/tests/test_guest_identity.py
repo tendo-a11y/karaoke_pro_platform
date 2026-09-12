@@ -157,3 +157,40 @@ def test_link_google_missing_credential_rejected(client, db, club):
     )
     assert resp.status_code == 401
     assert resp.get_json()["error"] == "GOOGLE_AUTH_FAILED"
+
+
+def test_link_google_table_out_of_range_rejected(client, db, club):
+    """KJ-04 доп. ТЗ "KJ Pro": если у клуба задано количество столов
+    (Club.table_count, настраивается KJ через PUT /api/kj/table-settings),
+    гость не может выбрать номер больше этого — как в старом боте
+    (venue.table_count, handlers/client.py: table_count_exceeded)."""
+    club.table_count = 5
+    db.session.commit()
+
+    session = _session(client, club.club_id)
+    resp = client.post(
+        "/api/guest/profile/link-google",
+        json={"table_no": 6, "google_credential": {"sub": "mock-sub-oob"}},
+        headers=_headers(session["token"]),
+    )
+    assert resp.status_code == 400
+    assert resp.get_json()["error"] == "TABLE_OUT_OF_RANGE"
+
+    ok = client.post(
+        "/api/guest/profile/link-google",
+        json={"table_no": 5, "google_credential": {"sub": "mock-sub-in-range"}},
+        headers=_headers(session["token"]),
+    )
+    assert ok.status_code == 200
+
+
+def test_link_google_table_no_unbounded_when_not_configured(client, db, club):
+    """Пока KJ не задал table_count (None по умолчанию) — старое поведение,
+    ограничения нет."""
+    session = _session(client, club.club_id)
+    resp = client.post(
+        "/api/guest/profile/link-google",
+        json={"table_no": 999, "google_credential": {"sub": "mock-sub-unbounded"}},
+        headers=_headers(session["token"]),
+    )
+    assert resp.status_code == 200
