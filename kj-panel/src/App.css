@@ -203,6 +203,15 @@ h2 { font-size: 16px; color: var(--muted); text-transform: uppercase; letter-spa
 
 .categories-panel { display: flex; flex-direction: column; gap: 24px; }
 
+.free-evening-banner {
+  background: rgba(255, 176, 32, 0.1);
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+.free-evening-banner h2 { margin: 0 0 8px; color: var(--accent); }
+.free-evening-banner .category-row__free { color: var(--text); font-size: 14px; }
+
 .categories-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
 
 .category-row {
