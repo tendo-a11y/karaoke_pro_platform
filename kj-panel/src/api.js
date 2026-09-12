@@ -85,6 +85,15 @@ export const api = {
     request(`/api/kj/vip-clients/${vipClientId}/debit`, { method: "POST", token, body: { amount } }),
   setVipBalance: (token, vipClientId, balance) =>
     request(`/api/kj/vip-clients/${vipClientId}/balance`, { method: "PUT", token, body: { balance } }),
+  listCategories: (token, clubId) => request(`/api/kj/categories/${clubId}`, { token }),
+  createCategory: (token, clubId, { name, description, price, isFree }) =>
+    request(`/api/kj/categories/${clubId}`, {
+      method: "POST", token, body: { name, description: description || null, price, is_free: isFree },
+    }),
+  updateCategory: (token, clubId, categoryId, fields) =>
+    request(`/api/kj/categories/${clubId}/${categoryId}`, { method: "PUT", token, body: fields }),
+  deleteCategory: (token, clubId, categoryId) =>
+    request(`/api/kj/categories/${clubId}/${categoryId}`, { method: "DELETE", token }),
 };
 
 export { ApiError, BACKEND_URL };
