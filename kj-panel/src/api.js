@@ -94,6 +94,9 @@ export const api = {
     request(`/api/kj/categories/${clubId}/${categoryId}`, { method: "PUT", token, body: fields }),
   deleteCategory: (token, clubId, categoryId) =>
     request(`/api/kj/categories/${clubId}/${categoryId}`, { method: "DELETE", token }),
+  getTableSettings: (token, clubId) => request(`/api/kj/table-settings/${clubId}`, { token }),
+  updateTableSettings: (token, clubId, tableCount) =>
+    request(`/api/kj/table-settings/${clubId}`, { method: "PUT", token, body: { table_count: tableCount } }),
 };
 
 export { ApiError, BACKEND_URL };
