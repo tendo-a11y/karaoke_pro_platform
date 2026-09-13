@@ -92,8 +92,13 @@ function QueueTable({ queue, dropActive, onDragOver, onDragLeave, onDrop }) {
       onDragLeave={onDragLeave}
       onDrop={onDrop}
     >
+      {/* Постоянная подсказка — видна всегда, а не только при пустой
+          очереди, чтобы было понятно, куда именно тащить карточку заказа
+          (пользователь жаловался, что после первой же песни в очереди
+          подсказка пропадала). */}
+      <p className="queue-dropzone__hint">⬇ Сюда перетаскивайте карточку заказа из списка «Заказы»</p>
       {queue.length === 0 ? (
-        <p className="empty-hint">Очередь VirtualDJ пуста. Перетащите сюда карточку заказа.</p>
+        <p className="empty-hint">Очередь VirtualDJ пока пуста.</p>
       ) : (
         // Вертикальный список вместо таблицы — тот же стиль строк, что и на
         // экране "Категории" (.categories-list/.category-row), по просьбе
