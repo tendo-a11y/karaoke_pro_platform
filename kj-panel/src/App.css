@@ -212,6 +212,19 @@ h2 { font-size: 16px; color: var(--muted); text-transform: uppercase; letter-spa
 .free-evening-banner h2 { margin: 0 0 8px; color: var(--accent); }
 .free-evening-banner .category-row__free { color: var(--text); font-size: 14px; }
 
+.table-settings-panel { display: flex; flex-direction: column; gap: 24px; max-width: 420px; }
+.table-settings-form { display: flex; gap: 8px; align-items: center; margin-top: 12px; }
+.table-settings-form input {
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 14px;
+  flex: 0 0 160px;
+}
+.table-settings-form .btn { flex: 0 0 auto; padding: 8px 16px; }
+
 .categories-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
 
 .category-row {
