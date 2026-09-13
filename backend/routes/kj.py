@@ -8,7 +8,14 @@ from extensions import db
 from models import ChatMessage, Club, Order, VipClient, VipRequest
 from services import category_service, song_service, vip_service
 from services.category_service import CategoryServiceError
-from services.vdj_service import add_manual_song, confirm_order, get_kj_queue_view, reject_order
+from services.vdj_service import (
+    add_manual_song,
+    confirm_order,
+    get_kj_queue_view,
+    reject_order,
+    update_order_category,
+    update_order_table,
+)
 from sockets import emit_chat_message
 
 bp = Blueprint("kj", __name__, url_prefix="/api/kj")
@@ -107,6 +114,71 @@ def reject(order_id):
         status_code, error_code, message = _OUTCOME_HTTP[outcome]
         return api_error(status_code, error_code, message)
 
+    return api_error(500, "INTERNAL_ERROR", "Неизвестный результат обработки заказа")
+
+
+_QUEUE_EDIT_OUTCOME_HTTP = {
+    "not_found": (404, "ORDER_NOT_FOUND", "Заказ не найден"),
+    "forbidden": (403, "FORBIDDEN", "Нет доступа к этому заказу"),
+    "not_queued": (409, "ORDER_NOT_QUEUED", "Менять можно только у песни, ещё стоящей в очереди"),
+    "service_not_found": (404, "SERVICE_NOT_FOUND", "Категория не найдена"),
+}
+
+
+@bp.put("/order/<int:order_id>/table")
+@require_kj
+def update_order_table_route(order_id):
+    """
+    Доп. ТЗ "KJ Pro": смена номера стола у песни, уже стоящей в очереди —
+    экран "Живая очередь VirtualDJ" (см. update_order_table() в
+    services/vdj_service.py). table_no: null — снять стол ("Без стола").
+    """
+    payload = request.get_json(silent=True) or {}
+    table_no = payload.get("table_no")
+
+    if table_no is not None and (
+        isinstance(table_no, bool) or not isinstance(table_no, int) or table_no <= 0
+    ):
+        return api_error(400, "VALIDATION_ERROR", "table_no должен быть положительным числом, либо null (без стола)")
+
+    # KJ-04: то же ограничение по количеству столов клуба, что и в
+    # /order/manual и /table-settings выше.
+    club = db.session.get(Club, g.club_id)
+    if table_no is not None and club is not None and club.table_count is not None and table_no > club.table_count:
+        return api_error(
+            400, "TABLE_OUT_OF_RANGE",
+            f"В этом клубе {club.table_count} столов — выберите номер от 1 до {club.table_count}",
+        )
+
+    order, outcome = update_order_table(order_id, g.kj, table_no)
+    if outcome == "updated":
+        return api_ok(order.to_dict())
+    if outcome in _QUEUE_EDIT_OUTCOME_HTTP:
+        status_code, error_code, message = _QUEUE_EDIT_OUTCOME_HTTP[outcome]
+        return api_error(status_code, error_code, message)
+    return api_error(500, "INTERNAL_ERROR", "Неизвестный результат обработки заказа")
+
+
+@bp.put("/order/<int:order_id>/category")
+@require_kj
+def update_order_category_route(order_id):
+    """
+    Доп. ТЗ "KJ Pro": назначение/смена категории у песни, уже стоящей в
+    очереди (см. update_order_category() в services/vdj_service.py).
+    service_id: null — снять категорию ("Без категории").
+    """
+    payload = request.get_json(silent=True) or {}
+    service_id = payload.get("service_id")
+
+    if service_id is not None and (isinstance(service_id, bool) or not isinstance(service_id, int)):
+        return api_error(400, "VALIDATION_ERROR", "service_id должен быть числом, либо null (без категории)")
+
+    order, outcome = update_order_category(order_id, g.kj, service_id)
+    if outcome == "updated":
+        return api_ok(order.to_dict())
+    if outcome in _QUEUE_EDIT_OUTCOME_HTTP:
+        status_code, error_code, message = _QUEUE_EDIT_OUTCOME_HTTP[outcome]
+        return api_error(status_code, error_code, message)
     return api_error(500, "INTERNAL_ERROR", "Неизвестный результат обработки заказа")
 
 
