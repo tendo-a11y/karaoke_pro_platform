@@ -95,26 +95,20 @@ function QueueTable({ queue, dropActive, onDragOver, onDragLeave, onDrop }) {
       {queue.length === 0 ? (
         <p className="empty-hint">Очередь VirtualDJ пуста. Перетащите сюда карточку заказа.</p>
       ) : (
-        <table className="queue-table">
-          <thead>
-            <tr>
-              <th>№</th>
-              <th>Песня</th>
-              <th>Исполнитель</th>
-              <th>Стол</th>
-            </tr>
-          </thead>
-          <tbody>
-            {queue.map((item, idx) => (
-              <tr key={item.vdj_item_id ?? `no-id-${idx}`}>
-                <td>{idx + 1}</td>
-                <td>{item.song_title}</td>
-                <td>{item.artist || "—"}</td>
-                <td>{tableCellLabel(item)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        // Вертикальный список вместо таблицы — тот же стиль строк, что и на
+        // экране "Категории" (.categories-list/.category-row), по просьбе
+        // пользователя. Пока без перетаскивания порядка внутри самой
+        // очереди — это отдельная задача (KJ-09, ещё не сделана).
+        <ul className="queue-list-vertical">
+          {queue.map((item, idx) => (
+            <li key={item.vdj_item_id ?? `no-id-${idx}`} className="queue-row">
+              <span className="queue-row__position">{idx + 1}</span>
+              <span className="queue-row__song">🎵 {item.song_title}</span>
+              <span className="queue-row__artist">{item.artist ? `🎤 ${item.artist}` : "—"}</span>
+              <span className="queue-row__table">{tableCellLabel(item)}</span>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );
