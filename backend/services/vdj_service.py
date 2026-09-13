@@ -248,16 +248,110 @@ def replace_order(order_id: int, guest_id: int, club_id: int, song_title: str, a
 
 
 def remove_from_vdj_queue(club_id: int, vdj_item_id: str):
-    """ТЗ п.20: удаление уже добавленного в очередь VirtualDJ элемента —
-    отдельная операция от отклонения ещё не переданного заказа.
+    """ТЗ п.20 + доп. ТЗ "KJ Pro" (запрос пользователя убрать песню прямо с
+    экрана "Живая очередь VirtualDJ"): удаление уже добавленного в очередь
+    VirtualDJ элемента — отдельная операция от отклонения ещё не переданного
+    заказа (reject_order выше).
 
     club_id обязателен по той же причине, что и в confirm_order(): в режиме
     VDJ_ADAPTER=bridge команду нужно адресовать мосту конкретного клуба,
-    а не какому попало (сейчас у функции нет вызывающего кода, но сигнатура
-    сразу сделана консистентной с остальными местами, использующими
-    get_vdj_client(), чтобы не отставить "молчаливую" точку отказа на потом)."""
+    а не какому попало.
+
+    Если этому элементу очереди соответствует заказ (сопоставление по
+    club_id+vdj_item_id, тем же способом, что и в get_kj_queue_view() ниже,
+    и только пока он ещё STATUS_QUEUED) — переводит его в STATUS_REJECTED.
+    Отдельного возврата денег, в отличие от старого бота
+    (handlers/kj.py::order_delete_confirmed -> db.refund_vip_for_order()),
+    здесь не требуется: в новой архитектуре списание происходит только при
+    ЗАВЕРШЕНИИ песни (services/billing_service.py::charge_at_completion), а
+    удалённая из очереди песня никогда не будет завершена — значит, с неё и
+    так ничего не спишется. Если соответствующего заказа не нашлось (песню
+    добавили прямо в VirtualDJ, минуя Backend) — просто ничего, кроме самой
+    VirtualDJ, не трогаем.
+
+    Возвращает найденный Order (или None, если его не было) — вызывающему
+    коду (routes/vdj.py) он не обязателен, но полезен для ответа фронтенду.
+    """
     vdj = get_vdj_client(club_id)
     vdj.remove_from_queue(vdj_item_id)
+
+    order = (
+        Order.query.filter_by(club_id=club_id, vdj_item_id=vdj_item_id, status=STATUS_QUEUED).first()
+    )
+    if order is not None:
+        order.status = STATUS_REJECTED
+        order.rejected_at = _utcnow()
+        db.session.commit()
+        emit_order_rejected(order)
+
+        if order.channel == "telegram":
+            song_line = f"{order.artist} — {order.song_title}" if order.artist else order.song_title
+            notify_guest(order.telegram_user_id, f"❌ Ваша песня удалена из очереди KJ.\n\n🎵 {song_line}")
+
+    emit_queue_updated(club_id, get_kj_queue_view(club_id))
+    return order
+
+
+def update_order_table(order_id: int, kj, table_no):
+    """
+    Доп. ТЗ "KJ Pro": смена номера стола у песни, уже стоящей в очереди —
+    экран "Живая очередь VirtualDJ" (запрос пользователя после того, как
+    выяснилось, что стол мог быть указан неверно уже постфактум). Сам
+    VirtualDJ номер стола не хранит вообще (см. докстринг get_kj_queue_view
+    ниже) — это чисто поле нашего Order.table_no, поэтому смена не требует
+    никакого обращения к VirtualDJ, только запись в базу.
+
+    Разрешено только пока заказ ещё STATUS_QUEUED — эта функция вызывается
+    только с экрана живой очереди, где показываются именно такие заказы.
+
+    Возвращает (order, outcome), где outcome — один из:
+        "not_found", "forbidden", "not_queued", "updated"
+    """
+    order = db.session.get(Order, order_id)
+    if order is None:
+        return None, "not_found"
+    if order.club_id != kj.club_id:
+        return None, "forbidden"
+    if order.status != STATUS_QUEUED:
+        return order, "not_queued"
+
+    order.table_no = table_no
+    db.session.commit()
+    emit_order_updated(order)
+    emit_queue_updated(order.club_id, get_kj_queue_view(order.club_id))
+    return order, "updated"
+
+
+def update_order_category(order_id: int, kj, service_id):
+    """
+    Доп. ТЗ "KJ Pro": назначение/смена категории (Service, см. её докстринг в
+    models.py) у песни, уже стоящей в очереди. До этого ни один эндпоинт
+    заказа не проставлял service_id вообще (см. комментарий у
+    Order.service_id в models.py) — это первое место, где KJ может сделать
+    это сам, вручную, для уже поставленной в очередь песни.
+
+    Тот же набор outcome, что и у update_order_table() выше, плюс
+    "service_not_found", если указанная категория не существует или
+    принадлежит другому клубу.
+    """
+    order = db.session.get(Order, order_id)
+    if order is None:
+        return None, "not_found"
+    if order.club_id != kj.club_id:
+        return None, "forbidden"
+    if order.status != STATUS_QUEUED:
+        return order, "not_queued"
+
+    if service_id is not None:
+        service = db.session.get(Service, service_id)
+        if service is None or service.club_id != kj.club_id:
+            return order, "service_not_found"
+
+    order.service_id = service_id
+    db.session.commit()
+    emit_order_updated(order)
+    emit_queue_updated(order.club_id, get_kj_queue_view(order.club_id))
+    return order, "updated"
 
 
 def get_kj_queue_view(club_id: int) -> list[dict]:
@@ -318,6 +412,10 @@ def get_kj_queue_view(club_id: int) -> list[dict]:
                 "artist": item.artist,
                 "table_no": matched.table_no if matched else None,
                 "order_id": matched.id if matched else None,
+                # Доп. ТЗ "KJ Pro": нужен экрану живой очереди, чтобы показать
+                # и дать сменить категорию уже поставленной в очередь песни
+                # (см. update_order_category() выше).
+                "service_id": matched.service_id if matched else None,
             }
         )
     return result
