@@ -666,6 +666,85 @@ function CategoriesPanel({ token, clubId }) {
   );
 }
 
+// Настройки столов (доп. ТЗ "KJ Pro", KJ-04) — в старом боте это была
+// настройка самого KJ (handlers/kj.py: tables_count_edit/
+// tables_settings_save), не админа: у каждого клуба своё количество
+// столов. Здесь тот же смысл — одно число, пустое значение (null) означает
+// "не ограничено" (пока KJ явно не задал число, как было по умолчанию и в
+// старом боте до первой настройки).
+function TableSettingsPanel({ token, clubId }) {
+  const [draft, setDraft] = useState("");
+  const [loadError, setLoadError] = useState(null);
+  const [actionError, setActionError] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  async function reload() {
+    try {
+      const data = await api.getTableSettings(token, clubId);
+      setDraft(data.table_count == null ? "" : String(data.table_count));
+      setLoadError(null);
+    } catch (err) {
+      setLoadError(err instanceof ApiError ? err.message : String(err));
+    }
+  }
+
+  useEffect(() => {
+    reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clubId]);
+
+  async function handleSave(event) {
+    event.preventDefault();
+    const value = draft.trim() === "" ? null : Number(draft);
+    if (value !== null && (!Number.isInteger(value) || value < 1)) return;
+    setBusy(true);
+    setActionError(null);
+    setSaved(false);
+    try {
+      const data = await api.updateTableSettings(token, clubId, value);
+      setDraft(data.table_count == null ? "" : String(data.table_count));
+      setSaved(true);
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (loadError) return <div className="banner banner--error">{loadError}</div>;
+
+  return (
+    <div className="table-settings-panel">
+      <section>
+        <h2>Настройки столов</h2>
+        <p className="empty-hint">
+          Сколько столов в клубе. Гость не сможет выбрать номер больше этого при входе, KJ — при ручном
+          добавлении песни. Оставьте поле пустым, если ограничивать не нужно.
+        </p>
+        {actionError && <div className="banner banner--error">{actionError}</div>}
+        <form className="table-settings-form" onSubmit={handleSave}>
+          <input
+            type="number"
+            min="1"
+            placeholder="Без ограничения"
+            value={draft}
+            onChange={(e) => {
+              setDraft(e.target.value);
+              setSaved(false);
+            }}
+            disabled={busy}
+          />
+          <button type="submit" className="btn btn--accent" disabled={busy}>
+            {busy ? "Сохраняем…" : "Сохранить"}
+          </button>
+        </form>
+        {saved && <p className="empty-hint">Сохранено.</p>}
+      </section>
+    </div>
+  );
+}
+
 export default function App() {
   const token = useMemo(() => resolveToken(), []);
   const [me, setMe] = useState(null);
@@ -679,8 +758,9 @@ export default function App() {
   const [dropActive, setDropActive] = useState(false);
   const [manualAddBusy, setManualAddBusy] = useState(false);
   const [manualAddError, setManualAddError] = useState(null);
-  // 'orders' | 'vip' | 'categories' — переключение верхнеуровневых экранов
-  // (Block D KJ Pro; 'categories' добавлен доп. ТЗ "KJ Pro", KJ-01/03/07).
+  // 'orders' | 'vip' | 'categories' | 'tables' — переключение верхнеуровневых
+  // экранов (Block D KJ Pro; 'categories'/'tables' добавлены доп. ТЗ "KJ Pro",
+  // KJ-01/03/07 и KJ-04 соответственно).
   const [view, setView] = useState("orders");
   // Реф нужен эффекту ниже (disconnect в cleanup без пересоздания подписок),
   // а socketInstance в state — чтобы VipPanel мог реагировать на появление
@@ -905,6 +985,11 @@ export default function App() {
               🎚 Категории
             </button>
           )}
+          {view !== "tables" && (
+            <button type="button" className="btn-link" onClick={() => setView("tables")}>
+              🪑 Столы
+            </button>
+          )}
         </div>
       </header>
 
@@ -914,6 +999,8 @@ export default function App() {
         <VipPanel token={token} clubId={me.club_id} socket={socketInstance} />
       ) : view === "categories" ? (
         <CategoriesPanel token={token} clubId={me.club_id} />
+      ) : view === "tables" ? (
+        <TableSettingsPanel token={token} clubId={me.club_id} />
       ) : (
         <main className="app-main">
           <section>
