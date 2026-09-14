@@ -169,6 +169,16 @@ h2 { font-size: 16px; color: var(--muted); text-transform: uppercase; letter-spa
 .queue-row__remove { margin-left: auto; color: var(--danger); }
 .queue-row__error { flex-basis: 100%; margin: 4px 0 0; font-size: 12px; }
 
+.queue-row--orphaned { border-style: dashed; opacity: 0.85; }
+.queue-row__orphaned-badge {
+  flex: 0 0 auto;
+  font-size: 12px;
+  color: var(--danger);
+  border: 1px solid var(--danger);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
 .empty-hint { color: var(--muted); }
 
 .manual-add-form {
