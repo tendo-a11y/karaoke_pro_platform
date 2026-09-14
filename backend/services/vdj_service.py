@@ -476,6 +476,74 @@ def get_kj_queue_view(club_id: int) -> list[dict]:
     return result
 
 
+def claim_vdj_queue_item(kj, vdj_item_id: str, song_title: str, artist, table_no, service_id):
+    """
+    Доп. ТЗ "KJ Pro" (запрос пользователя 2026-09-14, после первого живого
+    теста с настоящей VirtualDJ: KJ добавил песни прямо в VirtualDJ, они
+    появились в живой очереди KJ Pro как позиции "без заказа" — get_kj_
+    queue_view() отдаёт их с order_id=None, см. её докстринг). У такой
+    позиции просто негде хранить стол/категорию — без Order они относятся
+    только к самой VirtualDJ, которая про стол/категорию ничего не знает
+    (см. тот же докстринг). "Присвоить" здесь означает: завести для уже
+    существующей в VirtualDJ позиции свой Order, НЕ трогая саму VirtualDJ
+    (песня там уже есть, add_to_queue не вызывается) — после этого позиция
+    перестаёт быть "без заказа" (сопоставляется по vdj_item_id как любой
+    другой Order) и дальше её стол/категория меняются уже обычными
+    update_order_table()/update_order_category() выше, как у любого другого
+    заказа.
+
+    source="virtualdj" — до сих пор только предусмотренное в модели значение
+    (см. комментарий у Order.source в models.py: "guest | manual |
+    virtualdj"), это первое место, где оно реально проставляется.
+    telegram_user_id=-1 и channel="webapp" — та же причина, что и в
+    add_manual_song() ниже (не гость, уведомлять некого).
+
+    Не перепроверяет, что vdj_item_id прямо сейчас всё ещё есть в
+    vdj.get_queue() — экран KJ Pro и так строит список из свежего вызова
+    get_kj_queue_view() непосредственно перед показом кнопки "Присвоить",
+    гонка в несколько секунд не критична: если песню за это время уже убрали
+    из VirtualDJ вручную, получится тот же случай, что уже существует —
+    "потерянный" заказ (см. докстринг get_kj_queue_view), просто с самого
+    начала.
+
+    Возвращает (order, outcome), outcome — один из: "already_claimed"
+    (для этой позиции уже есть заказ — race двух одновременных нажатий),
+    "service_not_found", "claimed".
+    """
+    existing = Order.query.filter_by(
+        club_id=kj.club_id, vdj_item_id=vdj_item_id, status=STATUS_QUEUED
+    ).first()
+    if existing is not None:
+        return existing, "already_claimed"
+
+    if service_id is not None:
+        service = db.session.get(Service, service_id)
+        if service is None or service.club_id != kj.club_id:
+            return None, "service_not_found"
+
+    order = Order(
+        telegram_user_id=-1,
+        club_id=kj.club_id,
+        table_no=table_no,
+        song_title=song_title,
+        artist=artist,
+        status=STATUS_QUEUED,
+        source="virtualdj",
+        channel="webapp",
+        vdj_item_id=vdj_item_id,
+        service_id=service_id,
+        queued_at=_utcnow(),
+        confirmed_by=kj.id,
+        confirmed_at=_utcnow(),
+    )
+    db.session.add(order)
+    db.session.commit()
+
+    emit_queue_updated(kj.club_id, get_kj_queue_view(kj.club_id))
+
+    return order, "claimed"
+
+
 def add_manual_song(kj, song_title: str, artist, table_no: int):
     """
     KJ добавляет песню в очередь VirtualDJ прямо из панели KJ Pro, минуя
