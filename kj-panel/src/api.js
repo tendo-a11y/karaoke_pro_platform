@@ -103,6 +103,18 @@ export const api = {
     request(`/api/kj/order/${orderId}/category`, { method: "PUT", token, body: { service_id: serviceId } }),
   removeFromVdjQueue: (token, vdjItemId) =>
     request(`/api/vdj/queue/${encodeURIComponent(vdjItemId)}`, { method: "DELETE", token }),
+  claimQueueItem: (token, { vdjItemId, songTitle, artist, tableNo, serviceId }) =>
+    request(`/api/kj/queue/claim`, {
+      method: "POST",
+      token,
+      body: {
+        vdj_item_id: vdjItemId,
+        song_title: songTitle,
+        artist: artist || null,
+        table_no: tableNo,
+        service_id: serviceId,
+      },
+    }),
 };
 
 export { ApiError, BACKEND_URL };
