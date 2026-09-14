@@ -2,6 +2,7 @@ from flask import Blueprint, g, request
 
 from auth import require_kj
 from errors import api_error, api_ok
+from services.vdj_service import remove_from_vdj_queue as _remove_from_vdj_queue
 from vdj import get_vdj_client
 from vdj.base import VirtualDJError
 
@@ -38,10 +39,18 @@ def add_to_queue():
 @bp.delete("/queue/<vdj_item_id>")
 @require_kj
 def remove_from_queue(vdj_item_id):
-    """ТЗ п.20: удаление элемента, уже добавленного в очередь VirtualDJ."""
-    vdj = get_vdj_client(g.club_id)
+    """
+    ТЗ п.20 + доп. ТЗ "KJ Pro" (кнопка "Удалить" на экране "Живая очередь
+    VirtualDJ"): удаление элемента, уже добавленного в очередь VirtualDJ.
+    Вся логика (плюс закрытие соответствующего заказа, если он есть) — в
+    services/vdj_service.py::remove_from_vdj_queue, здесь только HTTP-обвязка.
+    """
     try:
-        vdj.remove_from_queue(vdj_item_id)
+        order = _remove_from_vdj_queue(g.club_id, vdj_item_id)
     except VirtualDJError as exc:
         return api_error(502, "VDJ_UNAVAILABLE", str(exc))
-    return api_ok({"vdj_item_id": vdj_item_id, "removed": True})
+    return api_ok({
+        "vdj_item_id": vdj_item_id,
+        "removed": True,
+        "order": order.to_dict() if order is not None else None,
+    })
