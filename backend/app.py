@@ -57,19 +57,22 @@ def create_app(config_object=Config):
     # set-bridge-token`, но прямого доступа к консоли Backend в проде нет,
     # поэтому здесь то же самое действие доступно по HTTP, под отдельным
     # секретом BRIDGE_SETUP_TOKEN (переменная окружения, задаётся только в
-    # Railway, никогда не в коде). Без верного secret_setup_token ничего не
-    # отдаёт и не создаёт. Можно оставить в проекте — без заданной
+    # Railway, никогда не в коде). Секрет передаётся заголовком, а не
+    # параметром адреса — секреты в URL (query string) остаются в логах
+    # прокси/браузера, заголовок — нет. Без верного заголовка X-Setup-Token
+    # ничего не отдаёт и не создаёт. Можно оставить в проекте — без заданной
     # переменной окружения BRIDGE_SETUP_TOKEN маршрут всегда отвечает 403.
-    @app.get("/internal/bridge-setup")
+    @app.post("/internal/bridge-setup")
     def bridge_setup():
         from models import Club
 
         setup_token = os.environ.get("BRIDGE_SETUP_TOKEN")
-        if not setup_token or request.args.get("setup_token") != setup_token:
+        if not setup_token or request.headers.get("X-Setup-Token") != setup_token:
             return jsonify({"error": "forbidden"}), 403
 
-        club_id = request.args.get("club_id", type=int)
-        if not club_id:
+        payload = request.get_json(silent=True) or {}
+        club_id = payload.get("club_id")
+        if not isinstance(club_id, int):
             return jsonify({"error": "club_id обязателен"}), 400
 
         club = db.session.get(Club, club_id)
