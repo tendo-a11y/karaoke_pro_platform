@@ -97,6 +97,12 @@ export const api = {
   getTableSettings: (token, clubId) => request(`/api/kj/table-settings/${clubId}`, { token }),
   updateTableSettings: (token, clubId, tableCount) =>
     request(`/api/kj/table-settings/${clubId}`, { method: "PUT", token, body: { table_count: tableCount } }),
+  updateOrderTable: (token, orderId, tableNo) =>
+    request(`/api/kj/order/${orderId}/table`, { method: "PUT", token, body: { table_no: tableNo } }),
+  updateOrderCategory: (token, orderId, serviceId) =>
+    request(`/api/kj/order/${orderId}/category`, { method: "PUT", token, body: { service_id: serviceId } }),
+  removeFromVdjQueue: (token, vdjItemId) =>
+    request(`/api/vdj/queue/${encodeURIComponent(vdjItemId)}`, { method: "DELETE", token }),
 };
 
 export { ApiError, BACKEND_URL };
