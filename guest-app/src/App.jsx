@@ -539,6 +539,16 @@ function ReplaceForm({ order, token, services, busy, onSubmit, onCancel }) {
   const [serviceId, setServiceId] = useState(order.service_id ? String(order.service_id) : "");
   const [error, setError] = useState(null);
 
+  // "Без тарифа" убран из списка ниже (запрос пользователя 2026-09-14) — а
+  // у заменяемого заказа тариф иногда исторически не был указан вообще
+  // (order.service_id == null), тогда подставляем первый доступный тариф,
+  // чтобы то, что видно в select, совпадало с тем, что реально отправится.
+  useEffect(() => {
+    if (!serviceId && services.length > 0) {
+      setServiceId(String(services[0].id));
+    }
+  }, [services, serviceId]);
+
   async function handleSubmit(event) {
     event.preventDefault();
     if (!songTitle.trim()) return;
@@ -576,8 +586,7 @@ function ReplaceForm({ order, token, services, busy, onSubmit, onCancel }) {
           maxLength={200}
         />
         {services.length > 0 && (
-          <select value={serviceId} onChange={(e) => setServiceId(e.target.value)}>
-            <option value="">Без тарифа</option>
+          <select value={serviceId} onChange={(e) => setServiceId(e.target.value)} required>
             {services.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name}{s.is_free ? " (бесплатно)" : ` — ${s.price}`}
@@ -1085,6 +1094,20 @@ export default function App() {
     api.listServices(session.token).then(setServices).catch(() => {});
   }, [session]);
 
+  // Запрос пользователя 2026-09-14: тариф в клубе есть всегда, поэтому
+  // "Без тарифа" убран из списка выбора совсем (см. select ниже) — а
+  // серверные заказы всё ещё принимают null, поэтому здесь дополнительно
+  // подставляем первый тариф из списка, как только он загрузится, чтобы
+  // реальное состояние формы не осталось пустым просто потому что человек
+  // ничего не трогал (без этого select показывал бы первый тариф на
+  // экране, а по факту заказ ушёл бы без тарифа вообще — несоответствие
+  // между тем, что видно, и тем, что отправится).
+  useEffect(() => {
+    if (!serviceId && services.length > 0) {
+      setServiceId(String(services[0].id));
+    }
+  }, [services, serviceId]);
+
   // Вынесено из handleSubmitOrder, чтобы этим же кодом мог воспользоваться
   // handleActivated выше — после единственного экрана "стол + Google"
   // нужно закончить то же самое действие уже настоящим (новым) токеном, а
@@ -1292,8 +1315,11 @@ export default function App() {
                 maxLength={200}
               />
               {services.length > 0 && (
-                <select value={serviceId} onChange={(e) => setServiceId(e.target.value)}>
-                  <option value="">Без тарифа</option>
+                // "Без тарифа" убран из списка (запрос пользователя
+                // 2026-09-14 — тариф в клубе есть всегда) — serviceId
+                // теперь всегда указывает на реальный тариф, см. эффект
+                // автоподстановки первого тарифа выше.
+                <select value={serviceId} onChange={(e) => setServiceId(e.target.value)} required>
                   {services.map((s) => (
                     <option key={s.id} value={s.id}>
                       {s.name}{s.is_free ? " (бесплатно)" : ` — ${s.price}`}
