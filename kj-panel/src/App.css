@@ -147,6 +147,28 @@ h2 { font-size: 16px; color: var(--muted); text-transform: uppercase; letter-spa
 .queue-row__artist { flex: 1 1 140px; color: var(--muted); }
 .queue-row__table { flex: 0 0 auto; margin-left: auto; color: var(--accent); font-weight: 600; }
 
+.queue-row__edit { display: flex; align-items: center; gap: 4px; }
+.queue-row__table-input {
+  width: 60px;
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 13px;
+}
+.queue-row__category-select {
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 13px;
+  max-width: 150px;
+}
+.queue-row__remove { margin-left: auto; color: var(--danger); }
+.queue-row__error { flex-basis: 100%; margin: 4px 0 0; font-size: 12px; }
+
 .empty-hint { color: var(--muted); }
 
 .manual-add-form {
