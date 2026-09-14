@@ -83,6 +83,6 @@ def create_app(config_object=Config):
             club.bridge_token = secrets.token_urlsafe(32)
             db.session.commit()
 
-        return jsonify({"club_id": club.id, "bridge_token": club.bridge_token})
+        return jsonify({"club_id": club.club_id, "bridge_token": club.bridge_token})
 
     return app
