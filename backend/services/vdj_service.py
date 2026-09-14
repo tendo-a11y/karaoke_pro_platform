@@ -271,9 +271,32 @@ def remove_from_vdj_queue(club_id: int, vdj_item_id: str):
 
     Возвращает найденный Order (или None, если его не было) — вызывающему
     коду (routes/vdj.py) он не обязателен, но полезен для ответа фронтенду.
+
+    ВАЖНО про "потерянные" (orphaned) заказы (см. докстринг get_kj_queue_view
+    про то, откуда они берутся — например, старые записи ещё из тестового
+    mock-режима, у которых vdj_item_id никогда не существовал в настоящей
+    VirtualDJ): если такой позиции уже и так нет в живой очереди VirtualDJ —
+    физически удалять там нечего, поэтому vdj.remove_from_queue() вообще не
+    вызывается. Раньше он вызывался всегда, и для настоящего VirtualDJ
+    (NetworkControlVDJDriver, удаление по ID не поддерживается вообще, см.
+    его докстринг) это гарантированно проваливалось с ошибкой — хотя удалять
+    было нечего с самого начала (живой инцидент 2026-09-14: старые заказы
+    "mock-3"/"mock-4" из тестового режима не давали себя убрать после
+    включения настоящей VirtualDJ). Если же позиция всё ещё правда стоит в
+    очереди — вызов идёт как раньше, и для настоящего VirtualDJ он по-прежнему
+    может закончиться отказом (удаление там остаётся ручным действием KJ
+    прямо в VirtualDJ — это согласовано с пользователем отдельно, не баг).
     """
     vdj = get_vdj_client(club_id)
-    vdj.remove_from_queue(vdj_item_id)
+
+    live_queue = vdj.get_queue()
+    still_in_vdj = any(
+        item.vdj_item_id
+        and (item.vdj_item_id == vdj_item_id or vdj_item_id.endswith(item.vdj_item_id))
+        for item in live_queue
+    )
+    if still_in_vdj:
+        vdj.remove_from_queue(vdj_item_id)
 
     order = (
         Order.query.filter_by(club_id=club_id, vdj_item_id=vdj_item_id, status=STATUS_QUEUED).first()
