@@ -10,6 +10,7 @@ from services import category_service, song_service, vip_service
 from services.category_service import CategoryServiceError
 from services.vdj_service import (
     add_manual_song,
+    claim_vdj_queue_item,
     confirm_order,
     get_kj_queue_view,
     reject_order,
@@ -458,6 +459,59 @@ def queue(club_id):
         return denied
 
     return api_ok(get_kj_queue_view(club_id))
+
+
+_CLAIM_OUTCOME_HTTP = {
+    "already_claimed": (409, "ALREADY_CLAIMED", "Этой позиции уже назначен заказ"),
+    "service_not_found": (404, "SERVICE_NOT_FOUND", "Категория не найдена"),
+}
+
+
+@bp.post("/queue/claim")
+@require_kj
+def claim_queue_item():
+    """
+    Доп. ТЗ "KJ Pro" (запрос пользователя 2026-09-14): назначить стол и/или
+    категорию позиции живой очереди, у которой ещё нет заказа (KJ добавил
+    песню прямо в VirtualDJ, минуя Guest App — GET /api/kj/queue/<club_id>
+    отдаёт такую позицию с order_id=null). vdj_item_id/song_title/artist
+    берутся из того же ответа очереди — фронтенд отправляет их обратно как
+    есть. См. claim_vdj_queue_item() в services/vdj_service.py.
+    """
+    payload = request.get_json(silent=True) or {}
+    vdj_item_id = payload.get("vdj_item_id")
+    song_title = payload.get("song_title")
+    artist = payload.get("artist")
+    table_no = payload.get("table_no")
+    service_id = payload.get("service_id")
+
+    if not vdj_item_id or not isinstance(vdj_item_id, str):
+        return api_error(400, "VALIDATION_ERROR", "vdj_item_id обязателен")
+    if not song_title or not isinstance(song_title, str):
+        return api_error(400, "VALIDATION_ERROR", "song_title обязателен")
+    if table_no is not None and (
+        isinstance(table_no, bool) or not isinstance(table_no, int) or table_no <= 0
+    ):
+        return api_error(400, "VALIDATION_ERROR", "table_no должен быть положительным числом, либо null")
+    if service_id is not None and (isinstance(service_id, bool) or not isinstance(service_id, int)):
+        return api_error(400, "VALIDATION_ERROR", "service_id должен быть числом, либо null")
+
+    # KJ-04: то же ограничение по количеству столов клуба, что и у остальных
+    # мест, где KJ сам вводит номер стола (см. /order/manual ниже).
+    club = db.session.get(Club, g.club_id)
+    if table_no is not None and club is not None and club.table_count is not None and table_no > club.table_count:
+        return api_error(
+            400, "TABLE_OUT_OF_RANGE",
+            f"В этом клубе {club.table_count} столов — выберите номер от 1 до {club.table_count}",
+        )
+
+    order, outcome = claim_vdj_queue_item(g.kj, vdj_item_id, song_title, artist, table_no, service_id)
+    if outcome == "claimed":
+        return api_ok(order.to_dict(), status_code=201)
+    if outcome in _CLAIM_OUTCOME_HTTP:
+        status_code, error_code, message = _CLAIM_OUTCOME_HTTP[outcome]
+        return api_error(status_code, error_code, message)
+    return api_error(500, "INTERNAL_ERROR", "Неизвестный результат")
 
 
 @bp.post("/order/manual")
