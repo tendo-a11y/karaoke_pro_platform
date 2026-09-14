@@ -84,7 +84,92 @@ function tableCellLabel(item) {
   return item.table_no == null ? "Без стола" : item.table_no;
 }
 
-function QueueTable({ queue, dropActive, onDragOver, onDragLeave, onDrop }) {
+// KJ Pro: смена стола/категории и удаление песни, уже стоящей в очереди
+// (запрос пользователя, после того как выяснилось, что перестановку порядка
+// в самой очереди VirtualDJ пока не сделать надёжно — см. обсуждение про
+// vdj_bridge/driver.py — договорились начать с этих трёх пунктов, порядок
+// песен отложен). Категории подтягиваются тем же способом, что и в
+// CategoriesPanel (см. её reload()) — свой собственный небольшой список
+// внутри компонента, отдельный от него.
+function QueueTable({ queue, dropActive, onDragOver, onDragLeave, onDrop, token, clubId }) {
+  const [categories, setCategories] = useState([]);
+  const [tableDrafts, setTableDrafts] = useState({});
+  const [busyKey, setBusyKey] = useState(null);
+  const [rowErrors, setRowErrors] = useState({});
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .listCategories(token, clubId)
+      .then((data) => {
+        if (!cancelled) setCategories(data);
+      })
+      .catch(() => {
+        // Список категорий здесь не критичен — если не загрузился, просто
+        // не покажем выпадающий список смены категории в этот раз.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token, clubId]);
+
+  function draftTableFor(item) {
+    return item.order_id in tableDrafts ? tableDrafts[item.order_id] : String(item.table_no ?? "");
+  }
+
+  function setRowError(orderId, message) {
+    setRowErrors((prev) => ({ ...prev, [orderId]: message }));
+  }
+
+  async function handleSaveTable(item) {
+    const raw = draftTableFor(item).trim();
+    const tableNo = raw === "" ? null : Number(raw);
+    if (raw !== "" && (!Number.isInteger(tableNo) || tableNo <= 0)) {
+      setRowError(item.order_id, "Стол — положительное число или пусто");
+      return;
+    }
+    setBusyKey(`table-${item.order_id}`);
+    setRowError(item.order_id, null);
+    try {
+      await api.updateOrderTable(token, item.order_id, tableNo);
+      setTableDrafts((prev) => {
+        const next = { ...prev };
+        delete next[item.order_id];
+        return next;
+      });
+    } catch (err) {
+      setRowError(item.order_id, err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  async function handleChangeCategory(item, rawValue) {
+    const serviceId = rawValue === "" ? null : Number(rawValue);
+    setBusyKey(`category-${item.order_id}`);
+    setRowError(item.order_id, null);
+    try {
+      await api.updateOrderCategory(token, item.order_id, serviceId);
+    } catch (err) {
+      setRowError(item.order_id, err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  async function handleRemove(item) {
+    const key = item.vdj_item_id ?? `no-id-${item.order_id}`;
+    setBusyKey(`remove-${key}`);
+    if (item.order_id != null) setRowError(item.order_id, null);
+    try {
+      await api.removeFromVdjQueue(token, item.vdj_item_id);
+    } catch (err) {
+      if (item.order_id != null) setRowError(item.order_id, err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
   return (
     <div
       className={`queue-dropzone${dropActive ? " queue-dropzone--active" : ""}`}
@@ -102,15 +187,72 @@ function QueueTable({ queue, dropActive, onDragOver, onDragLeave, onDrop }) {
       ) : (
         // Вертикальный список вместо таблицы — тот же стиль строк, что и на
         // экране "Категории" (.categories-list/.category-row), по просьбе
-        // пользователя. Пока без перетаскивания порядка внутри самой
-        // очереди — это отдельная задача (KJ-09, ещё не сделана).
+        // пользователя. Порядок песен внутри самой очереди VirtualDJ пока не
+        // меняется отсюда — это отдельная задача (KJ-09, отложена).
         <ul className="queue-list-vertical">
           {queue.map((item, idx) => (
-            <li key={item.vdj_item_id ?? `no-id-${idx}`} className="queue-row">
+            <li
+              key={item.vdj_item_id ?? `no-id-${idx}`}
+              className={`queue-row${item.orphaned ? " queue-row--orphaned" : ""}`}
+            >
               <span className="queue-row__position">{idx + 1}</span>
               <span className="queue-row__song">🎵 {item.song_title}</span>
               <span className="queue-row__artist">{item.artist ? `🎤 ${item.artist}` : "—"}</span>
-              <span className="queue-row__table">{tableCellLabel(item)}</span>
+              {item.orphaned && (
+                <span className="queue-row__orphaned-badge" title="Эта песня больше не найдена в самом VirtualDJ — например, из-за перезапуска сервера. Можно только удалить.">
+                  ⚠ нет в VDJ
+                </span>
+              )}
+              {item.order_id != null ? (
+                <>
+                  <span className="queue-row__edit">
+                    <input
+                      type="number"
+                      min="1"
+                      className="queue-row__table-input"
+                      placeholder="Стол"
+                      value={draftTableFor(item)}
+                      onChange={(event) =>
+                        setTableDrafts((prev) => ({ ...prev, [item.order_id]: event.target.value }))
+                      }
+                    />
+                    <button
+                      type="button"
+                      className="btn-link"
+                      disabled={busyKey === `table-${item.order_id}`}
+                      onClick={() => handleSaveTable(item)}
+                    >
+                      ✓
+                    </button>
+                  </span>
+                  <select
+                    className="queue-row__category-select"
+                    value={item.service_id ?? ""}
+                    disabled={busyKey === `category-${item.order_id}`}
+                    onChange={(event) => handleChangeCategory(item, event.target.value)}
+                  >
+                    <option value="">Без категории</option>
+                    {categories.map((category) => (
+                      <option key={category.id} value={category.id}>
+                        {category.name}
+                      </option>
+                    ))}
+                  </select>
+                </>
+              ) : (
+                <span className="queue-row__table">{tableCellLabel(item)}</span>
+              )}
+              <button
+                type="button"
+                className="btn-link queue-row__remove"
+                disabled={busyKey === `remove-${item.vdj_item_id ?? `no-id-${item.order_id}`}`}
+                onClick={() => handleRemove(item)}
+              >
+                🗑 Удалить
+              </button>
+              {item.order_id != null && rowErrors[item.order_id] && (
+                <p className="error-text queue-row__error">{rowErrors[item.order_id]}</p>
+              )}
             </li>
           ))}
         </ul>
@@ -1037,6 +1179,8 @@ export default function App() {
               onDragOver={handleQueueDragOver}
               onDragLeave={handleQueueDragLeave}
               onDrop={handleQueueDrop}
+              token={token}
+              clubId={me.club_id}
             />
           </section>
         </main>
