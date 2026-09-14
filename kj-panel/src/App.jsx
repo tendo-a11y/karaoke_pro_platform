@@ -159,7 +159,12 @@ function QueueTable({ queue, dropActive, onDragOver, onDragLeave, onDrop, token,
   }
 
   function claimDraftFor(item) {
-    return claimDrafts[item.vdj_item_id] || { table: "", serviceId: "" };
+    // По умолчанию сразу подставляем первую категорию (запрос пользователя
+    // 2026-09-14 — "Без категории" убрана из списка совсем, см. select
+    // ниже), чтобы то, что видно в форме, совпадало с тем, что реально
+    // отправится при нажатии "Присвоить".
+    const fallbackServiceId = categories[0] ? String(categories[0].id) : "";
+    return claimDrafts[item.vdj_item_id] || { table: "", serviceId: fallbackServiceId };
   }
 
   function setClaimDraft(item, patch) {
@@ -269,19 +274,26 @@ function QueueTable({ queue, dropActive, onDragOver, onDragLeave, onDrop, token,
                       ✓
                     </button>
                   </span>
-                  <select
-                    className="queue-row__category-select"
-                    value={item.service_id ?? ""}
-                    disabled={busyKey === `category-${item.order_id}`}
-                    onChange={(event) => handleChangeCategory(item, event.target.value)}
-                  >
-                    <option value="">Без категории</option>
-                    {categories.map((category) => (
-                      <option key={category.id} value={category.id}>
-                        {category.name}
-                      </option>
-                    ))}
-                  </select>
+                  {categories.length > 0 && (
+                    // "Без категории" убран из списка (запрос пользователя
+                    // 2026-09-14 — категория есть всегда). Если у заказа
+                    // категория исторически не назначена (service_id ==
+                    // null, заказы до этого изменения), показываем первую
+                    // из списка — но это только отображение, само по себе
+                    // оно ничего не сохраняет, пока KJ не тронет select.
+                    <select
+                      className="queue-row__category-select"
+                      value={item.service_id ?? categories[0]?.id ?? ""}
+                      disabled={busyKey === `category-${item.order_id}`}
+                      onChange={(event) => handleChangeCategory(item, event.target.value)}
+                    >
+                      {categories.map((category) => (
+                        <option key={category.id} value={category.id}>
+                          {category.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                 </>
               ) : (
                 // Позиция реально есть в живой очереди VirtualDJ, но заказа
@@ -298,18 +310,22 @@ function QueueTable({ queue, dropActive, onDragOver, onDragLeave, onDrop, token,
                     value={claimDraftFor(item).table}
                     onChange={(event) => setClaimDraft(item, { table: event.target.value })}
                   />
-                  <select
-                    className="queue-row__category-select"
-                    value={claimDraftFor(item).serviceId}
-                    onChange={(event) => setClaimDraft(item, { serviceId: event.target.value })}
-                  >
-                    <option value="">Без категории</option>
-                    {categories.map((category) => (
-                      <option key={category.id} value={category.id}>
-                        {category.name}
-                      </option>
-                    ))}
-                  </select>
+                  {categories.length > 0 && (
+                    // "Без категории" убран из списка (запрос пользователя
+                    // 2026-09-14 — категория есть всегда), см. claimDraftFor
+                    // выше про то, чем заполняется значение по умолчанию.
+                    <select
+                      className="queue-row__category-select"
+                      value={claimDraftFor(item).serviceId}
+                      onChange={(event) => setClaimDraft(item, { serviceId: event.target.value })}
+                    >
+                      {categories.map((category) => (
+                        <option key={category.id} value={category.id}>
+                          {category.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                   <button
                     type="button"
                     className="btn-link"
