@@ -381,6 +381,22 @@ def get_kj_queue_view(club_id: int) -> list[dict]:
     KJ Pro "как есть", с order_id=None. Именно по наличию order_id (а не по
     значению table_no) экран отличает такую позицию от легитимного заказа
     без стола (order_id есть, table_no=None, гость сам не указал стол).
+
+    Обратный случай — заказ в базе всё ещё STATUS_QUEUED, но его
+    vdj_item_id уже не встречается в живой очереди VirtualDJ вообще (после
+    того, как unused_orders разобраны выше, здесь остаются именно такие) —
+    "потерянный" заказ. В тестовом режиме (VDJ_ADAPTER=mock) это возникает
+    при каждом перезапуске Backend: очередь mock-клиента хранится в памяти
+    процесса (vdj/mock_client.py) и обнуляется, а STATUS_QUEUED в постоянной
+    базе — нет (живой пример: пользователь столкнулся с этим 2026-09-14,
+    после нескольких перезапусков во время загрузки файлов гость упёрся в
+    лимит "не более 2 заказов одновременно" из-за пары таких заказов). В
+    реальном VirtualDJ то же самое возможно при разрыве и переподключении
+    моста. Раньше такие заказы нигде не показывались и KJ не мог их снять —
+    добавляем их в конец списка с order_id (он есть) и пометкой
+    "orphaned": true, чтобы уже существующая кнопка "Удалить" в KJ Pro (см.
+    remove_from_vdj_queue выше — она ищет заказ по vdj_item_id независимо от
+    того, жив ли он в самом VirtualDJ) могла закрыть и их тоже.
     """
     vdj = get_vdj_client(club_id)
     live_queue = vdj.get_queue()
@@ -416,6 +432,22 @@ def get_kj_queue_view(club_id: int) -> list[dict]:
                 # и дать сменить категорию уже поставленной в очередь песни
                 # (см. update_order_category() выше).
                 "service_id": matched.service_id if matched else None,
+                "orphaned": False,
+            }
+        )
+
+    # Заказы, оставшиеся неразобранными выше — STATUS_QUEUED в базе, но нет
+    # такой позиции в живой очереди VirtualDJ вообще (см. докстринг).
+    for order in unused_orders:
+        result.append(
+            {
+                "vdj_item_id": order.vdj_item_id,
+                "song_title": order.song_title,
+                "artist": order.artist,
+                "table_no": order.table_no,
+                "order_id": order.id,
+                "service_id": order.service_id,
+                "orphaned": True,
             }
         )
     return result
