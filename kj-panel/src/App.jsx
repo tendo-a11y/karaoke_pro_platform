@@ -78,18 +78,6 @@ function OrderCard({ order, busy, dragging, onReject, onDragStart, onDragEnd }) 
   );
 }
 
-// Отличаем два разных случая пустой колонки "Стол" (согласовано с
-// пользователем, минимальный вариант без выдумывания нового поведения):
-// order_id есть, а table_no пуст -> легитимный заказ гостя без стола
-// ("Без стола"); order_id вообще нет -> позиция в очереди VirtualDJ не
-// соответствует ни одному известному заказу (KJ добавил/переставил песню
-// прямо в VirtualDJ) -> "без заказа". Новый заказ в базе для такой песни
-// автоматически НЕ создаётся.
-function tableCellLabel(item) {
-  if (item.order_id == null) return "без заказа";
-  return item.table_no == null ? "Без стола" : item.table_no;
-}
-
 // KJ Pro: смена стола/категории и удаление песни, уже стоящей в очереди
 // (запрос пользователя, после того как выяснилось, что перестановку порядка
 // в самой очереди VirtualDJ пока не сделать надёжно — см. обсуждение про
@@ -102,6 +90,13 @@ function QueueTable({ queue, dropActive, onDragOver, onDragLeave, onDrop, token,
   const [tableDrafts, setTableDrafts] = useState({});
   const [busyKey, setBusyKey] = useState(null);
   const [rowErrors, setRowErrors] = useState({});
+  // Черновики "Стол"/"Категория" для позиций БЕЗ заказа (order_id == null —
+  // KJ добавил песню прямо в VirtualDJ, минуя Guest App, см. докстринг
+  // tableCellLabel выше). Ключ — vdj_item_id, а не order_id, потому что у
+  // таких позиций order_id ещё нет вообще (запрос пользователя 2026-09-14,
+  // после первого живого теста: 3 песни, добавленные прямо в VirtualDJ,
+  // попали в живую очередь KJ Pro, но назначить им стол было нельзя).
+  const [claimDrafts, setClaimDrafts] = useState({});
 
   useEffect(() => {
     let cancelled = false;
@@ -158,6 +153,49 @@ function QueueTable({ queue, dropActive, onDragOver, onDragLeave, onDrop, token,
       await api.updateOrderCategory(token, item.order_id, serviceId);
     } catch (err) {
       setRowError(item.order_id, err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  function claimDraftFor(item) {
+    return claimDrafts[item.vdj_item_id] || { table: "", serviceId: "" };
+  }
+
+  function setClaimDraft(item, patch) {
+    setClaimDrafts((prev) => ({
+      ...prev,
+      [item.vdj_item_id]: { ...claimDraftFor(item), ...patch },
+    }));
+  }
+
+  async function handleClaim(item) {
+    const draft = claimDraftFor(item);
+    const rawTable = draft.table.trim();
+    const tableNo = rawTable === "" ? null : Number(rawTable);
+    const errorKey = `claim-${item.vdj_item_id}`;
+    if (rawTable !== "" && (!Number.isInteger(tableNo) || tableNo <= 0)) {
+      setRowError(errorKey, "Стол — положительное число или пусто");
+      return;
+    }
+    const serviceId = draft.serviceId === "" ? null : Number(draft.serviceId);
+    setBusyKey(errorKey);
+    setRowError(errorKey, null);
+    try {
+      await api.claimQueueItem(token, {
+        vdjItemId: item.vdj_item_id,
+        songTitle: item.song_title,
+        artist: item.artist,
+        tableNo,
+        serviceId,
+      });
+      setClaimDrafts((prev) => {
+        const next = { ...prev };
+        delete next[item.vdj_item_id];
+        return next;
+      });
+    } catch (err) {
+      setRowError(errorKey, err instanceof ApiError ? err.message : String(err));
     } finally {
       setBusyKey(null);
     }
@@ -246,7 +284,41 @@ function QueueTable({ queue, dropActive, onDragOver, onDragLeave, onDrop, token,
                   </select>
                 </>
               ) : (
-                <span className="queue-row__table">{tableCellLabel(item)}</span>
+                // Позиция реально есть в живой очереди VirtualDJ, но заказа
+                // на неё нет (KJ добавил песню прямо в VirtualDJ) — раньше
+                // тут был просто текст "без заказа" без возможности что-то
+                // назначить (запрос пользователя 2026-09-14 — сделать это
+                // возможным, см. claim_vdj_queue_item в vdj_service.py).
+                <span className="queue-row__edit">
+                  <input
+                    type="number"
+                    min="1"
+                    className="queue-row__table-input"
+                    placeholder="Стол"
+                    value={claimDraftFor(item).table}
+                    onChange={(event) => setClaimDraft(item, { table: event.target.value })}
+                  />
+                  <select
+                    className="queue-row__category-select"
+                    value={claimDraftFor(item).serviceId}
+                    onChange={(event) => setClaimDraft(item, { serviceId: event.target.value })}
+                  >
+                    <option value="">Без категории</option>
+                    {categories.map((category) => (
+                      <option key={category.id} value={category.id}>
+                        {category.name}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    className="btn-link"
+                    disabled={busyKey === `claim-${item.vdj_item_id}`}
+                    onClick={() => handleClaim(item)}
+                  >
+                    ✓ Присвоить
+                  </button>
+                </span>
               )}
               <button
                 type="button"
@@ -258,6 +330,9 @@ function QueueTable({ queue, dropActive, onDragOver, onDragLeave, onDrop, token,
               </button>
               {item.order_id != null && rowErrors[item.order_id] && (
                 <p className="error-text queue-row__error">{rowErrors[item.order_id]}</p>
+              )}
+              {item.order_id == null && rowErrors[`claim-${item.vdj_item_id}`] && (
+                <p className="error-text queue-row__error">{rowErrors[`claim-${item.vdj_item_id}`]}</p>
               )}
             </li>
           ))}
