@@ -141,6 +141,11 @@ def list_guests(club_id: int, guest_type_filter: str | None = None) -> list[dict
             "table_no": current_table_no,
             "is_blocked": is_blocked,
             "email": account.email if account else None,
+            # Имя, которое гость сам себе задал (запрос пользователя
+            # 2026-09, "самопереименование гостя") — null, если гость ещё
+            # не входил через Google или ещё не задал имя, см.
+            # routes/guest.py::set_display_name.
+            "display_name": account.display_name if account else None,
             "last_song_title": entry["last_song_title"],
             "last_artist": entry["last_artist"],
             "last_activity_at": entry["last_activity_at"].isoformat() if entry["last_activity_at"] else None,
@@ -187,6 +192,7 @@ def get_guest_detail(club_id: int, guest_id: int) -> dict:
         "table_no": current_table_no,
         "is_blocked": bool(status.is_blocked) if status else False,
         "email": account.email if account else None,
+        "display_name": account.display_name if account else None,
         "last_song_title": entry["last_song_title"],
         "last_artist": entry["last_artist"],
         "last_activity_at": entry["last_activity_at"].isoformat() if entry["last_activity_at"] else None,
