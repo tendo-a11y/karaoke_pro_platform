@@ -76,6 +76,11 @@ MAX_RESULTS = 5
 
 LINK_DOMAINS = ("youtube.com", "youtu.be", "music.apple.com", "itunes.apple.com", "open.spotify.com")
 
+# Типы картинок, которые принимает Claude API (и которых достаточно для
+# скриншота из телефона — HEIC на бэкенд не доходит, конвертируется в JPEG
+# ещё на фронтенде при сжатии через canvas, см. guest-app/src/App.jsx).
+ALLOWED_SCREENSHOT_TYPES = {"image/jpeg", "image/png", "image/webp"}
+
 CLAUDE_PROMPT = """Гость караоке-бара описал песню свободным текстом (возможно, с ошибками,
 на русском или румынском, без знаков препинания). Определи, какую песню он имеет
 в виду. Верни СТРОГО JSON без пояснений в формате:
@@ -87,6 +92,19 @@ CLAUDE_PROMPT = """Гость караоке-бара описал песню с
 название. Если совсем не удаётся ничего определить — верни {{"queries": []}}.
 
 Текст гостя: {text}"""
+
+CLAUDE_VISION_PROMPT = """Гость караоке-бара прислал скриншот (например, из Shazam, Spotify,
+YouTube Music, ВКонтакте или похожего приложения), где виден плеер или
+карточка песни. Найди на картинке название песни и, если видно, исполнителя.
+Текст на скриншоте может быть частично обрезан или на разных языках (русский,
+румынский, английский). Верни СТРОГО JSON без пояснений в формате:
+
+{"queries": ["исполнитель - название"]}
+
+Дай ровно один наиболее вероятный вариант "исполнитель - название" для поиска
+в базе Apple Music/iTunes (или только название, если исполнитель не виден).
+Если на картинке вообще не видно ничего похожего на название песни — верни
+{"queries": []}."""
 
 
 def _ask_claude(text: str) -> list[str]:
@@ -127,6 +145,56 @@ def _ask_claude(text: str) -> list[str]:
         return [q for q in queries if isinstance(q, str) and q.strip()][:3]
     except (KeyError, IndexError, ValueError, AttributeError, TypeError):
         logger.exception("Не удалось разобрать ответ Claude")
+        return []
+
+
+def _ask_claude_vision(image_base64: str, media_type: str) -> list[str]:
+    api_key = current_app.config.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        logger.warning("ANTHROPIC_API_KEY не задан — распознавание скриншота пропущено")
+        return []
+
+    try:
+        resp = requests.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "x-api-key": api_key,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json",
+            },
+            json={
+                "model": current_app.config.get("ANTHROPIC_MODEL"),
+                "max_tokens": 300,
+                "messages": [{
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image",
+                            "source": {"type": "base64", "media_type": media_type, "data": image_base64},
+                        },
+                        {"type": "text", "text": CLAUDE_VISION_PROMPT},
+                    ],
+                }],
+            },
+            timeout=20,
+        )
+    except requests.RequestException:
+        logger.exception("Ошибка сети при обращении к Claude API (скриншот)")
+        return []
+
+    if resp.status_code != 200:
+        logger.error("Claude API (скриншот) вернул %s: %s", resp.status_code, resp.text)
+        return []
+
+    try:
+        data = resp.json()
+        raw_text = data["content"][0]["text"]
+        match = re.search(r"\{.*\}", raw_text, re.DOTALL)
+        parsed = json.loads(match.group(0) if match else raw_text)
+        queries = parsed.get("queries", [])
+        return [q for q in queries if isinstance(q, str) and q.strip()][:3]
+    except (KeyError, IndexError, ValueError, AttributeError, TypeError):
+        logger.exception("Не удалось разобрать ответ Claude (скриншот)")
         return []
 
 
@@ -288,6 +356,35 @@ def _resolve_link(url: str) -> list[dict]:
         return []
 
     return []
+
+
+def screenshot_powered_search(image_base64: str, media_type: str) -> list[dict]:
+    """
+    Гость прислал скриншот вместо текста (например, из Shazam/Spotify/ВК) —
+    Клод по картинке определяет название и исполнителя, дальше поиск идёт
+    так же, как при обычном текстовом AI-поиске (ai_powered_search):
+    полученный вариант ищется в iTunes. В отличие от текстового поиска
+    здесь нет "запасного" текста гостя для честного fallback в iTunes —
+    если Клод ничего не разглядел на картинке (нет ключа/ошибка/пустой
+    JSON/на скриншоте не оказалось названия песни), результат тоже
+    честно пустой [], без выдумывания.
+    """
+    queries = _ask_claude_vision(image_base64, media_type)
+    if not queries:
+        return []
+
+    seen = set()
+    results: list[dict] = []
+    for query in queries:
+        for item in _search_itunes(query, limit=MAX_RESULTS):
+            key = (item["title"].strip().lower(), (item["artist"] or "").strip().lower())
+            if key in seen:
+                continue
+            seen.add(key)
+            results.append(item)
+            if len(results) >= MAX_RESULTS:
+                return results
+    return results
 
 
 def ai_powered_search(text: str) -> list[dict]:
