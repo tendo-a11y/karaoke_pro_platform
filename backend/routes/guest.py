@@ -6,7 +6,7 @@ from auth import issue_guest_token, require_guest
 from errors import api_error, api_ok
 from extensions import db
 from models import STATUS_ERROR, STATUS_REJECTED, ChatMessage, Club, Order, Service
-from services import ai_search_service, guest_account_service, song_service, table_group_service, vdj_service, vip_service
+from services import ai_search_service, guest_account_service, guest_status_service, song_service, table_group_service, vdj_service, vip_service
 from services.google_auth_service import GoogleAuthError, verify_google_credential
 from sockets import emit_chat_message, emit_order_created, emit_vip_request_created
 from vdj import get_vdj_client
@@ -433,6 +433,11 @@ def link_google():
     if new_guest_id != g.guest_id:
         table_group_service.transfer_identity(g.club_id, effective_table_no, g.guest_id, new_guest_id)
     table_group_state = table_group_service.ensure_session_group_state(g.club_id, effective_table_no, new_guest_id)
+
+    # Живой стол в БД (см. models.py::GuestStatus, auth.py::require_guest) —
+    # чтобы список гостей в KJ Panel видел актуальный стол сразу, не
+    # дожидаясь первого заказа этого гостя.
+    guest_status_service.set_table(g.club_id, new_guest_id, effective_table_no)
 
     token = issue_guest_token(
         new_guest_id, g.club_id, effective_table_no,
