@@ -361,6 +361,16 @@ class GuestAccount(db.Model):
     telegram_user_id = db.Column(db.BigInteger, nullable=False, index=True)
     google_sub = db.Column(db.String(255), nullable=False, index=True)
     email = db.Column(db.String(255), nullable=True)
+
+    # Имя, которое гость сам себе задаёт (запрос пользователя 2026-09,
+    # "самопереименование гостя") — видно KJ в списке гостей и в карточке
+    # гостя (см. services/guest_directory_service.py), задаётся/меняется
+    # через PUT /api/guest/profile/name (routes/guest.py::set_display_name).
+    # Живёт на постоянном профиле, а не в токене/сессии — доступно только
+    # ПОСЛЕ входа через Google, как и email выше; можно менять сколько
+    # угодно раз, это не разовая настройка при активации.
+    display_name = db.Column(db.String(60), nullable=True)
+
     created_at = db.Column(db.DateTime(timezone=True), default=utcnow, nullable=False)
 
     club = db.relationship("Club")
@@ -376,6 +386,7 @@ class GuestAccount(db.Model):
             "club_id": self.club_id,
             "telegram_user_id": self.telegram_user_id,
             "email": self.email,
+            "display_name": self.display_name,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
