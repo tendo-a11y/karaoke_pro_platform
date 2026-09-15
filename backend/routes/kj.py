@@ -6,7 +6,8 @@ from auth import require_kj
 from errors import api_error, api_ok
 from extensions import db
 from models import ChatMessage, Club, Order, VipClient, VipRequest
-from services import category_service, song_service, vip_service
+from services import category_service, guest_directory_service, guest_status_service, song_service, vip_service
+from services.guest_directory_service import GUEST_TYPES, GuestDirectoryError
 from services.category_service import CategoryServiceError
 from services.vdj_service import (
     add_manual_song,
@@ -666,3 +667,74 @@ def update_table_settings(club_id):
     club.table_count = table_count
     db.session.commit()
     return api_ok({"table_count": club.table_count})
+
+
+# --- Список гостей / карточка гостя (запрос пользователя 2026-09: сортировка
+# VIP/Простой/Без стола, переход в карточку, блокировка, снятие со стола,
+# статистика по вечеру/неделе/месяцу, избранные песни видны). guest_id —
+# BigInteger, приходит строкой в URL (JS теряет точность на больших int,
+# тот же принцип, что и у TableGroup.to_dict()/guest_id в токене), поэтому
+# путь принимает его как строку и парсит вручную, а не через <int:...>.
+
+def _parse_guest_id(raw: str):
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return None
+
+
+@bp.get("/guests/<int:club_id>")
+@require_kj
+def list_guests(club_id):
+    denied = _ensure_own_club(club_id)
+    if denied:
+        return denied
+    guest_type = request.args.get("type")
+    if guest_type is not None and guest_type not in GUEST_TYPES:
+        return api_error(400, "VALIDATION_ERROR", f"type должен быть одним из: {', '.join(GUEST_TYPES)}")
+    return api_ok(guest_directory_service.list_guests(club_id, guest_type))
+
+
+@bp.get("/guests/<int:club_id>/<guest_id>")
+@require_kj
+def get_guest(club_id, guest_id):
+    denied = _ensure_own_club(club_id)
+    if denied:
+        return denied
+    parsed_id = _parse_guest_id(guest_id)
+    if parsed_id is None:
+        return api_error(400, "VALIDATION_ERROR", "guest_id должен быть числом")
+    try:
+        return api_ok(guest_directory_service.get_guest_detail(club_id, parsed_id))
+    except GuestDirectoryError as exc:
+        return api_error(exc.status_code, exc.code, exc.message)
+
+
+@bp.post("/guests/<guest_id>/block")
+@require_kj
+def block_guest(guest_id):
+    parsed_id = _parse_guest_id(guest_id)
+    if parsed_id is None:
+        return api_error(400, "VALIDATION_ERROR", "guest_id должен быть числом")
+    status = guest_status_service.block(g.club_id, parsed_id, g.kj)
+    return api_ok(status.to_dict())
+
+
+@bp.post("/guests/<guest_id>/unblock")
+@require_kj
+def unblock_guest(guest_id):
+    parsed_id = _parse_guest_id(guest_id)
+    if parsed_id is None:
+        return api_error(400, "VALIDATION_ERROR", "guest_id должен быть числом")
+    status = guest_status_service.unblock(g.club_id, parsed_id)
+    return api_ok(status.to_dict() if status else {"guest_id": guest_id, "is_blocked": False})
+
+
+@bp.post("/guests/<guest_id>/remove-table")
+@require_kj
+def remove_guest_from_table(guest_id):
+    parsed_id = _parse_guest_id(guest_id)
+    if parsed_id is None:
+        return api_error(400, "VALIDATION_ERROR", "guest_id должен быть числом")
+    status = guest_status_service.set_table(g.club_id, parsed_id, None)
+    return api_ok(status.to_dict())
