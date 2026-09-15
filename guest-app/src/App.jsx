@@ -415,15 +415,60 @@ function SongSearch({ token, onPick }) {
 // не спрятанное автоопределение: гость сам выбирает, чем ищет. "Ссылка" и
 // "ИИ-поиск" отправляют текст в тот же самый эндпоинт api.aiSearchSongs —
 // вся разница только в подсказке и плейсхолдере, backend не поменялся.
-// "Скриншот" — согласованный со пользователем следующий шаг, ещё не
-// реализован (нет пока backend-части, которая читает картинку): кнопка
-// есть, но честно показывает "скоро", ничего не изображая из себя рабочим,
-// пока это не так на самом деле.
+// "Скриншот" (2026-09) отправляет картинку в отдельный эндпоинт
+// api.screenshotSearchSongs — Клод сам смотрит на картинку
+// (backend/services/ai_search_service.py::_ask_claude_vision) и определяет
+// название/исполнителя, дальше поиск в iTunes идёт так же, как у двух
+// других режимов.
 const FINDER_MODES = [
   { key: "text", label: "🤖 ИИ-поиск" },
   { key: "link", label: "🔗 Ссылка" },
   { key: "screenshot", label: "📷 Скриншот" },
 ];
+
+// Скриншот с телефона может весить несколько мегабайт — сжимаем через
+// canvas перед отправкой (быстрее для гостя на мобильном интернете и не
+// упирается в лимит размера картинки у Claude API). Результат — всегда
+// JPEG, независимо от исходного формата (PNG со скриншота и так почти
+// всегда без прозрачности, а на распознавание текста Клодом это не влияет).
+const SCREENSHOT_MAX_DIM = 1280;
+const SCREENSHOT_JPEG_QUALITY = 0.82;
+
+function resizeImageToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("Не удалось прочитать файл"));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error("Не удалось открыть изображение"));
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > SCREENSHOT_MAX_DIM || height > SCREENSHOT_MAX_DIM) {
+          if (width >= height) {
+            height = Math.round((height * SCREENSHOT_MAX_DIM) / width);
+            width = SCREENSHOT_MAX_DIM;
+          } else {
+            width = Math.round((width * SCREENSHOT_MAX_DIM) / height);
+            height = SCREENSHOT_MAX_DIM;
+          }
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext("2d").drawImage(img, 0, 0, width, height);
+        const dataUrl = canvas.toDataURL("image/jpeg", SCREENSHOT_JPEG_QUALITY);
+        const base64 = dataUrl.split(",")[1];
+        if (!base64) {
+          reject(new Error("Не удалось обработать изображение"));
+          return;
+        }
+        resolve({ base64, mediaType: "image/jpeg" });
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
 
 function AiSearch({ token, onPick }) {
   const [mode, setMode] = useState("text");
@@ -432,6 +477,7 @@ function AiSearch({ token, onPick }) {
   const [searching, setSearching] = useState(false);
   const [searched, setSearched] = useState(false);
   const [error, setError] = useState(null);
+  const screenshotInputRef = useRef(null);
 
   function switchMode(nextMode) {
     setMode(nextMode);
@@ -439,6 +485,27 @@ function AiSearch({ token, onPick }) {
     setResults([]);
     setSearched(false);
     setError(null);
+    if (screenshotInputRef.current) screenshotInputRef.current.value = "";
+  }
+
+  async function handleScreenshotChange(event) {
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+    setSearching(true);
+    setError(null);
+    setSearched(false);
+    setResults([]);
+    try {
+      const { base64, mediaType } = await resizeImageToBase64(file);
+      const data = await api.screenshotSearchSongs(token, base64, mediaType);
+      setResults(data);
+      setSearched(true);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setSearching(false);
+      event.target.value = "";
+    }
   }
 
   async function handleSearch(event) {
@@ -481,7 +548,44 @@ function AiSearch({ token, onPick }) {
       </div>
 
       {mode === "screenshot" ? (
-        <p className="empty-hint">Поиск по скриншоту скоро будет доступен — пока используйте ссылку или ИИ-поиск.</p>
+        <div className="screenshot-search">
+          <p className="empty-hint">
+            Загрузите скриншот из Shazam, Spotify, ВКонтакте или похожего приложения — определим песню по картинке.
+          </p>
+          <input
+            ref={screenshotInputRef}
+            type="file"
+            accept="image/*"
+            className="screenshot-search__input"
+            onChange={handleScreenshotChange}
+            disabled={searching}
+          />
+          {searching && <p className="empty-hint">Распознаём…</p>}
+          {error && <div className="banner banner--error">{error}</div>}
+          {searched && !searching && results.length === 0 && (
+            <p className="empty-hint">Не удалось разобрать песню на скриншоте — попробуйте другой скриншот или другой режим поиска.</p>
+          )}
+          {results.length > 0 && (
+            <ul className="song-search__results">
+              {results.map((s, idx) => (
+                <li key={idx}>
+                  <button
+                    type="button"
+                    className="link-btn"
+                    onClick={() => {
+                      onPick(s);
+                      setResults([]);
+                      setSearched(false);
+                      if (screenshotInputRef.current) screenshotInputRef.current.value = "";
+                    }}
+                  >
+                    🎵 {s.artist ? `${s.artist} — ${s.title}` : s.title}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       ) : (
         <>
           <form className="order-form" onSubmit={handleSearch}>
