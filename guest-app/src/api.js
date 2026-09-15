@@ -92,6 +92,12 @@ export const api = {
   // выбран и гость лишь переключается на другой Google-аккаунт, сервер
   // сам подставит уже известный стол, если его не передать (см. docstring
   // routes/guest.py::link_google) — здесь для простоты передаём всегда.
+  setDisplayName: (token, displayName) =>
+    request("/api/guest/profile/name", {
+      method: "PUT",
+      token,
+      body: { display_name: displayName },
+    }),
   linkGoogle: (token, tableNo, googleCredential) =>
     request("/api/guest/profile/link-google", {
       method: "POST", token, body: { table_no: tableNo, google_credential: googleCredential },
