@@ -958,6 +958,93 @@ function ChatPanel({ token }) {
   );
 }
 
+// Имя, которое гость сам себе задаёт (запрос пользователя 2026-09,
+// "самопереименование гостя") — видно ведущему в KJ Panel (список гостей и
+// карточка гостя), вместо голого номера guest_id. Доступно только ПОСЛЕ
+// входа через Google (см. ActivationPanel/handleActivated ниже) — до этого
+// нет постоянного профиля, к которому можно привязать имя (см.
+// backend/routes/guest.py::set_display_name, GOOGLE_LINK_REQUIRED). Можно
+// менять сколько угодно раз — это переименование, а не разовая настройка.
+const MAX_DISPLAY_NAME_LEN = 40;
+
+function ProfileNamePanel({ token, meInfo, onNameChanged }) {
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(meInfo.display_name || "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+
+  // Если имя обновилось извне (например, опрос /me после действия в другой
+  // вкладке) — подхватываем новое значение, но только пока сами не
+  // редактируем, чтобы не затереть то, что гость уже печатает.
+  useEffect(() => {
+    if (!editing) setName(meInfo.display_name || "");
+  }, [meInfo.display_name, editing]);
+
+  async function handleSave(event) {
+    event.preventDefault();
+    const trimmed = name.trim();
+    if (!trimmed) {
+      setError("Имя не может быть пустым");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await api.setDisplayName(token, trimmed);
+      setEditing(false);
+      await onNameChanged();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!editing) {
+    return (
+      <section className="panel profile-panel">
+        <h2>👤 Ваше имя</h2>
+        <p className="empty-hint">
+          {meInfo.display_name
+            ? <>Ведущий видит вас как «{meInfo.display_name}».</>
+            : "Вы ещё не задали имя — ведущий видит только номер гостя."}
+        </p>
+        <button type="button" className="btn-link" onClick={() => setEditing(true)}>
+          {meInfo.display_name ? "Изменить имя" : "Задать имя"}
+        </button>
+      </section>
+    );
+  }
+
+  return (
+    <section className="panel profile-panel">
+      <h2>👤 Ваше имя</h2>
+      {error && <div className="banner banner--error">{error}</div>}
+      <form className="order-form" onSubmit={handleSave}>
+        <input
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          maxLength={MAX_DISPLAY_NAME_LEN}
+          placeholder="Как вас называть?"
+          autoFocus
+        />
+        <button type="submit" disabled={busy || !name.trim()}>
+          {busy ? "Сохраняем…" : "Сохранить"}
+        </button>
+        <button
+          type="button"
+          className="link-btn"
+          onClick={() => { setEditing(false); setError(null); }}
+          disabled={busy}
+        >
+          Отмена
+        </button>
+      </form>
+    </section>
+  );
+}
+
 // ТЗ п.45 (финальная единая модель входа) — единственный способ стать
 // Role 4: гость вводит номер своего стола и подтверждает личность через
 // Google одним действием (см. api.linkGoogle). До этого он мог только
@@ -1369,6 +1456,10 @@ export default function App() {
           {meInfo.table_no != null ? `Стол ${meInfo.table_no}` : "Без стола"}
         </span>
       </header>
+
+      {activated && (
+        <ProfileNamePanel token={session.token} meInfo={meInfo} onNameChanged={refreshMe} />
+      )}
 
       <VipPanel token={session.token} meInfo={meInfo} />
 
