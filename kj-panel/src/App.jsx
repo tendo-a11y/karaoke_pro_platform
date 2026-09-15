@@ -1064,10 +1064,14 @@ function GuestCard({ token, clubId, guestId, onBack, onChanged }) {
       {guest && (
         <>
           <h2>
-            Гость #{guest.guest_id}{" "}
+            {guest.display_name || `Гость #${guest.guest_id}`}{" "}
             <span className="guest-type-badge">{GUEST_TYPE_BADGE[guest.guest_type] || guest.guest_type}</span>
             {guest.is_blocked && <span className="guest-type-badge guest-type-badge--blocked">🚫 Заблокирован</span>}
           </h2>
+          {/* Имя — самоназвание гостя (запрос пользователя 2026-09), ID
+          показываем отдельно всегда, чтобы не терять однозначную ссылку на
+          гостя, если имя выглядит неоднозначно (совпадает у двух гостей). */}
+          {guest.display_name && <p className="empty-hint">ID гостя: {guest.guest_id}</p>}
           {guest.email && <p className="empty-hint">Почта: {guest.email}</p>}
           <p className="empty-hint">
             Стол: {guest.table_no ?? "—"}
@@ -1177,10 +1181,11 @@ function GuestsPanel({ token, clubId }) {
             {guests.map((guest) => (
               <li key={guest.guest_id} className="vip-row vip-row--client">
                 <div>
-                  Гость #{guest.guest_id} · {GUEST_TYPE_BADGE[guest.guest_type] || guest.guest_type}
+                  {guest.display_name || `Гость #${guest.guest_id}`} · {GUEST_TYPE_BADGE[guest.guest_type] || guest.guest_type}
                   {guest.is_blocked && <span className="guest-type-badge guest-type-badge--blocked"> 🚫 Заблокирован</span>}
                   <br />
                   <span className="empty-hint">
+                    {guest.display_name && <>ID {guest.guest_id} · </>}
                     Стол: {guest.table_no ?? "—"} · за вечер {guest.orders_evening} · за неделю {guest.orders_week} · за месяц {guest.orders_month}
                     {guest.vip_balance != null && <> · баланс {guest.vip_balance} MDL</>}
                   </span>
