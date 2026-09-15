@@ -21,6 +21,7 @@ docstring AdminUser в models.py, уже написанный до этого ш
 filter), чтобы не тащить сюда старый баг с бакетингом по календарным
 суткам в UTC при отображении в локальном времени.
 """
+import secrets
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
@@ -93,6 +94,23 @@ def list_clubs(admin) -> list[dict]:
 
 def get_club_detail(admin, club_id: int) -> dict:
     club = _resolve_visible_club(admin, club_id)
+
+    # Код доступа для программы-моста VirtualDJ (см. Club.bridge_token в
+    # models.py и backend/vdj/bridge_client.py) — раньше появлялся только
+    # через manage.py (нет доступа к консоли Backend в проде) или разовый
+    # служебный HTTP-эндпоинт (app.py::bridge_setup, оставлен как есть, но
+    # больше не нужен для новых клубов). Теперь create_club() создаёт его
+    # сразу; эта проверка — просто подстраховка для клубов, заведённых ещё
+    # до этого изменения (например, club_id=1 в самом начале). Запрос
+    # пользователя 2026-09-14: чтобы для нового клуба в новом городе не
+    # требовалось моё ручное участие — админ должен сразу видеть и сам код,
+    # и готовый файл для скачивания (тот же принцип, что и у QR-кода клуба
+    # ниже, get_club_qr_link() — готовый артефакт отдаётся прямо из Admin
+    # App, без обращения ко мне).
+    if not club.bridge_token:
+        club.bridge_token = secrets.token_urlsafe(32)
+        db.session.commit()
+
     now = datetime.now(timezone.utc)
     revenue_today = _revenue_since(club.club_id, now - timedelta(days=1))
     revenue_week = _revenue_since(club.club_id, now - timedelta(days=7))
@@ -114,6 +132,11 @@ def get_club_detail(admin, club_id: int) -> dict:
         "admin_cashback": float(admin_cashback),
         "songs_count": songs_count,
         "kj_operators": kj_operators,
+        # Намеренно НЕ добавлено в Club.to_dict() (используется и в
+        # list_clubs() — списке сразу всех клубов админа): секрет должен
+        # быть виден только на экране конкретного клуба, куда админ уже
+        # авторизован, а не в общем списке.
+        "bridge_token": club.bridge_token,
     })
     return data
 
@@ -164,6 +187,13 @@ def create_club(admin, *, name, city=None, phone=None, email=None, table_count=N
         email=email,
         table_count=table_count,
         is_active=True,
+        # Запрос пользователя 2026-09-14: код доступа для программы-моста
+        # VirtualDJ (см. Club.bridge_token в models.py) создаётся сразу при
+        # создании клуба, а не отдельным ручным шагом — при открытии клуба
+        # в новом городе админ сразу видит его на экране клуба (см.
+        # get_club_detail() ниже) и может скачать готовый файл для KJ, без
+        # обращения к разработчику.
+        bridge_token=secrets.token_urlsafe(32),
     )
     db.session.add(club)
     db.session.commit()
