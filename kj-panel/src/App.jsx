@@ -983,6 +983,222 @@ function TableSettingsPanel({ token, clubId }) {
   );
 }
 
+// Экран "Гости" (запрос пользователя 2026-09): сортировка/фильтр гостей по
+// типу VIP/Простой/Без стола, переход в карточку гостя, блокировка и
+// снятие со стола (реально действующие — см. backend/auth.py::
+// require_guest и models.py::GuestStatus, а не просто отметка в интерфейсе),
+// статистика по вечеру/неделе/месяцу, избранные песни гостя видны в карточке.
+const GUEST_TYPE_FILTERS = [
+  { key: "", label: "Все" },
+  { key: "vip", label: "⭐ VIP" },
+  { key: "client", label: "🙂 Простой" },
+  { key: "no_table", label: "🚪 Без стола" },
+];
+
+const GUEST_TYPE_BADGE = {
+  vip: "⭐ VIP",
+  client: "🙂 Простой",
+  no_table: "🚪 Без стола",
+};
+
+function GuestCard({ token, clubId, guestId, onBack, onChanged }) {
+  const [guest, setGuest] = useState(null);
+  const [loadError, setLoadError] = useState(null);
+  const [actionError, setActionError] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  async function reload() {
+    try {
+      const data = await api.getGuest(token, clubId, guestId);
+      setGuest(data);
+      setLoadError(null);
+    } catch (err) {
+      setLoadError(err instanceof ApiError ? err.message : String(err));
+    }
+  }
+
+  useEffect(() => {
+    reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [guestId]);
+
+  async function handleToggleBlock() {
+    setBusy(true);
+    setActionError(null);
+    try {
+      if (guest.is_blocked) {
+        await api.unblockGuest(token, guestId);
+      } else {
+        await api.blockGuest(token, guestId);
+      }
+      await reload();
+      onChanged?.();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleRemoveTable() {
+    setBusy(true);
+    setActionError(null);
+    try {
+      await api.removeGuestFromTable(token, guestId);
+      await reload();
+      onChanged?.();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="guest-card">
+      <button type="button" className="btn-link" onClick={onBack}>← К списку гостей</button>
+
+      {loadError && <div className="banner banner--error">{loadError}</div>}
+      {!guest && !loadError && <p className="empty-hint">Загрузка…</p>}
+
+      {guest && (
+        <>
+          <h2>
+            Гость #{guest.guest_id}{" "}
+            <span className="guest-type-badge">{GUEST_TYPE_BADGE[guest.guest_type] || guest.guest_type}</span>
+            {guest.is_blocked && <span className="guest-type-badge guest-type-badge--blocked">🚫 Заблокирован</span>}
+          </h2>
+          {guest.email && <p className="empty-hint">Почта: {guest.email}</p>}
+          <p className="empty-hint">
+            Стол: {guest.table_no ?? "—"}
+            {guest.last_song_title && (
+              <> · последняя песня: {guest.last_artist ? `${guest.last_artist} — ` : ""}{guest.last_song_title}</>
+            )}
+          </p>
+
+          {guest.vip_balance != null && (
+            <p className="empty-hint">
+              Баланс: <strong>{guest.vip_balance} MDL</strong> · кэшбэк {guest.vip_cashback_percent}%
+            </p>
+          )}
+
+          <div className="vip-stat-row"><span>Заказов за вечер</span><strong>{guest.orders_evening}</strong></div>
+          <div className="vip-stat-row"><span>Заказов за неделю</span><strong>{guest.orders_week}</strong></div>
+          <div className="vip-stat-row"><span>Заказов за месяц</span><strong>{guest.orders_month}</strong></div>
+
+          {actionError && <div className="banner banner--error">{actionError}</div>}
+
+          <div className="vip-row__actions" style={{ marginTop: 10 }}>
+            <button type="button" className="btn btn--reject" disabled={busy} onClick={handleToggleBlock}>
+              {guest.is_blocked ? "Разблокировать" : "🚫 Заблокировать"}
+            </button>
+            {guest.table_no != null && (
+              <button type="button" className="btn-link" disabled={busy} onClick={handleRemoveTable}>
+                Снять со стола
+              </button>
+            )}
+          </div>
+
+          <h3 style={{ marginTop: 16 }}>Избранные песни ({guest.favorites.length})</h3>
+          {guest.favorites.length === 0 && <p className="empty-hint">Пока ничего не добавлено.</p>}
+          {guest.favorites.length > 0 && (
+            <ul className="song-search__results">
+              {guest.favorites.map((f) => (
+                <li key={f.id} style={{ padding: "8px 12px" }}>
+                  🎵 {f.artist ? `${f.artist} — ${f.song_title}` : f.song_title}
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function GuestsPanel({ token, clubId }) {
+  const [typeFilter, setTypeFilter] = useState("");
+  const [guests, setGuests] = useState(null);
+  const [loadError, setLoadError] = useState(null);
+  const [selectedGuestId, setSelectedGuestId] = useState(null);
+
+  async function reload() {
+    try {
+      const data = await api.listGuests(token, clubId, typeFilter || undefined);
+      setGuests(data);
+      setLoadError(null);
+    } catch (err) {
+      setLoadError(err instanceof ApiError ? err.message : String(err));
+    }
+  }
+
+  useEffect(() => {
+    reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clubId, typeFilter]);
+
+  if (selectedGuestId != null) {
+    return (
+      <div className="guests-panel">
+        <GuestCard
+          token={token}
+          clubId={clubId}
+          guestId={selectedGuestId}
+          onBack={() => setSelectedGuestId(null)}
+          onChanged={reload}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="guests-panel">
+      <section>
+        <h2>Гости</h2>
+        <div className="guest-type-filters">
+          {GUEST_TYPE_FILTERS.map((f) => (
+            <button
+              key={f.key || "all"}
+              type="button"
+              className={`btn-link${typeFilter === f.key ? " guest-type-filters__active" : ""}`}
+              onClick={() => setTypeFilter(f.key)}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+
+        {loadError && <div className="banner banner--error">{loadError}</div>}
+        {!guests && !loadError && <p className="empty-hint">Загрузка…</p>}
+        {guests && guests.length === 0 && <p className="empty-hint">Гостей пока нет.</p>}
+
+        {guests && guests.length > 0 && (
+          <ul className="vip-list">
+            {guests.map((guest) => (
+              <li key={guest.guest_id} className="vip-row vip-row--client">
+                <div>
+                  Гость #{guest.guest_id} · {GUEST_TYPE_BADGE[guest.guest_type] || guest.guest_type}
+                  {guest.is_blocked && <span className="guest-type-badge guest-type-badge--blocked"> 🚫 Заблокирован</span>}
+                  <br />
+                  <span className="empty-hint">
+                    Стол: {guest.table_no ?? "—"} · за вечер {guest.orders_evening} · за неделю {guest.orders_week} · за месяц {guest.orders_month}
+                    {guest.vip_balance != null && <> · баланс {guest.vip_balance} MDL</>}
+                  </span>
+                </div>
+                <div className="vip-row__actions">
+                  <button type="button" className="btn-link" onClick={() => setSelectedGuestId(guest.guest_id)}>
+                    Открыть карточку →
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </div>
+  );
+}
+
 export default function App() {
   const token = useMemo(() => resolveToken(), []);
   const [me, setMe] = useState(null);
@@ -996,9 +1212,10 @@ export default function App() {
   const [dropActive, setDropActive] = useState(false);
   const [manualAddBusy, setManualAddBusy] = useState(false);
   const [manualAddError, setManualAddError] = useState(null);
-  // 'orders' | 'vip' | 'categories' | 'tables' — переключение верхнеуровневых
-  // экранов (Block D KJ Pro; 'categories'/'tables' добавлены доп. ТЗ "KJ Pro",
-  // KJ-01/03/07 и KJ-04 соответственно).
+  // 'orders' | 'vip' | 'categories' | 'tables' | 'guests' — переключение
+  // верхнеуровневых экранов (Block D KJ Pro; 'categories'/'tables' добавлены
+  // доп. ТЗ "KJ Pro", KJ-01/03/07 и KJ-04 соответственно; 'guests' — запрос
+  // пользователя 2026-09, список гостей VIP/Простой/Без стола с карточкой).
   const [view, setView] = useState("orders");
   // Реф нужен эффекту ниже (disconnect в cleanup без пересоздания подписок),
   // а socketInstance в state — чтобы VipPanel мог реагировать на появление
@@ -1228,6 +1445,11 @@ export default function App() {
               🪑 Столы
             </button>
           )}
+          {view !== "guests" && (
+            <button type="button" className="btn-link" onClick={() => setView("guests")}>
+              👥 Гости
+            </button>
+          )}
         </div>
       </header>
 
@@ -1239,6 +1461,8 @@ export default function App() {
         <CategoriesPanel token={token} clubId={me.club_id} />
       ) : view === "tables" ? (
         <TableSettingsPanel token={token} clubId={me.club_id} />
+      ) : view === "guests" ? (
+        <GuestsPanel token={token} clubId={me.club_id} />
       ) : (
         <main className="app-main">
           <section>
