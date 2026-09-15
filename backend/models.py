@@ -775,3 +775,59 @@ class TableJoinRequest(db.Model):
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "decided_at": self.decided_at.isoformat() if self.decided_at else None,
         }
+
+
+class GuestStatus(db.Model):
+    """
+    Живой статус гостя, который KJ управляет из карточки гостя в KJ Panel
+    (запрос пользователя 2026-09: список гостей VIP/Простой/Без стола,
+    карточка гостя, блокировка, снятие со стола). Одна строка на (club_id,
+    telegram_user_id) — создаётся лениво, при первом действии KJ над этим
+    гостем (block/unblock/remove-table) или при первом выборе стола этим
+    гостем (см. guest_account_service.link_google), до этого гость просто
+    не имеет строки, и это эквивалентно "не заблокирован, стол — как в
+    токене".
+
+    Это ЕДИНСТВЕННЫЙ источник истины про текущий стол и блокировку —
+    именно то "ОБЯЗАТЕЛЬНО нужно добавить" из комментария в auth.py::
+    require_guest про появление функции "закрыть стол": require_guest
+    теперь на каждый запрос живьём проверяет эту таблицу и, если строка
+    есть, ПОДМЕНЯЕТ table_no из JWT на актуальный (или отказывает вовсе,
+    если is_blocked) — так что "снять со стола"/"заблокировать" из KJ
+    Panel действуют сразу на следующем же запросе гостя, а не только после
+    истечения токена.
+
+    table_no здесь МОЖЕТ быть null при is_blocked=False — это просто
+    означает "гость выбрал стол №N, потом ушёл/выбрал другой" в обычном
+    ходе дел; отдельного отличия от "KJ принудительно снял со стола" не
+    делается, потому что для гостя (и для require_guest) результат
+    одинаковый в обоих случаях — стола сейчас нет.
+    """
+
+    __tablename__ = "guest_statuses"
+
+    id = db.Column(db.Integer, primary_key=True)
+    club_id = db.Column(db.Integer, db.ForeignKey("clubs.club_id"), nullable=False, index=True)
+    telegram_user_id = db.Column(db.BigInteger, nullable=False, index=True)
+    table_no = db.Column(db.Integer, nullable=True)
+    is_blocked = db.Column(db.Boolean, nullable=False, default=False)
+    blocked_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    blocked_by = db.Column(db.Integer, db.ForeignKey("kj_operators.id"), nullable=True)
+    updated_at = db.Column(db.DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+    club = db.relationship("Club")
+
+    __table_args__ = (
+        db.UniqueConstraint("club_id", "telegram_user_id", name="uq_guest_statuses_club_user"),
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "club_id": self.club_id,
+            "guest_id": str(self.telegram_user_id),
+            "table_no": self.table_no,
+            "is_blocked": self.is_blocked,
+            "blocked_at": self.blocked_at.isoformat() if self.blocked_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
