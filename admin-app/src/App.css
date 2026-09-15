@@ -216,3 +216,21 @@ button.btn--danger {
 @media print {
   .app-header, .link-btn, .club-form, .club-detail__admin-actions { display: none; }
 }
+
+.club-detail__bridge-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.club-detail__bridge-token {
+  display: block;
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 13px;
+  word-break: break-all;
+}
