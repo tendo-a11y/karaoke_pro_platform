@@ -226,6 +226,7 @@ function ClubDetail({ token, clubId, isSuperAdmin, onClubChanged, onBack }) {
   const [showQr, setShowQr] = useState(false);
   const [qrData, setQrData] = useState(null);
   const [qrError, setQrError] = useState(null);
+  const [showBridgeToken, setShowBridgeToken] = useState(false);
 
   async function reload() {
     try {
@@ -304,6 +305,29 @@ function ClubDetail({ token, clubId, isSuperAdmin, onClubChanged, onBack }) {
     }
   }
 
+  // Запрос пользователя 2026-09-14: для клуба в новом городе не должно
+  // требоваться моё ручное участие, чтобы подключить настоящую VirtualDJ —
+  // club.bridge_token теперь приходит прямо в ответе GET /clubs/<id> (см.
+  // club_service.get_club_detail), здесь только собираем из него готовый
+  // файл club_config.txt — тот же формат, что программа-мост (vdj_bridge/
+  // vdj_bridge_app.py, см. её докстринг про _load_config) сама подхватывает
+  // из своей папки. Как и CSV в ReportsPanel ниже — обычный клиентский
+  // download из уже полученного JSON, отдельный authenticated-эндпоинт для
+  // файла не нужен.
+  function handleDownloadBridgeConfig() {
+    if (!club) return;
+    const content = `club_id=${club.club_id}\nbridge_token=${club.bridge_token}\n`;
+    const blob = new Blob([content], { type: "text/plain;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "club_config.txt";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
   if (loadError) return <div className="banner banner--error">{loadError}</div>;
   if (!club) return <p className="empty-hint">Загрузка…</p>;
 
@@ -345,6 +369,20 @@ function ClubDetail({ token, clubId, isSuperAdmin, onClubChanged, onBack }) {
           <QrCodeImage url={qrData.url} />
         </div>
       )}
+
+      <h3>Мост VirtualDJ</h3>
+      <p className="empty-hint">
+        Файл club_config.txt нужно положить рядом с программой VDJBridge.exe
+        на компьютере KJ — она сама подставит номер клуба и код доступа, и
+        KJ останется только нажать «Подключиться», ничего не вводя вручную.
+      </p>
+      <div className="club-detail__bridge-actions">
+        <button type="button" className="link-btn" onClick={() => setShowBridgeToken((v) => !v)}>
+          {showBridgeToken ? "Скрыть код доступа" : "Показать код доступа"}
+        </button>
+        <button type="button" onClick={handleDownloadBridgeConfig}>⬇ Скачать club_config.txt</button>
+      </div>
+      {showBridgeToken && <code className="club-detail__bridge-token">{club.bridge_token}</code>}
     </div>
   );
 }
