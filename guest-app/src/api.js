@@ -115,6 +115,10 @@ export const api = {
     request(`/api/guest/songs/search?q=${encodeURIComponent(query)}`, { token }),
   aiSearchSongs: (token, text) =>
     request("/api/guest/songs/ai-search", { method: "POST", token, body: { text } }),
+  screenshotSearchSongs: (token, imageBase64, mediaType) =>
+    request("/api/guest/songs/screenshot-search", {
+      method: "POST", token, body: { image_base64: imageBase64, media_type: mediaType },
+    }),
   requestVip: (token) => request("/api/guest/vip/request", { method: "POST", token }),
   listFavorites: (token) => request("/api/guest/favorites", { token }),
   addFavorite: (token, songTitle, artist, serviceId) =>
