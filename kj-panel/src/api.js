@@ -115,6 +115,16 @@ export const api = {
         service_id: serviceId,
       },
     }),
+  listGuests: (token, clubId, guestType) =>
+    request(`/api/kj/guests/${clubId}${guestType ? `?type=${encodeURIComponent(guestType)}` : ""}`, { token }),
+  getGuest: (token, clubId, guestId) =>
+    request(`/api/kj/guests/${clubId}/${encodeURIComponent(guestId)}`, { token }),
+  blockGuest: (token, guestId) =>
+    request(`/api/kj/guests/${encodeURIComponent(guestId)}/block`, { method: "POST", token }),
+  unblockGuest: (token, guestId) =>
+    request(`/api/kj/guests/${encodeURIComponent(guestId)}/unblock`, { method: "POST", token }),
+  removeGuestFromTable: (token, guestId) =>
+    request(`/api/kj/guests/${encodeURIComponent(guestId)}/remove-table`, { method: "POST", token }),
 };
 
 export { ApiError, BACKEND_URL };
