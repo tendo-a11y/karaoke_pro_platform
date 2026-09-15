@@ -5,6 +5,12 @@ services/google_auth_service.py для проверки Google-подтверж�
 from extensions import db
 from models import GuestAccount
 
+# Ограничение длины самостоятельно задаваемого гостем имени (запрос
+# пользователя 2026-09, "самопереименование гостя") — совпадает с длиной
+# колонки GuestAccount.display_name (models.py), проверяется здесь же, а не
+# только на уровне БД, чтобы отдать понятную ошибку до попытки записи.
+MAX_DISPLAY_NAME_LEN = 40
+
 
 def get_by_guest_id(club_id: int, guest_id: int) -> GuestAccount | None:
     return GuestAccount.query.filter_by(club_id=club_id, telegram_user_id=guest_id).first()
@@ -44,3 +50,20 @@ def link_google(club_id: int, current_guest_id: int, google_sub: str, email) -> 
     db.session.add(account)
     db.session.commit()
     return LinkGoogleResult(account=account, outcome="created")
+
+
+def set_display_name(club_id: int, guest_id: int, name: str) -> GuestAccount | None:
+    """
+    Гость задаёт/меняет своё отображаемое имя (routes/guest.py::
+    set_display_name). Требует уже существующего постоянного профиля —
+    возвращает None, если гость ещё не входил через Google, вызывающий код
+    сам решает, какой HTTP-код это означает (см. routes/guest.py:
+    GOOGLE_LINK_REQUIRED, тот же принцип, что и у остальных действий,
+    требующих постоянной личности — см. request_vip/add_favorite).
+    """
+    account = get_by_guest_id(club_id, guest_id)
+    if account is None:
+        return None
+    account.display_name = name
+    db.session.commit()
+    return account
