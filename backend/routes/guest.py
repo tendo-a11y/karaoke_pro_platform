@@ -98,7 +98,8 @@ def me():
     guest_type, vip = _guest_type_and_vip(g.club_id, g.guest_id)
 
     pending_request = vip_service.get_pending_vip_request(g.club_id, g.guest_id)
-    has_permanent_profile = guest_account_service.get_by_guest_id(g.club_id, g.guest_id) is not None
+    account = guest_account_service.get_by_guest_id(g.club_id, g.guest_id)
+    has_permanent_profile = account is not None
 
     # Групповой стол — статус пересчитывается заново на каждый опрос (а не
     # берётся из токена), потому что JWT не переиздаётся при одобрении
@@ -139,6 +140,10 @@ def me():
         # Google" (см. POST /profile/link-google) — до входа стола нет и
         # заказ недоступен, независимо от того, каким QR открыто приложение.
         "has_permanent_profile": has_permanent_profile,
+        # Имя, которое гость сам себе задал (запрос пользователя 2026-09,
+        # "самопереименование гостя") — null, пока не задано или пока нет
+        # постоянного профиля вообще, см. PUT /profile/name ниже.
+        "display_name": account.display_name if account else None,
         # Старое: handlers/vip.py::vip_profile (баланс/кэшбэк), п.9-10-11
         # отчёта по Role 3/4/5. join date (added_at) старый бот тоже нигде
         # не показывал — не добавляем и здесь, чтобы не изобретать поле,
@@ -449,6 +454,46 @@ def link_google():
         "token": token, "table_group_status": table_group_state.status,
         "account": result.account.to_dict(),
     })
+
+
+@bp.put("/profile/name")
+@require_guest
+def set_display_name():
+    """
+    Гость задаёт/меняет своё отображаемое имя (запрос пользователя 2026-09,
+    "самопереименование гостя") — это имя видит KJ в списке гостей и в
+    карточке гостя KJ Panel (см. services/guest_directory_service.py)
+    вместо (точнее, в дополнение к) голого номера guest_id. Хранится на
+    постоянном профиле (models.py::GuestAccount.display_name), как и email
+    — поэтому доступно только ПОСЛЕ входа через Google (см. link_google
+    выше): до этого у гостя ещё нет записи, к которой можно привязать имя,
+    тот же принцип, что и у request_vip/add_favorite. Менять можно сколько
+    угодно раз — это не разовая настройка при активации, а именно
+    "переименование".
+    """
+    payload = request.get_json(silent=True) or {}
+    raw_name = payload.get("display_name")
+
+    if not isinstance(raw_name, str):
+        return api_error(400, "VALIDATION_ERROR", "display_name обязателен и должен быть строкой")
+
+    name = raw_name.strip()
+    if not name:
+        return api_error(400, "VALIDATION_ERROR", "Имя не может быть пустым")
+    if len(name) > guest_account_service.MAX_DISPLAY_NAME_LEN:
+        return api_error(
+            400, "VALIDATION_ERROR",
+            f"Имя не должно быть длиннее {guest_account_service.MAX_DISPLAY_NAME_LEN} символов",
+        )
+
+    account = guest_account_service.set_display_name(g.club_id, g.guest_id, name)
+    if account is None:
+        return api_error(
+            409, "GOOGLE_LINK_REQUIRED",
+            "Чтобы задать имя, сначала войдите через Google",
+        )
+
+    return api_ok(account.to_dict())
 
 
 @bp.get("/vip/transactions")
