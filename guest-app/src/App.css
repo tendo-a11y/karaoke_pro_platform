@@ -222,6 +222,17 @@ select {
   border-color: var(--accent);
 }
 
+.screenshot-search__input {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+  padding: 8px;
+  font-size: 13px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-alt);
+}
+
 /* Экран "Выберите стол и войдите через Google" (ActivationPanel) появляется
    после нажатия "Заказать" — гость обязательно должен его заметить, иначе
    решает, что кнопка не сработала (см. комментарий в App.jsx). Рамка
