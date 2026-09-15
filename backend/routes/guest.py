@@ -305,6 +305,40 @@ def ai_search_songs():
     return api_ok(results)
 
 
+# Скриншот сжимается до разумного размера ещё на фронтенде (canvas, см.
+# guest-app/src/App.jsx) — это ограничение просто честный верхний предел,
+# чтобы случайно присланный огромный оригинал (гость обошёл сжатие,
+# прислав файл напрямую через API) не улетел в Claude API как есть.
+MAX_SCREENSHOT_BASE64_LEN = 8_000_000
+
+
+@bp.post("/songs/screenshot-search")
+@require_guest
+def screenshot_search_songs():
+    """
+    Третий способ поиска песни (см. ai_search_songs выше) — гость вместо
+    текста присылает скриншот (например, из Shazam/Spotify/ВК), где видно
+    название и исполнителя. Картинка приходит как base64 в теле JSON (без
+    multipart — так проще на фронтенде через FileReader/canvas). Дальше
+    Клод смотрит на картинку вместо текста (ai_search_service._ask_claude_vision),
+    а остальной путь (iTunes-поиск, выбор варианта гостем, обычный
+    /api/guest/order) не отличается от ai_search_songs.
+    """
+    payload = request.get_json(silent=True) or {}
+    image_base64 = payload.get("image_base64", "")
+    media_type = payload.get("media_type", "")
+
+    if not isinstance(image_base64, str) or not image_base64.strip():
+        return api_error(400, "VALIDATION_ERROR", "image_base64 обязателен и должен быть непустой строкой")
+    if len(image_base64) > MAX_SCREENSHOT_BASE64_LEN:
+        return api_error(400, "IMAGE_TOO_LARGE", "Изображение слишком большое")
+    if media_type not in ai_search_service.ALLOWED_SCREENSHOT_TYPES:
+        return api_error(400, "VALIDATION_ERROR", "media_type должен быть image/jpeg, image/png или image/webp")
+
+    results = ai_search_service.screenshot_powered_search(image_base64.strip(), media_type)
+    return api_ok(results)
+
+
 @bp.post("/vip/request")
 @require_guest
 def request_vip():
