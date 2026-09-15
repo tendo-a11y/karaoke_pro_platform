@@ -6,7 +6,7 @@ from flask import current_app, g, request
 
 from errors import api_error
 from extensions import db
-from models import AdminUser, Club, KJOperator
+from models import AdminUser, Club, GuestStatus, KJOperator
 
 
 def issue_kj_token(telegram_user_id: int, secret: str, ttl_seconds: int) -> str:
@@ -178,17 +178,17 @@ def require_guest(view):
     клуб отключили после выдачи токена, доступ пропадает сразу же, как и у
     KJ/админа.
 
-    ОТКРЫТЫЙ ВОПРОС на будущее (проверено сейчас, но не закрыто навсегда):
-    club_id перепроверяется живьём из БД на каждый запрос, а table_no —
-    НЕТ, он всегда берётся из токена как есть. Сегодня это безопасно,
-    потому что в новом Backend вообще нет понятия "стол закрыт/недоступен"
-    отдельно от клуба (нет аналога старых table_groups/table_join_requests
-    — это ещё не перенесено, см. PHASE1_AUDIT). Как только появится
-    функция "закрыть стол" (Guest App / KJ Pro, ТЗ §47-48), здесь
-    ОБЯЗАТЕЛЬНО нужно добавить такую же живую проверку table_no по БД,
-    иначе гость со старым токеном сможет продолжать заказывать на уже
-    закрытый стол. Не удалять этот комментарий при реализации закрытия
-    стола, пока проверка не добавлена.
+    ЗАКРЫТО (2026-09, список гостей KJ Panel): раньше здесь был открытый
+    вопрос про то, что table_no берётся из токена как есть, без живой
+    проверки по БД — теперь GuestStatus (models.py) это и есть та самая
+    живая проверка. Если для (club_id, guest_id) есть строка в
+    guest_statuses — она главнее токена: is_blocked обрывает запрос сразу
+    (гостя заблокировал KJ из карточки гостя), а table_no берётся ИЗ
+    СТРОКИ, а не из токена — так KJ-действие "снять со стола" действует
+    начиная со следующего же запроса гостя, не дожидаясь истечения токена.
+    Если строки нет вообще (гость никогда не попадал в поле зрения KJ
+    Panel и никогда не выбирал стол через link_google) — ведём себя как
+    раньше, доверяя токену.
     """
 
     @wraps(view)
@@ -216,6 +216,13 @@ def require_guest(view):
         club = db.session.get(Club, club_id)
         if club is None or not club.is_active:
             return api_error(403, "FORBIDDEN", "Клуб недоступен")
+
+        # Живой статус из KJ Panel (см. докстринг выше) главнее токена.
+        status = GuestStatus.query.filter_by(club_id=club_id, telegram_user_id=guest_id).first()
+        if status is not None:
+            if status.is_blocked:
+                return api_error(403, "GUEST_BLOCKED", "Доступ ограничен — обратитесь к диджею")
+            table_no = status.table_no
 
         g.guest_id = guest_id
         g.club_id = club_id
