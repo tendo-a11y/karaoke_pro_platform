@@ -1,14 +1,15 @@
 from decimal import Decimal, InvalidOperation
 
-from flask import Blueprint, g, jsonify, request
+from flask import Blueprint, current_app, g, jsonify, request
 
-from auth import require_kj
+from auth import issue_kj_google_token, require_kj
 from errors import api_error, api_ok
 from extensions import db
-from models import ChatMessage, Club, Order, VipClient, VipRequest
+from models import ChatMessage, Club, KJOperator, Order, VipClient, VipRequest
 from services import category_service, guest_directory_service, guest_status_service, song_service, vip_service
 from services.guest_directory_service import GUEST_TYPES, GuestDirectoryError
 from services.category_service import CategoryServiceError
+from services.google_auth_service import GoogleAuthError, verify_google_credential
 from services.vdj_service import (
     add_manual_song,
     claim_vdj_queue_item,
@@ -19,8 +20,61 @@ from services.vdj_service import (
     update_order_table,
 )
 from sockets import emit_chat_message
+from vdj import bridge_status
 
 bp = Blueprint("kj", __name__, url_prefix="/api/kj")
+
+
+@bp.post("/auth/google")
+def kj_google_login():
+    """
+    Вход в KJ Panel через клубный Google-аккаунт (запрос пользователя
+    2026-09: "доступ KJ Pro определяется Google-аккаунтом клуба" — основной
+    способ входа наряду с /kjpanel через бота, см. auth.py::issue_kj_google_token
+    и docstring KJOperator в models.py). Без @require_kj — это как раз тот
+    эндпоинт, который выдаёт токен, а не проверяет его.
+
+    В отличие от routes/guest.py::link_google, здесь Google-аккаунт НЕ
+    привязывается сам фактом входа с любой почты — сначала администратор
+    клуба должен явно вписать разрешённую почту в KJOperator.google_email
+    (Admin App, см. services/kj_admin_service.assign_kj). Первый успешный
+    вход с этой почтой заполняет google_sub — дальше уже он, а не email,
+    служит источником истины (сверка по email при каждом входе была бы
+    менее надёжной: email технически можно сменить на стороне Google).
+    """
+    payload = request.get_json(silent=True) or {}
+    credential = payload.get("credential")
+    try:
+        identity = verify_google_credential(
+            current_app.config["GOOGLE_AUTH_MODE"], current_app.config.get("GOOGLE_CLIENT_ID"), credential,
+        )
+    except GoogleAuthError as exc:
+        return api_error(400, "GOOGLE_AUTH_ERROR", exc.message)
+
+    sub = identity["sub"]
+    email = identity.get("email")
+
+    kj = KJOperator.query.filter_by(google_sub=sub).first()
+    if kj is None and email:
+        kj = KJOperator.query.filter_by(google_email=email.lower(), google_sub=None).first()
+        if kj is not None:
+            kj.google_sub = sub
+            db.session.commit()
+
+    if kj is None:
+        return api_error(
+            403, "GOOGLE_NOT_REGISTERED",
+            "Этот Google-аккаунт не привязан ни к одному клубу — обратитесь к администратору",
+        )
+    if not kj.is_active:
+        return api_error(403, "FORBIDDEN", "Доступ KJ заблокирован")
+    if not kj.club or not kj.club.is_active:
+        return api_error(403, "FORBIDDEN", "Клуб недоступен")
+
+    token = issue_kj_google_token(
+        sub, current_app.config["KJ_JWT_SECRET"], current_app.config["KJ_JWT_TTL_SECONDS"],
+    )
+    return api_ok({"token": token})
 
 
 def _ensure_own_club(club_id: int):
@@ -738,3 +792,23 @@ def remove_guest_from_table(guest_id):
         return api_error(400, "VALIDATION_ERROR", "guest_id должен быть числом")
     status = guest_status_service.set_table(g.club_id, parsed_id, None)
     return api_ok(status.to_dict())
+
+
+# --- Статус моста VirtualDJ (запрос пользователя 2026-09: "переключатель"
+# для контроля — светофор в KJ Panel, подключён ли сейчас мост). Живое
+# состояние, не БД — см. докстринг vdj/bridge_status.py. Здесь REST-эндпоинт
+# только для первого запроса при открытии KJ Panel (пока WebSocket ещё не
+# успел получить ни одного события bridge_status, см. sockets.py) —
+# дальнейшие изменения статуса приходят уже сокетом, без поллинга.
+
+@bp.get("/bridge/status/<int:club_id>")
+@require_kj
+def get_bridge_status(club_id):
+    denied = _ensure_own_club(club_id)
+    if denied:
+        return denied
+    since = bridge_status.connected_since(club_id)
+    return api_ok({
+        "connected": bridge_status.is_connected(club_id),
+        "connected_since": since.isoformat() if since else None,
+    })
