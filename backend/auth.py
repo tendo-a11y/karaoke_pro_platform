@@ -15,6 +15,10 @@ def issue_kj_token(telegram_user_id: int, secret: str, ttl_seconds: int) -> str:
     ни club_id в токене не хранятся и не используются для авторизации (ТЗ п.24):
     при каждом запросе Backend заново читает эти данные из таблицы kj_operators.
     Используется ботом (см. backend_client.py) при выдаче ссылки на панель.
+
+    Токен без поля "identity" — это токен телеграм-идентичности (см.
+    require_kj ниже); отдельно от issue_kj_google_token, чтобы уже выданные
+    ботом ссылки продолжали работать один в один без изменений.
     """
     now = int(time.time())
     payload = {
@@ -22,6 +26,28 @@ def issue_kj_token(telegram_user_id: int, secret: str, ttl_seconds: int) -> str:
         "iat": now,
         "exp": now + ttl_seconds,
         "type": "kj_panel",
+    }
+    return jwt.encode(payload, secret, algorithm="HS256")
+
+
+def issue_kj_google_token(google_sub: str, secret: str, ttl_seconds: int) -> str:
+    """
+    Выпускает JWT для KJ-панели по Google-идентичности клубного аккаунта
+    (запрос пользователя 2026-09: "доступ KJ Pro определяется Google-
+    аккаунтом клуба" — основной способ входа наряду с /kjpanel через бота).
+    Как и issue_kj_token, несёт только идентификатор — ни роль, ни club_id
+    не хранятся в токене, require_kj каждый раз заново читает их из
+    kj_operators по google_sub. Явное поле "identity": "google" отличает
+    этот токен от telegram-токена — sub здесь произвольная строка (Google
+    sub), а не телеграм ID.
+    """
+    now = int(time.time())
+    payload = {
+        "sub": google_sub,
+        "iat": now,
+        "exp": now + ttl_seconds,
+        "type": "kj_panel",
+        "identity": "google",
     }
     return jwt.encode(payload, secret, algorithm="HS256")
 
@@ -85,9 +111,16 @@ def _extract_bearer_token() -> str | None:
 def require_kj(view):
     """
     Декоратор для эндпоинтов KJ Panel. Проверяет подпись и срок действия JWT,
-    затем САМОСТОЯТЕЛЬНО загружает KJ-оператора из БД по telegram_user_id из
-    токена и кладёт его в g.kj. Ничего, что прислал клиент (club_id, order.id
-    и т.п.), не считается источником прав доступа — только запись в БД.
+    затем САМОСТОЯТЕЛЬНО загружает KJ-оператора из БД и кладёт его в g.kj.
+    Ничего, что прислал клиент (club_id, order.id и т.п.), не считается
+    источником прав доступа — только запись в БД.
+
+    2026-09: токен несёт поле "identity" — "google" (см. issue_kj_google_token)
+    или отсутствует/что угодно ещё, что трактуется как "telegram" (старые,
+    уже выданные ботом токены такого поля не имеют вовсе — обратная
+    совместимость обязательна, эти ссылки не должны сломаться). От этого
+    поля зависит только то, по какой колонке искать KJOperator — само
+    решение "пускать/не пускать" (is_active, club.is_active) не отличается.
     """
 
     @wraps(view)
@@ -105,12 +138,19 @@ def require_kj(view):
         except jwt.InvalidTokenError:
             return api_error(401, "UNAUTHORIZED", "Недействительный токен")
 
-        try:
-            telegram_user_id = int(payload.get("sub"))
-        except (TypeError, ValueError):
+        sub = payload.get("sub")
+        if not sub:
             return api_error(401, "UNAUTHORIZED", "Недействительный токен")
 
-        kj = KJOperator.query.filter_by(telegram_user_id=telegram_user_id).first()
+        if payload.get("identity") == "google":
+            kj = KJOperator.query.filter_by(google_sub=sub).first()
+        else:
+            try:
+                telegram_user_id = int(sub)
+            except (TypeError, ValueError):
+                return api_error(401, "UNAUTHORIZED", "Недействительный токен")
+            kj = KJOperator.query.filter_by(telegram_user_id=telegram_user_id).first()
+
         if kj is None:
             return api_error(403, "FORBIDDEN", "KJ не зарегистрирован в системе")
         if not kj.is_active:
