@@ -2,9 +2,16 @@ const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
 
 // Токен приходит по ссылке (см. backend/manage.py::admin-link, по образцу
 // kj-panel/src/api.js::resolveToken) — /set_admin в старом боте больше не
-// существует как отдельный флоу, ссылку выдаёт CLI-провижининг (аудит
-// PHASE1_AUDIT: "/set_admin ... становится обычным auth-flow").
+// существует как отдельный флоу. 2026-09: основной способ входа теперь —
+// Google (см. AdminLoginScreen в App.jsx), ссылка admin-link остаётся
+// резервной, как /kjpanel у KJ Panel.
 const TOKEN_STORAGE_KEY = "admin_app_token";
+
+// Client ID не секрет (виден в открытом виде на любой странице с кнопкой
+// входа Google), поэтому хранится прямо в коде фронтенда — тот же Client
+// ID, что и в kj-panel/guest-app (один GOOGLE_CLIENT_ID на весь бэкенд,
+// см. backend/config.py).
+export const GOOGLE_CLIENT_ID = "798456512733-iiel465aq3g5nprap64mq8ovrvcjqsfd.apps.googleusercontent.com";
 
 export function resolveToken() {
   const url = new URL(window.location.href);
@@ -17,6 +24,13 @@ export function resolveToken() {
     return fromUrl;
   }
   return localStorage.getItem(TOKEN_STORAGE_KEY);
+}
+
+// Токен, полученный входом через Google (см. loginWithGoogle ниже),
+// сохраняется тем же способом, что и токен из ссылки admin-link — дальше
+// оба неотличимы друг от друга для остального кода панели.
+export function storeToken(token) {
+  localStorage.setItem(TOKEN_STORAGE_KEY, token);
 }
 
 export function clearToken() {
@@ -58,6 +72,11 @@ async function request(path, { method = "GET", token, body } = {}) {
 }
 
 export const api = {
+  // 2026-09: вход через Google (см. routes/admin.py::admin_google_login и
+  // auth.py::issue_admin_google_token). credential — {id_token} от
+  // настоящей кнопки Google Identity Services (см. AdminLoginScreen в App.jsx).
+  loginWithGoogle: (credential) =>
+    request("/api/admin/auth/google", { method: "POST", body: { credential } }),
   me: (token) => request("/api/admin/me", { token }),
   listClubs: (token) => request("/api/admin/clubs", { token }),
   getClub: (token, clubId) => request(`/api/admin/clubs/${clubId}`, { token }),
