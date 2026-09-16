@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, ApiError, resolveToken } from "./api";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { GOOGLE_CLIENT_ID, api, ApiError, resolveToken, storeToken } from "./api";
 import { connectSocket } from "./socket";
 import "./App.css";
 
@@ -1204,8 +1204,62 @@ function GuestsPanel({ token, clubId }) {
   );
 }
 
+// 2026-09: "доступ KJ Pro определяется Google-аккаунтом клуба" — основной
+// способ входа (см. docstring KJOperator в models.py и auth.py::
+// issue_kj_google_token), показывается только когда resolveToken() не
+// нашёл токен ни в ссылке, ни в localStorage. Ссылка от бота (/kjpanel)
+// по-прежнему сама кладёт токен в localStorage при первом же открытии
+// (см. resolveToken) и минует этот экран целиком — она остаётся резервным
+// способом, полностью равноценным по правам после входа.
+function KjLoginScreen({ onLoggedIn }) {
+  const [error, setError] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const buttonRef = useRef(null);
+
+  async function handleGoogleCredential(response) {
+    setBusy(true);
+    setError(null);
+    try {
+      const { token } = await api.loginWithGoogle({ id_token: response.credential });
+      storeToken(token);
+      onLoggedIn(token);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : String(err));
+      setBusy(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!window.google?.accounts?.id || !buttonRef.current) {
+      setError("Не удалось загрузить вход через Google — проверьте подключение к интернету и обновите страницу");
+      return;
+    }
+    window.google.accounts.id.initialize({
+      client_id: GOOGLE_CLIENT_ID,
+      callback: handleGoogleCredential,
+    });
+    window.google.accounts.id.renderButton(buttonRef.current, {
+      theme: "outline", size: "large", text: "signin_with", locale: "ru", width: 280,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <div className="app-shell centered">
+      <h1>KJ Panel</h1>
+      <p>Войдите через Google-аккаунт клуба — основной способ входа.</p>
+      {error && <p className="error-text">{error}</p>}
+      <div ref={buttonRef} />
+      {busy && <p>Входим…</p>}
+      <p className="app-header__subtitle">
+        Резервный способ: ссылка из команды /kjpanel в Telegram-боте.
+      </p>
+    </div>
+  );
+}
+
 export default function App() {
-  const token = useMemo(() => resolveToken(), []);
+  const [token, setToken] = useState(() => resolveToken());
   const [me, setMe] = useState(null);
   const [orders, setOrders] = useState([]);
   const [queue, setQueue] = useState([]);
@@ -1394,12 +1448,7 @@ export default function App() {
   }
 
   if (!token) {
-    return (
-      <div className="app-shell centered">
-        <h1>KJ Panel</h1>
-        <p>Ссылка без токена доступа. Откройте панель по ссылке, которую выдаёт бот команде /kj.</p>
-      </div>
-    );
+    return <KjLoginScreen onLoggedIn={setToken} />;
   }
 
   if (loadError) {
