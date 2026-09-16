@@ -1,88 +1,88 @@
-import logging
-import os
-import secrets
+"""
+2026-09-16: регрессия на баг из логов Railway ("мост не подключается",
+повторяется каждые ~80-140с): "Error handling request /socket.io/?...&sid=..."
++ "KeyError: 'Session is disconnected'".
 
-from flask import Flask, jsonify, request
-from flask_cors import CORS
+python-engineio 4.14.0 (see engineio/base_server.py::_get_socket) raises this
+KeyError, unguarded, from the POST branch of engineio/server.py::handle_request
+when a session exists in self.sockets but is already marked closed — a normal
+thread race under gunicorn --worker-class gthread. The GET branch in the same
+function already catches this KeyError and answers 400; the POST branch does
+not, so the exception used to reach gunicorn unhandled and come back to the
+client (the KJ's bridge program) as a bare 500, which python-socketio.Client
+treats as a connection failure.
 
-from config import Config
-from extensions import db, migrate, socketio
+app.py wraps app.wsgi_app (see its docstring) to catch exactly this KeyError
+and answer 400, matching what the GET path already does. These tests exercise
+the real, wrapped app.wsgi_app (not a mock of the guard).
+"""
+import io
+
+from extensions import socketio
 
 
-def create_app(config_object=Config):
-    app = Flask(__name__)
-    app.config.from_object(config_object)
+class _FakeClosedSocket:
+    """Stand-in for engineio.socket.Socket with .closed=True — same shape
+    _get_socket() checks in the real library."""
+    closed = True
+    upgraded = False
 
-    logging.basicConfig(level=logging.INFO)
 
-    db.init_app(app)
-    # models импортируется до migrate.init_app, иначе Alembic не увидит
-    # таблицы при автогенерации новых миграций (flask db migrate).
-    import models  # noqa: F401
-    migrate.init_app(app, db)
-    socketio.init_app(app, cors_allowed_origins=app.config.get("CORS_ORIGINS", "*"))
-    # expose_headers: Content-Disposition нужен фронтенду admin-app, чтобы
-    # прочитать имя файла через fetch() при скачивании бэкапа БД (Block #4,
-    # GET /api/admin/system/backup) — без этого браузер по умолчанию не
-    # отдаёт JS доступ к этому заголовку даже при успешном CORS-запросе,
-    # и фронтенду не из чего взять реальное имя файла с таймстампом.
-    CORS(
-        app,
-        resources={r"/api/*": {"origins": app.config.get("CORS_ORIGINS", "*")}},
-        expose_headers=["Content-Disposition"],
-    )
+def _wsgi_get(app, path):
+    captured = {}
 
-    # sockets.py регистрирует @socketio.on(...) обработчики через side-effect импорта
-    import sockets  # noqa: F401
+    def start_response(status, headers):
+        captured["status"] = status
+        captured["headers"] = headers
 
-    from routes.admin import bp as admin_bp
-    from routes.client import bp as client_bp
-    from routes.guest import bp as guest_bp
-    from routes.kj import bp as kj_bp
-    from routes.vdj import bp as vdj_bp
+    environ = {
+        "REQUEST_METHOD": "GET",
+        "PATH_INFO": path,
+        "QUERY_STRING": "",
+        "wsgi.input": io.BytesIO(b""),
+        "CONTENT_LENGTH": "0",
+        "SERVER_NAME": "localhost",
+        "SERVER_PORT": "80",
+        "wsgi.url_scheme": "http",
+    }
+    body = app.wsgi_app(environ, start_response)
+    return captured["status"], b"".join(body)
 
-    app.register_blueprint(admin_bp)
-    app.register_blueprint(client_bp)
-    app.register_blueprint(guest_bp)
-    app.register_blueprint(kj_bp)
-    app.register_blueprint(vdj_bp)
 
-    @app.get("/health")
-    def health():
-        return {"status": "ok"}
+def test_post_to_already_closed_session_returns_400_instead_of_crashing(app):
+    eio = socketio.server.eio
+    fake_sid = "FAKESIDFORRACETEST00"
+    eio.sockets[fake_sid] = _FakeClosedSocket()
+    try:
+        captured = {}
 
-    # Разовый служебный адрес для подключения настоящего VirtualDJ через
-    # мост (vdj_bridge/agent.py, см. её докстринг и backend/manage.py::
-    # cmd_set_bridge_token) — обычно этот код выдаёт `manage.py
-    # set-bridge-token`, но прямого доступа к консоли Backend в проде нет,
-    # поэтому здесь то же самое действие доступно по HTTP, под отдельным
-    # секретом BRIDGE_SETUP_TOKEN (переменная окружения, задаётся только в
-    # Railway, никогда не в коде). Секрет передаётся заголовком, а не
-    # параметром адреса — секреты в URL (query string) остаются в логах
-    # прокси/браузера, заголовок — нет. Без верного заголовка X-Setup-Token
-    # ничего не отдаёт и не создаёт. Можно оставить в проекте — без заданной
-    # переменной окружения BRIDGE_SETUP_TOKEN маршрут всегда отвечает 403.
-    @app.post("/internal/bridge-setup")
-    def bridge_setup():
-        from models import Club
+        def start_response(status, headers):
+            captured["status"] = status
+            captured["headers"] = headers
 
-        setup_token = os.environ.get("BRIDGE_SETUP_TOKEN")
-        if not setup_token or request.headers.get("X-Setup-Token") != setup_token:
-            return jsonify({"error": "forbidden"}), 403
+        environ = {
+            "REQUEST_METHOD": "POST",
+            "PATH_INFO": "/socket.io/",
+            "QUERY_STRING": f"EIO=4&transport=polling&sid={fake_sid}",
+            "wsgi.input": io.BytesIO(b""),
+            "CONTENT_LENGTH": "0",
+            "SERVER_NAME": "localhost",
+            "SERVER_PORT": "80",
+            "wsgi.url_scheme": "http",
+        }
 
-        payload = request.get_json(silent=True) or {}
-        club_id = payload.get("club_id")
-        if not isinstance(club_id, int):
-            return jsonify({"error": "club_id обязателен"}), 400
+        body = app.wsgi_app(environ, start_response)
 
-        club = db.session.get(Club, club_id)
-        if club is None:
-            return jsonify({"error": "club не найден"}), 404
+        assert captured["status"] == "400 BAD REQUEST"
+        assert b"".join(body) == b"Session is disconnected"
+    finally:
+        eio.sockets.pop(fake_sid, None)
 
-        if not club.bridge_token:
-            club.bridge_token = secrets.token_urlsafe(32)
-            db.session.commit()
 
-        return jsonify({"club_id": club.club_id, "bridge_token": club.bridge_token})
-
-    return app
+def test_ordinary_requests_still_work_through_the_guard(app):
+    """The guard wraps every request (not just /socket.io/) — a plain route
+    must still work normally, proving the try/except doesn't swallow or
+    otherwise interfere with the regular request path."""
+    status, body = _wsgi_get(app, "/health")
+    assert status.startswith("200")
+    assert b'"status": "ok"' in body or b'"status":"ok"' in body
