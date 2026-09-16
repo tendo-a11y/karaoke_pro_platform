@@ -2,6 +2,11 @@ const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
 
 const TOKEN_STORAGE_KEY = "kj_panel_token";
 
+// 2026-09: "доступ KJ Pro определяется Google-аккаунтом клуба" — Client ID
+// не секрет (виден в открытом виде на любой странице с кнопкой входа
+// Google), поэтому хранится прямо в коде фронтенда, как и в guest-app.
+export const GOOGLE_CLIENT_ID = "798456512733-iiel465aq3g5nprap64mq8ovrvcjqsfd.apps.googleusercontent.com";
+
 export function resolveToken() {
   const url = new URL(window.location.href);
   const fromUrl = url.searchParams.get("token");
@@ -13,6 +18,13 @@ export function resolveToken() {
     return fromUrl;
   }
   return localStorage.getItem(TOKEN_STORAGE_KEY);
+}
+
+// Токен, полученный входом через Google (см. loginWithGoogle ниже),
+// сохраняется тем же способом, что и токен из ссылки бота — дальше оба
+// неотличимы друг от друга для остального кода панели.
+export function storeToken(token) {
+  localStorage.setItem(TOKEN_STORAGE_KEY, token);
 }
 
 export function clearToken() {
@@ -54,6 +66,11 @@ async function request(path, { method = "GET", token, body } = {}) {
 }
 
 export const api = {
+  // Без токена — это как раз тот эндпоинт, который его выдаёт (см.
+  // routes/kj.py::kj_google_login). credential — {id_token} от настоящей
+  // кнопки Google Identity Services (см. KjLoginScreen в App.jsx).
+  loginWithGoogle: (credential) =>
+    request("/api/kj/auth/google", { method: "POST", body: { credential } }),
   me: (token) => request("/api/kj/me", { token }),
   listOrders: (token, clubId, status = "pending") =>
     request(`/api/kj/orders/${clubId}?status=${status}`, { token }),
@@ -125,6 +142,7 @@ export const api = {
     request(`/api/kj/guests/${encodeURIComponent(guestId)}/unblock`, { method: "POST", token }),
   removeGuestFromTable: (token, guestId) =>
     request(`/api/kj/guests/${encodeURIComponent(guestId)}/remove-table`, { method: "POST", token }),
+  getBridgeStatus: (token, clubId) => request(`/api/kj/bridge/status/${clubId}`, { token }),
 };
 
 export { ApiError, BACKEND_URL };
