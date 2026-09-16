@@ -69,6 +69,28 @@ def issue_admin_token(telegram_user_id: int, secret: str, ttl_seconds: int) -> s
     return jwt.encode(payload, secret, algorithm="HS256")
 
 
+def issue_admin_google_token(google_sub: str, secret: str, ttl_seconds: int) -> str:
+    """
+    Выпускает JWT для Admin App по Google-идентичности (запрос пользователя
+    2026-09: "нормальный вход через Google в админку" — по образцу
+    issue_kj_google_token/KJOperator, см. docstring AdminUser в models.py).
+    Как и issue_admin_token, несёт только идентификатор — ни роль, ни
+    club_id, ни is_super_admin не хранятся в токене, require_admin каждый
+    раз заново читает их из admin_users по google_sub. Поле "identity":
+    "google" отличает этот токен от telegram-токена — sub здесь Google sub,
+    а не telegram_user_id.
+    """
+    now = int(time.time())
+    payload = {
+        "sub": google_sub,
+        "iat": now,
+        "exp": now + ttl_seconds,
+        "type": "admin_panel",
+        "identity": "google",
+    }
+    return jwt.encode(payload, secret, algorithm="HS256")
+
+
 def issue_guest_token(guest_id: int, club_id: int, table_no: int | None, secret: str,
                        ttl_seconds: int) -> str:
     """
@@ -172,6 +194,13 @@ def require_admin(view):
     неактивен, доступ запрещён, как и у KJ. Супер-админ (единственный
     config.ADMIN_ID старой системы) этой проверкой не ограничивается —
     у него нет привязки к активности конкретного клуба.
+
+    2026-09: токен несёт поле "identity" — "google" (см.
+    issue_admin_google_token) или отсутствует/что угодно ещё, что
+    трактуется как "telegram" (уже выданные manage.py admin-link токены
+    такого поля не имеют вовсе — обратная совместимость обязательна). От
+    этого поля зависит только то, по какой колонке искать AdminUser — само
+    решение "пускать/не пускать" не отличается (см. require_kj).
     """
 
     @wraps(view)
@@ -189,12 +218,19 @@ def require_admin(view):
         except jwt.InvalidTokenError:
             return api_error(401, "UNAUTHORIZED", "Недействительный токен")
 
-        try:
-            telegram_user_id = int(payload.get("sub"))
-        except (TypeError, ValueError):
+        sub = payload.get("sub")
+        if not sub:
             return api_error(401, "UNAUTHORIZED", "Недействительный токен")
 
-        admin = AdminUser.query.filter_by(telegram_user_id=telegram_user_id).first()
+        if payload.get("identity") == "google":
+            admin = AdminUser.query.filter_by(google_sub=sub).first()
+        else:
+            try:
+                telegram_user_id = int(sub)
+            except (TypeError, ValueError):
+                return api_error(401, "UNAUTHORIZED", "Недействительный токен")
+            admin = AdminUser.query.filter_by(telegram_user_id=telegram_user_id).first()
+
         if admin is None:
             return api_error(403, "FORBIDDEN", "Администратор не зарегистрирован в системе")
         if not admin.is_active:
