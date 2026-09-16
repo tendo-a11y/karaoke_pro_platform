@@ -156,14 +156,16 @@ def assign_kj():
     """
     Аудит kj_assign_start/venue_assign_kj — здесь без поиска по @username
     (в новой архитектуре нет реестра пользователей бота), telegram_user_id
-    вводится напрямую, как в manage.py add-kj. Upsert по telegram_user_id —
-    см. kj_admin_service.assign_kj docstring.
+    вводится напрямую, как в manage.py add-kj. Upsert по telegram_user_id
+    и/или google_email (2026-09, клубный Google-аккаунт) — см.
+    kj_admin_service.assign_kj docstring.
     """
     payload = request.get_json(silent=True) or {}
     try:
         kj = kj_admin_service.assign_kj(
             g.admin,
             telegram_user_id=payload.get("telegram_user_id"),
+            google_email=payload.get("google_email"),
             display_name=payload.get("display_name"),
             club_id=payload.get("club_id"),
         )
@@ -175,9 +177,9 @@ def assign_kj():
 @bp.put("/kj/<int:kj_id>")
 @require_admin
 def update_kj(kj_id):
-    """Редактирование display_name; club_id — только для super_admin (перенос между клубами)."""
+    """Редактирование display_name/google_email; club_id — только для super_admin (перенос между клубами)."""
     payload = request.get_json(silent=True) or {}
-    fields = {key: payload[key] for key in ("display_name", "club_id") if key in payload}
+    fields = {key: payload[key] for key in ("display_name", "club_id", "google_email") if key in payload}
     try:
         kj = kj_admin_service.update_kj(g.admin, kj_id, **fields)
     except KjAdminServiceError as exc:
