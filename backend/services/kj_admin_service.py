@@ -20,6 +20,16 @@ kj_toggle_block_*). План блока согласован с пользова
     KJ своего клуба; переносить KJ между клубами может только super_admin;
   - POST /api/admin/kj — upsert по telegram_user_id, как уже делает
     manage.py::cmd_add_kj (создать или переназначить+реактивировать).
+
+2026-09, запрос пользователя "доступ KJ Pro определяется Google-аккаунтом
+клуба": assign_kj теперь принимает ещё и google_email — один постоянный
+служебный Google-аккаунт на клуб (не на конкретного человека), т.к. KJ
+физически меняются и переезжают между клубами/городами. Нужен хотя бы один
+из двух идентификаторов (telegram_user_id/google_email), можно оба сразу —
+тогда один и тот же KJ доступен и по ссылке от бота, и по клубной почте.
+Сама привязка google_sub (кто именно вошёл) заполняется не здесь, а при
+первом успешном входе через Google (см. routes/kj.py::kj_google_login) —
+здесь администратор лишь заранее объявляет, какая почта имеет право войти.
 """
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
@@ -96,16 +106,29 @@ def _validate_telegram_user_id(value):
     return value
 
 
-def assign_kj(admin, *, telegram_user_id, display_name, club_id=None) -> KJOperator:
+def _validate_google_email(value):
+    if not isinstance(value, str) or not value.strip():
+        raise KjAdminServiceError("VALIDATION_ERROR", "google_email должен быть непустой строкой")
+    return value.strip().lower()
+
+
+def assign_kj(admin, *, telegram_user_id=None, google_email=None, display_name, club_id=None) -> KJOperator:
     """
-    Upsert по telegram_user_id — аналог manage.py::cmd_add_kj. Для обычного
-    админа club_id принудительно = его собственный клуб (поле в форме
-    фронтенда не показывается вообще, но и на бэкенде перепроверяем —
-    ТЗ п.24, фронтенду не доверяем). Если KJ с таким telegram_user_id уже
-    привязан к ДРУГОМУ клубу — обычному админу переносить его нельзя,
-    только super_admin.
+    Upsert по telegram_user_id и/или по google_email (см. докстринг модуля) —
+    аналог manage.py::cmd_add_kj, расширенный под клубный Google-аккаунт.
+    Нужен хотя бы один идентификатор. Для обычного админа club_id
+    принудительно = его собственный клуб (поле в форме фронтенда не
+    показывается вообще, но и на бэкенде перепроверяем — ТЗ п.24, фронтенду
+    не доверяем). Если найденный KJ уже привязан к ДРУГОМУ клубу — обычному
+    админу переносить его нельзя, только super_admin.
     """
-    telegram_user_id = _validate_telegram_user_id(telegram_user_id)
+    if telegram_user_id is None and not google_email:
+        raise KjAdminServiceError("VALIDATION_ERROR", "Укажите telegram_user_id и/или google_email")
+
+    if telegram_user_id is not None:
+        telegram_user_id = _validate_telegram_user_id(telegram_user_id)
+    if google_email:
+        google_email = _validate_google_email(google_email)
 
     if not display_name or not isinstance(display_name, str) or not display_name.strip():
         raise KjAdminServiceError("VALIDATION_ERROR", "Укажите имя KJ")
@@ -126,17 +149,42 @@ def assign_kj(admin, *, telegram_user_id, display_name, club_id=None) -> KJOpera
     if club is None:
         raise KjAdminServiceError("NOT_FOUND", "Клуб не найден", 404)
 
-    kj = KJOperator.query.filter_by(telegram_user_id=telegram_user_id).first()
+    # Ищем существующую запись сначала по telegram_user_id, потом по
+    # google_email — так к уже привязанному по одному способу KJ можно тем
+    # же вызовом довесить второй, не создавая дубликат строки.
+    kj = None
+    if telegram_user_id is not None:
+        kj = KJOperator.query.filter_by(telegram_user_id=telegram_user_id).first()
+    if kj is None and google_email:
+        kj = KJOperator.query.filter_by(google_email=google_email).first()
+
     if kj is not None and not admin.is_super_admin and kj.club_id != admin.club_id:
         raise KjAdminServiceError(
             "FORBIDDEN", "Этот KJ уже привязан к другому клубу — перенести может только супер-админ", 403,
         )
 
+    if google_email:
+        conflict = KJOperator.query.filter(
+            KJOperator.google_email == google_email,
+            KJOperator.id != (kj.id if kj is not None else None),
+        ).first()
+        if conflict is not None:
+            raise KjAdminServiceError("VALIDATION_ERROR", "Эта почта уже привязана к другому KJ")
+
     if kj is None:
-        kj = KJOperator(telegram_user_id=telegram_user_id, club_id=target_club_id,
+        kj = KJOperator(telegram_user_id=telegram_user_id, google_email=google_email, club_id=target_club_id,
                          display_name=display_name, is_active=True)
         db.session.add(kj)
     else:
+        if telegram_user_id is not None:
+            kj.telegram_user_id = telegram_user_id
+        if google_email:
+            # Смена почты на другую сбрасывает уже привязанный google_sub —
+            # прежний вход больше не должен работать под новой почтой без
+            # повторного явного входа (см. докстринг update_kj про тот же принцип).
+            if google_email != (kj.google_email or ""):
+                kj.google_sub = None
+            kj.google_email = google_email
         kj.club_id = target_club_id
         kj.display_name = display_name
         kj.is_active = True
@@ -153,6 +201,27 @@ def update_kj(admin, kj_id: int, **fields) -> KJOperator:
         if not isinstance(display_name, str) or not display_name.strip():
             raise KjAdminServiceError("VALIDATION_ERROR", "Имя KJ не может быть пустым")
         kj.display_name = display_name.strip()
+
+    if "google_email" in fields:
+        raw = fields["google_email"]
+        if raw is None or (isinstance(raw, str) and not raw.strip()):
+            # Явная отвязка клубного Google-аккаунта (например, он
+            # скомпрометирован) — вместе с почтой сбрасываем и google_sub,
+            # иначе прежний вход продолжил бы работать без всякой почты.
+            kj.google_email = None
+            kj.google_sub = None
+        else:
+            if not isinstance(raw, str):
+                raise KjAdminServiceError("VALIDATION_ERROR", "google_email должен быть строкой")
+            new_email = raw.strip().lower()
+            conflict = KJOperator.query.filter(
+                KJOperator.google_email == new_email, KJOperator.id != kj.id,
+            ).first()
+            if conflict is not None:
+                raise KjAdminServiceError("VALIDATION_ERROR", "Эта почта уже привязана к другому KJ")
+            if new_email != (kj.google_email or ""):
+                kj.google_sub = None
+            kj.google_email = new_email
 
     if "club_id" in fields:
         if not admin.is_super_admin:
