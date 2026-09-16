@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import QRCode from "qrcode";
-import { GOOGLE_CLIENT_ID, api, ApiError, downloadSystemBackup, resolveToken, storeToken } from "./api";
+import { GOOGLE_CLIENT_ID, api, ApiError, clearToken, downloadSystemBackup, resolveToken, storeToken } from "./api";
 import "./App.css";
 
 // 1:1 перенос utils.format_currency старого бота (config.DEFAULT_CURRENCY="MDL") —
@@ -631,6 +631,234 @@ function SystemPanel({ token }) {
   );
 }
 
+// Блок "Управление администраторами" (запрос пользователя 2026-09, сразу
+// после появления входа через Google — до этого единственный способ
+// вписать google_email администратору был manage.py по SSH). По образцу
+// KjManagementPanel, но: (1) top-level экран, а не внутри карточки клуба —
+// администраторы не привязаны к экрану ровно одного клуба так плотно, как
+// KJ, и супер-админ должен видеть/заводить их для любого клуба сразу; (2)
+// виден только супер-админу (см. admin_admin_service.py docstring про
+// то, почему это не то же самое, что "Управление KJ").
+function AdminManagementPanel({ token, clubs, currentAdminId }) {
+  const [adminsList, setAdminsList] = useState(null);
+  const [loadError, setLoadError] = useState(null);
+  const [actionError, setActionError] = useState(null);
+  const [busyId, setBusyId] = useState(null);
+  const [renameDrafts, setRenameDrafts] = useState({});
+  const [emailDrafts, setEmailDrafts] = useState({});
+  const [newTelegramId, setNewTelegramId] = useState("");
+  const [newGoogleEmail, setNewGoogleEmail] = useState("");
+  const [newDisplayName, setNewDisplayName] = useState("");
+  const [newClubId, setNewClubId] = useState(clubs[0]?.club_id ?? "");
+  const [newIsSuperAdmin, setNewIsSuperAdmin] = useState(false);
+  const [assignBusy, setAssignBusy] = useState(false);
+
+  async function reload() {
+    try {
+      const data = await api.listAdmins(token);
+      setAdminsList(data);
+      setLoadError(null);
+    } catch (err) {
+      setLoadError(err instanceof ApiError ? err.message : String(err));
+    }
+  }
+
+  useEffect(() => {
+    reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const canAssign = newTelegramId.trim() !== "" || newGoogleEmail.trim() !== "";
+
+  async function handleAssign(e) {
+    e.preventDefault();
+    if (!canAssign) {
+      setActionError("Укажите Telegram ID и/или Google-почту");
+      return;
+    }
+    if (newClubId === "") {
+      setActionError("Выберите клуб");
+      return;
+    }
+    setAssignBusy(true);
+    setActionError(null);
+    try {
+      await api.assignAdmin(token, {
+        telegram_user_id: newTelegramId.trim() !== "" ? Number(newTelegramId) : null,
+        google_email: newGoogleEmail.trim() !== "" ? newGoogleEmail.trim() : null,
+        display_name: newDisplayName,
+        club_id: Number(newClubId),
+        is_super_admin: newIsSuperAdmin,
+      });
+      setNewTelegramId("");
+      setNewGoogleEmail("");
+      setNewDisplayName("");
+      setNewIsSuperAdmin(false);
+      await reload();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setAssignBusy(false);
+    }
+  }
+
+  async function handleToggleStatus(a) {
+    setBusyId(a.id);
+    setActionError(null);
+    try {
+      await api.setAdminStatus(token, a.id, !a.is_active);
+      await reload();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function handleRename(a) {
+    const newName = (renameDrafts[a.id] ?? a.display_name ?? "").trim();
+    if (!newName || newName === a.display_name) return;
+    setBusyId(a.id);
+    setActionError(null);
+    try {
+      await api.updateAdmin(token, a.id, { display_name: newName });
+      await reload();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function handleUpdateEmail(a) {
+    const draft = (emailDrafts[a.id] ?? a.google_email ?? "").trim();
+    if (draft === (a.google_email ?? "")) return;
+    setBusyId(a.id);
+    setActionError(null);
+    try {
+      await api.updateAdmin(token, a.id, { google_email: draft || null });
+      await reload();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function handleToggleSuperAdmin(a) {
+    setBusyId(a.id);
+    setActionError(null);
+    try {
+      await api.updateAdmin(token, a.id, { is_super_admin: !a.is_super_admin });
+      await reload();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  if (loadError) return <div className="banner banner--error">{loadError}</div>;
+  if (!adminsList) return <p className="empty-hint">Загрузка…</p>;
+
+  return (
+    <div>
+      <ul className="order-list">
+        {adminsList.map((a) => (
+          <li key={a.id} className="order-row kj-row">
+            <div className="kj-row__main">
+              <input
+                className="kj-row__name-input"
+                value={renameDrafts[a.id] ?? a.display_name ?? ""}
+                onChange={(e) => setRenameDrafts((prev) => ({ ...prev, [a.id]: e.target.value }))}
+              />
+              <span>{a.is_active ? "🟢" : "🔴"}</span>
+              {a.id === currentAdminId && <span className="empty-hint">(это вы)</span>}
+            </div>
+            <div className="kj-row__stats">
+              {a.club_name || `Клуб #${a.club_id}`} · {a.is_super_admin ? "супер-админ" : "админ клуба"}
+            </div>
+            <div className="kj-row__main">
+              <input
+                className="kj-row__name-input"
+                placeholder="Google-почта (не привязана)"
+                value={emailDrafts[a.id] ?? a.google_email ?? ""}
+                onChange={(e) => setEmailDrafts((prev) => ({ ...prev, [a.id]: e.target.value }))}
+              />
+              <span title={a.google_linked ? "Google-аккаунт уже входил" : "Ещё ни разу не входили через Google"}>
+                {a.google_linked ? "🔗" : "⛓️‍💥"}
+              </span>
+            </div>
+            <div className="kj-row__actions">
+              <button type="button" className="link-btn" disabled={busyId === a.id} onClick={() => handleRename(a)}>
+                Сохранить имя
+              </button>
+              <button type="button" className="link-btn" disabled={busyId === a.id} onClick={() => handleUpdateEmail(a)}>
+                Сохранить почту
+              </button>
+              <button
+                type="button" className="link-btn" disabled={busyId === a.id}
+                onClick={() => handleToggleSuperAdmin(a)}
+              >
+                {a.is_super_admin ? "Снять права супер-админа" : "Сделать супер-админом"}
+              </button>
+              <button
+                type="button" className="link-btn" disabled={busyId === a.id || a.id === currentAdminId}
+                title={a.id === currentAdminId ? "Нельзя заблокировать самого себя" : undefined}
+                onClick={() => handleToggleStatus(a)}
+              >
+                {a.is_active ? "Заблокировать" : "Активировать"}
+              </button>
+              <span className="kj-row__id">ID Telegram: {a.telegram_user_id ?? "—"}</span>
+            </div>
+          </li>
+        ))}
+      </ul>
+
+      {actionError && <div className="banner banner--error">{actionError}</div>}
+
+      <form className="club-form" onSubmit={handleAssign}>
+        <input
+          placeholder="Telegram ID нового администратора"
+          type="number"
+          value={newTelegramId}
+          onChange={(e) => setNewTelegramId(e.target.value)}
+        />
+        <input
+          placeholder="Google-почта администратора"
+          type="email"
+          value={newGoogleEmail}
+          onChange={(e) => setNewGoogleEmail(e.target.value)}
+        />
+        <input
+          placeholder="Имя администратора"
+          value={newDisplayName}
+          onChange={(e) => setNewDisplayName(e.target.value)}
+          required
+        />
+        <select value={newClubId} onChange={(e) => setNewClubId(e.target.value)}>
+          {clubs.map((c) => (
+            <option key={c.club_id} value={c.club_id}>{c.name} (ID {c.club_id})</option>
+          ))}
+        </select>
+        <label className="empty-hint">
+          <input
+            type="checkbox"
+            checked={newIsSuperAdmin}
+            onChange={(e) => setNewIsSuperAdmin(e.target.checked)}
+          />
+          {" "}Супер-админ (доступ ко всем клубам, отчётам, системе и этому блоку)
+        </label>
+        <button type="submit" disabled={assignBusy || !canAssign}>Добавить администратора</button>
+      </form>
+      <p className="empty-hint">
+        Укажите Telegram ID и/или Google-почту — можно оба сразу. После первого входа через Google
+        почта навсегда привязывается к тому аккаунту, который её подтвердил.
+      </p>
+    </div>
+  );
+}
+
 function ClubList({ clubs, onSelect }) {
   return (
     <ul className="order-list">
@@ -750,6 +978,18 @@ export default function App() {
     };
   }, [token]);
 
+  // Кнопка "Выйти" (запрос пользователя 2026-09, сразу после появления
+  // входа через Google — до этого выйти из панели штатно было нельзя
+  // вообще, ни через Google, ни по ссылке admin-link). Просто стирает
+  // токен и возвращает на экран входа — сама Google-сессия в браузере
+  // (аккаунт, выбранный в её окне выбора) не трогается, при следующем
+  // входе Google может даже не спросить заново, какой аккаунт выбрать.
+  function handleLogout() {
+    clearToken();
+    setToken(null);
+    setMe(null);
+  }
+
   async function handleCreate(payload) {
     setCreateBusy(true);
     setCreateError(null);
@@ -795,19 +1035,25 @@ export default function App() {
             {me.display_name || "Админ"} {me.is_super_admin ? "(супер-админ)" : `— ${me.club_name || `Клуб #${me.club_id}`}`}
           </span>
         </div>
-        {me.is_super_admin && selectedClubId == null && (
-          <div className="club-detail__admin-actions">
-            {view !== "clubs" && (
-              <button type="button" className="link-btn" onClick={() => setView("clubs")}>← К клубам</button>
-            )}
-            {view !== "reports" && (
-              <button type="button" className="link-btn" onClick={() => setView("reports")}>📊 Отчёты</button>
-            )}
-            {view !== "system" && (
-              <button type="button" className="link-btn" onClick={() => setView("system")}>⚙️ Система</button>
-            )}
-          </div>
-        )}
+        <div className="club-detail__admin-actions">
+          {me.is_super_admin && selectedClubId == null && (
+            <>
+              {view !== "clubs" && (
+                <button type="button" className="link-btn" onClick={() => setView("clubs")}>← К клубам</button>
+              )}
+              {view !== "reports" && (
+                <button type="button" className="link-btn" onClick={() => setView("reports")}>📊 Отчёты</button>
+              )}
+              {view !== "system" && (
+                <button type="button" className="link-btn" onClick={() => setView("system")}>⚙️ Система</button>
+              )}
+              {view !== "admins" && (
+                <button type="button" className="link-btn" onClick={() => setView("admins")}>👥 Администраторы</button>
+              )}
+            </>
+          )}
+          <button type="button" className="link-btn" onClick={handleLogout}>Выйти</button>
+        </div>
       </header>
 
       <main>
@@ -821,6 +1067,11 @@ export default function App() {
             <div className="panel">
               <h2>Система</h2>
               <SystemPanel token={token} />
+            </div>
+          ) : view === "admins" ? (
+            <div className="panel">
+              <h2>Администраторы</h2>
+              <AdminManagementPanel token={token} clubs={clubs} currentAdminId={me.admin_id} />
             </div>
           ) : (
             <div className="panel">
