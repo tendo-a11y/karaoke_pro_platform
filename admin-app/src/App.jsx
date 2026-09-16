@@ -92,7 +92,12 @@ function KjManagementPanel({ token, clubId, isSuperAdmin }) {
   const [actionError, setActionError] = useState(null);
   const [busyId, setBusyId] = useState(null);
   const [renameDrafts, setRenameDrafts] = useState({});
+  // 2026-09: "доступ KJ Pro определяется Google-аккаунтом клуба" — почта
+  // клубного Google-аккаунта редактируется точно так же, как имя (черновик
+  // на строку + отдельная кнопка сохранения), см. handleUpdateEmail ниже.
+  const [emailDrafts, setEmailDrafts] = useState({});
   const [newTelegramId, setNewTelegramId] = useState("");
+  const [newGoogleEmail, setNewGoogleEmail] = useState("");
   const [newDisplayName, setNewDisplayName] = useState("");
   const [assignBusy, setAssignBusy] = useState(false);
 
@@ -112,17 +117,29 @@ function KjManagementPanel({ token, clubId, isSuperAdmin }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clubId]);
 
+  // И Telegram ID, и Google-почта — необязательны по отдельности, но нужен
+  // хотя бы один (см. kj_admin_service.assign_kj docstring) — раньше
+  // telegram_user_id был единственным способом назначить KJ и был required,
+  // теперь это просто одно из двух полей формы.
+  const canAssign = newTelegramId.trim() !== "" || newGoogleEmail.trim() !== "";
+
   async function handleAssign(e) {
     e.preventDefault();
+    if (!canAssign) {
+      setActionError("Укажите Telegram ID и/или Google-почту клуба");
+      return;
+    }
     setAssignBusy(true);
     setActionError(null);
     try {
       await api.assignKj(token, {
-        telegram_user_id: Number(newTelegramId),
+        telegram_user_id: newTelegramId.trim() !== "" ? Number(newTelegramId) : null,
+        google_email: newGoogleEmail.trim() !== "" ? newGoogleEmail.trim() : null,
         display_name: newDisplayName,
         club_id: clubId,
       });
       setNewTelegramId("");
+      setNewGoogleEmail("");
       setNewDisplayName("");
       await reload();
     } catch (err) {
@@ -160,6 +177,24 @@ function KjManagementPanel({ token, clubId, isSuperAdmin }) {
     }
   }
 
+  async function handleUpdateEmail(kj) {
+    const draft = (emailDrafts[kj.id] ?? kj.google_email ?? "").trim();
+    if (draft === (kj.google_email ?? "")) return;
+    setBusyId(kj.id);
+    setActionError(null);
+    try {
+      // Пустая строка = отвязать Google-аккаунт (сервер трактует null/""
+      // как явную очистку google_email и google_sub — см. kj_admin_service
+      // update_kj docstring).
+      await api.updateKj(token, kj.id, { google_email: draft || null });
+      await reload();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   if (loadError) return <div className="banner banner--error">{loadError}</div>;
   if (!kjList) return <p className="empty-hint">Загрузка…</p>;
 
@@ -182,14 +217,35 @@ function KjManagementPanel({ token, clubId, isSuperAdmin }) {
               <div className="kj-row__stats">
                 Сегодня: {kj.orders_completed_today} заказ(ов) · {formatMoney(kj.revenue_today)}
               </div>
+              {/* 2026-09: "доступ KJ Pro определяется Google-аккаунтом клуба" —
+                  основной способ входа (наряду с /kjpanel через бота, который
+                  остаётся резервным), см. docstring KJOperator в models.py. */}
+              <div className="kj-row__main">
+                <input
+                  className="kj-row__name-input"
+                  placeholder="Google-почта клуба (не привязана)"
+                  value={emailDrafts[kj.id] ?? kj.google_email ?? ""}
+                  onChange={(e) => setEmailDrafts((prev) => ({ ...prev, [kj.id]: e.target.value }))}
+                />
+                <span title={kj.google_linked ? "Google-аккаунт уже входил" : "Ещё ни разу не входили через Google"}>
+                  {kj.google_linked ? "🔗" : "⛓️‍💥"}
+                </span>
+              </div>
               <div className="kj-row__actions">
                 <button type="button" className="link-btn" disabled={busyId === kj.id} onClick={() => handleRename(kj)}>
                   Сохранить имя
                 </button>
+                <button type="button" className="link-btn" disabled={busyId === kj.id} onClick={() => handleUpdateEmail(kj)}>
+                  Сохранить почту
+                </button>
                 <button type="button" className="link-btn" disabled={busyId === kj.id} onClick={() => handleToggle(kj)}>
                   {kj.is_active ? "Заблокировать" : "Активировать"}
                 </button>
-                {isSuperAdmin && <span className="kj-row__id">ID Telegram: {kj.telegram_user_id}</span>}
+                {isSuperAdmin && (
+                  <span className="kj-row__id">
+                    ID Telegram: {kj.telegram_user_id ?? "—"}
+                  </span>
+                )}
               </div>
             </li>
           ))}
@@ -200,11 +256,16 @@ function KjManagementPanel({ token, clubId, isSuperAdmin }) {
 
       <form className="club-form" onSubmit={handleAssign}>
         <input
-          placeholder="Telegram ID нового KJ"
+          placeholder="Telegram ID нового KJ (резервный способ)"
           type="number"
           value={newTelegramId}
           onChange={(e) => setNewTelegramId(e.target.value)}
-          required
+        />
+        <input
+          placeholder="Google-почта клуба (основной способ)"
+          type="email"
+          value={newGoogleEmail}
+          onChange={(e) => setNewGoogleEmail(e.target.value)}
         />
         <input
           placeholder="Имя KJ"
@@ -212,8 +273,12 @@ function KjManagementPanel({ token, clubId, isSuperAdmin }) {
           onChange={(e) => setNewDisplayName(e.target.value)}
           required
         />
-        <button type="submit" disabled={assignBusy}>Назначить KJ в этот клуб</button>
+        <button type="submit" disabled={assignBusy || !canAssign}>Назначить KJ в этот клуб</button>
       </form>
+      <p className="empty-hint">
+        Укажите Telegram ID и/или Google-почту клуба — можно оба сразу. Google-вход основной,
+        Telegram /kjpanel через бота остаётся резервным способом.
+      </p>
     </div>
   );
 }
