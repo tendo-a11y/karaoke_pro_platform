@@ -5,6 +5,10 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
     <title>Karaoke — заказ песни</title>
+    <!-- Google Identity Services — настоящая кнопка "Войти через Google"
+         (см. ActivationPanel в src/App.jsx, заменяет прежнюю имитацию
+         getMockGoogleCredential теперь, когда есть боевой Client ID). -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
   </head>
   <body>
     <div id="root"></div>
