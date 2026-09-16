@@ -4,7 +4,8 @@ from auth import issue_admin_google_token, require_admin
 from errors import api_error, api_ok
 from models import AdminUser
 from extensions import db
-from services import club_service, kj_admin_service, report_service, system_admin_service
+from services import admin_admin_service, club_service, kj_admin_service, report_service, system_admin_service
+from services.admin_admin_service import AdminAdminServiceError
 from services.club_service import ClubServiceError
 from services.kj_admin_service import KjAdminServiceError
 from services.report_service import ReportServiceError
@@ -324,3 +325,65 @@ def system_backup():
         mimetype="application/sql",
         headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
+
+
+# --- Управление администраторами (Block #5, только super_admin) ---
+# 2026-09, сразу после "нормальный вход через Google в админку": до этого
+# единственный способ вписать google_email администратору был manage.py
+# set-admin-google-email по SSH (см. его докстринг) — этот блок убирает
+# необходимость в SSH для ЛЮБОГО следующего администратора, по образцу
+# уже существующего "Управление KJ" (см. admin_admin_service.py docstring
+# про то, почему доступ здесь только super_admin, в отличие от KJ).
+
+@bp.get("/admins")
+@require_admin
+def list_admins():
+    try:
+        return api_ok(admin_admin_service.list_admins(g.admin))
+    except AdminAdminServiceError as exc:
+        return _service_error_response(exc)
+
+
+@bp.post("/admins")
+@require_admin
+def assign_admin():
+    payload = request.get_json(silent=True) or {}
+    try:
+        target = admin_admin_service.assign_admin(
+            g.admin,
+            telegram_user_id=payload.get("telegram_user_id"),
+            google_email=payload.get("google_email"),
+            display_name=payload.get("display_name"),
+            club_id=payload.get("club_id"),
+            is_super_admin=payload.get("is_super_admin", False),
+        )
+    except AdminAdminServiceError as exc:
+        return _service_error_response(exc)
+    return api_ok(target.to_dict(), status_code=201)
+
+
+@bp.put("/admins/<int:admin_id>")
+@require_admin
+def update_admin(admin_id):
+    payload = request.get_json(silent=True) or {}
+    fields = {
+        key: payload[key]
+        for key in ("display_name", "google_email", "club_id", "is_super_admin")
+        if key in payload
+    }
+    try:
+        target = admin_admin_service.update_admin(g.admin, admin_id, **fields)
+    except AdminAdminServiceError as exc:
+        return _service_error_response(exc)
+    return api_ok(target.to_dict())
+
+
+@bp.put("/admins/<int:admin_id>/status")
+@require_admin
+def set_admin_status(admin_id):
+    payload = request.get_json(silent=True) or {}
+    try:
+        target = admin_admin_service.set_admin_status(g.admin, admin_id, payload.get("is_active"))
+    except AdminAdminServiceError as exc:
+        return _service_error_response(exc)
+    return api_ok(target.to_dict())
