@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import QRCode from "qrcode";
-import { api, ApiError, downloadSystemBackup, resolveToken } from "./api";
+import { GOOGLE_CLIENT_ID, api, ApiError, downloadSystemBackup, resolveToken, storeToken } from "./api";
 import "./App.css";
 
 // 1:1 перенос utils.format_currency старого бота (config.DEFAULT_CURRENCY="MDL") —
@@ -645,8 +645,63 @@ function ClubList({ clubs, onSelect }) {
   );
 }
 
+// 2026-09: "нормальный вход через Google в админку" — основной способ
+// входа (см. docstring AdminUser в models.py и auth.py::
+// issue_admin_google_token), показывается только когда resolveToken() не
+// нашёл токен ни в ссылке, ни в localStorage. Ссылка manage.py admin-link
+// по-прежнему сама кладёт токен в localStorage при первом же открытии
+// (см. resolveToken) и минует этот экран целиком — она остаётся резервным
+// способом, полностью равноценным по правам после входа (по образцу
+// KjLoginScreen в kj-panel/src/App.jsx).
+function AdminLoginScreen({ onLoggedIn }) {
+  const [error, setError] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const buttonRef = useRef(null);
+
+  async function handleGoogleCredential(response) {
+    setBusy(true);
+    setError(null);
+    try {
+      const { token } = await api.loginWithGoogle({ id_token: response.credential });
+      storeToken(token);
+      onLoggedIn(token);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : String(err));
+      setBusy(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!window.google?.accounts?.id || !buttonRef.current) {
+      setError("Не удалось загрузить вход через Google — проверьте подключение к интернету и обновите страницу");
+      return;
+    }
+    window.google.accounts.id.initialize({
+      client_id: GOOGLE_CLIENT_ID,
+      callback: handleGoogleCredential,
+    });
+    window.google.accounts.id.renderButton(buttonRef.current, {
+      theme: "outline", size: "large", text: "signin_with", locale: "ru", width: 280,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <div className="app-shell centered">
+      <h1>Karaoke Admin</h1>
+      <p>Войдите через свой Google-аккаунт администратора.</p>
+      {error && <p className="error-text">{error}</p>}
+      <div ref={buttonRef} />
+      {busy && <p>Входим…</p>}
+      <p className="empty-hint">
+        Резервный способ: ссылка, которую выдаёт manage.py admin-link.
+      </p>
+    </div>
+  );
+}
+
 export default function App() {
-  const token = useMemo(() => resolveToken(), []);
+  const [token, setToken] = useState(() => resolveToken());
   const [me, setMe] = useState(null);
   const [clubs, setClubs] = useState([]);
   const [selectedClubId, setSelectedClubId] = useState(null);
@@ -711,12 +766,7 @@ export default function App() {
   }
 
   if (!token) {
-    return (
-      <div className="app-shell centered">
-        <h1>Karaoke Admin</h1>
-        <p>Ссылка без токена доступа. Откройте панель по ссылке, которую выдаёт CLI-провижининг (manage.py admin-link).</p>
-      </div>
-    );
+    return <AdminLoginScreen onLoggedIn={setToken} />;
   }
 
   if (loadError) {
