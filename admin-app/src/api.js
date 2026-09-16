@@ -100,6 +100,14 @@ export const api = {
   getReportsOverview: (token) => request("/api/admin/reports/overview", { token }),
   getSystemOverview: (token) => request("/api/admin/system/overview", { token }),
   getSystemLogs: (token) => request("/api/admin/system/logs", { token }),
+  // Блок "Управление администраторами" (2026-09, только super_admin — см.
+  // admin_admin_service.py docstring) — по образцу listKj/assignKj/updateKj/setKjStatus.
+  listAdmins: (token) => request("/api/admin/admins", { token }),
+  assignAdmin: (token, payload) => request("/api/admin/admins", { method: "POST", token, body: payload }),
+  updateAdmin: (token, adminId, payload) =>
+    request(`/api/admin/admins/${adminId}`, { method: "PUT", token, body: payload }),
+  setAdminStatus: (token, adminId, isActive) =>
+    request(`/api/admin/admins/${adminId}/status`, { method: "PUT", token, body: { is_active: isActive } }),
 };
 
 // Скачивание бэкапа БД — отдельно от api.request(), т.к. это не JSON-ответ
