@@ -22,28 +22,15 @@ export function storeSession(clubId, session) {
   localStorage.setItem(tokenStorageKey(clubId), JSON.stringify(session));
 }
 
-// ТЗ п.45 (финальная единая модель входа) — постоянная идентификация
-// гостя через Google, GOOGLE_AUTH_MODE=mock на бэкенде (см. services/
-// google_auth_service.py): пока нет настоящего Google Client ID, сам
-// credential не настоящий Google id_token, а простой {"sub"}, который
-// формирует сам фронтенд, без участия гостя (гость не видит и не вводит
-// ничего Google-специфичного — только номер стола). sub хранится в этом
-// браузере ГЛОБАЛЬНО (не по клубам) и переиспользуется при каждом входе —
-// это имитирует то, как ведёт себя настоящий Google-аккаунт: один и тот
-// же человек, в любом клубе, всегда даёт один и тот же sub. Когда
-// появится настоящий Client ID, эта функция заменяется на настоящую
-// кнопку Google Identity Services — остальной код (вызов api.linkGoogle)
-// не меняется.
-const MOCK_GOOGLE_SUB_KEY = "guest_app_mock_google_sub";
-
-export function getMockGoogleCredential() {
-  let sub = localStorage.getItem(MOCK_GOOGLE_SUB_KEY);
-  if (!sub) {
-    sub = `mock-${crypto.randomUUID()}`;
-    localStorage.setItem(MOCK_GOOGLE_SUB_KEY, sub);
-  }
-  return { sub };
-}
+// ТЗ п.45 (финальная единая модель входа) — постоянная идентификация гостя
+// через Google (см. services/google_auth_service.py). 2026-09: боевой
+// GOOGLE_CLIENT_ID заведён и GOOGLE_AUTH_MODE переключён на "real" — здесь
+// настоящая кнопка Google Identity Services (см. index.html и
+// ActivationPanel в App.jsx), прежняя имитация (getMockGoogleCredential,
+// {"sub"} без всякого Google) удалена вместе с этим комментарием.
+// Client ID — не секрет (он всегда виден в открытом виде на любой странице
+// с кнопкой входа Google), поэтому его можно хранить прямо в коде фронтенда.
+export const GOOGLE_CLIENT_ID = "798456512733-iiel465aq3g5nprap64mq8ovrvcjqsfd.apps.googleusercontent.com";
 
 class ApiError extends Error {
   constructor(status, code, message) {
