@@ -1,18 +1,71 @@
 from flask import Blueprint, Response, current_app, g, request
 
-from auth import require_admin
+from auth import issue_admin_google_token, require_admin
 from errors import api_error, api_ok
+from models import AdminUser
+from extensions import db
 from services import club_service, kj_admin_service, report_service, system_admin_service
 from services.club_service import ClubServiceError
 from services.kj_admin_service import KjAdminServiceError
 from services.report_service import ReportServiceError
 from services.system_admin_service import SystemAdminServiceError
+from services.google_auth_service import GoogleAuthError, verify_google_credential
 
 bp = Blueprint("admin", __name__, url_prefix="/api/admin")
 
 
 def _service_error_response(exc):
     return api_error(exc.status_code, exc.code, exc.message)
+
+
+@bp.post("/auth/google")
+def admin_google_login():
+    """
+    Вход в Admin App через Google-аккаунт (запрос пользователя 2026-09:
+    "нормальный вход через Google в админку" — по образцу
+    routes/kj.py::kj_google_login, см. auth.py::issue_admin_google_token и
+    docstring AdminUser в models.py). Без @require_admin — это как раз тот
+    эндпоинт, который выдаёт токен, а не проверяет его.
+
+    Как и у KJ, Google-аккаунт НЕ привязывается сам фактом входа с любой
+    почты — сначала нужно вписать разрешённую почту в
+    AdminUser.google_email (сейчас — только через manage.py, см. его
+    докстринг). Первый успешный вход с этой почтой заполняет google_sub —
+    дальше уже он, а не email, служит источником истины.
+    """
+    payload = request.get_json(silent=True) or {}
+    credential = payload.get("credential")
+    try:
+        identity = verify_google_credential(
+            current_app.config["GOOGLE_AUTH_MODE"], current_app.config.get("GOOGLE_CLIENT_ID"), credential,
+        )
+    except GoogleAuthError as exc:
+        return api_error(400, "GOOGLE_AUTH_ERROR", exc.message)
+
+    sub = identity["sub"]
+    email = identity.get("email")
+
+    admin = AdminUser.query.filter_by(google_sub=sub).first()
+    if admin is None and email:
+        admin = AdminUser.query.filter_by(google_email=email.lower(), google_sub=None).first()
+        if admin is not None:
+            admin.google_sub = sub
+            db.session.commit()
+
+    if admin is None:
+        return api_error(
+            403, "GOOGLE_NOT_REGISTERED",
+            "Этот Google-аккаунт не привязан ни к одному администратору — обратитесь к владельцу проекта",
+        )
+    if not admin.is_active:
+        return api_error(403, "FORBIDDEN", "Доступ администратора заблокирован")
+    if not admin.is_super_admin and (not admin.club or not admin.club.is_active):
+        return api_error(403, "FORBIDDEN", "Клуб недоступен")
+
+    token = issue_admin_google_token(
+        sub, current_app.config["ADMIN_JWT_SECRET"], current_app.config["ADMIN_JWT_TTL_SECONDS"],
+    )
+    return api_ok({"token": token})
 
 
 @bp.get("/me")
