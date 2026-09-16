@@ -20,6 +20,7 @@ upgrade` на одной и той же базе нельзя: Alembic не бу
     python manage.py kj-link --telegram-id 5450586697 --panel-url http://localhost:3000
     python manage.py add-admin --telegram-id 111222333 --club-id 1 --name "Owner"
     python manage.py admin-link --telegram-id 111222333 --panel-url http://localhost:3001
+    python manage.py set-admin-google-email --telegram-id 111222333 --google-email you@gmail.com
     python manage.py set-bridge-token --club-id 1
 
 club-id рекомендуется указывать равным venue_id из существующей SQLite базы
@@ -117,6 +118,31 @@ def cmd_admin_link(args):
     print(f"{args.panel_url}?token={token}")
 
 
+def cmd_set_admin_google_email(args):
+    """
+    Привязывает Google-почту к уже существующему администратору (запрос
+    пользователя 2026-09: "нормальный вход через Google в админку" — по
+    образцу google_email у KJ, см. docstring AdminUser в models.py). В
+    отличие от KJ, для админов пока нет экрана управления в самом Admin
+    App — единственный способ вписать первую разрешённую почту (в первую
+    очередь себе) — эта команда. google_sub НЕ трогаем: если почта
+    меняется на другую, старая Google-привязка (google_sub) сбрасывается,
+    чтобы вход снова потребовал подтверждения новой почтой.
+    """
+    app = create_app()
+    with app.app_context():
+        admin = AdminUser.query.filter_by(telegram_user_id=args.telegram_id).first()
+        if admin is None:
+            print(f"ОШИБКА: администратор {args.telegram_id} не найден — сначала добавь его через add-admin")
+            return
+        new_email = args.google_email.strip().lower()
+        if admin.google_email != new_email:
+            admin.google_sub = None
+        admin.google_email = new_email
+        db.session.commit()
+    print(f"OK: почта {new_email} привязана к администратору {args.telegram_id} — можно входить в Admin App через Google")
+
+
 def cmd_set_bridge_token(args):
     """
     Генерирует (или показывает существующий) секрет для локального моста
@@ -175,6 +201,11 @@ def main():
     p.add_argument("--telegram-id", type=int, required=True)
     p.add_argument("--panel-url", default="http://localhost:3001")
     p.set_defaults(func=cmd_admin_link)
+
+    p = sub.add_parser("set-admin-google-email")
+    p.add_argument("--telegram-id", type=int, required=True)
+    p.add_argument("--google-email", required=True)
+    p.set_defaults(func=cmd_set_admin_google_email)
 
     p = sub.add_parser("set-bridge-token")
     p.add_argument("--club-id", type=int, required=True)
