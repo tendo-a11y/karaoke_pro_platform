@@ -27,6 +27,7 @@ def test_status_false_when_no_bridge_connected(client, db, club, kj):
     data = resp.get_json()["data"]
     assert data["connected"] is False
     assert data["connected_since"] is None
+    assert data["vdj_reachable"] is None
 
 
 def test_status_requires_auth(client, db, club):
@@ -50,6 +51,9 @@ def test_bridge_connect_marks_status_true(app, client, db, club, kj):
         data = resp.get_json()["data"]
         assert data["connected"] is True
         assert data["connected_since"] is not None
+        # Мост только что подключился — ещё не успел ни разу отчитаться о
+        # VirtualDJ (см. mark_connected в vdj/bridge_status.py).
+        assert data["vdj_reachable"] is None
     finally:
         bridge.disconnect(namespace="/bridge")
 
@@ -93,5 +97,72 @@ def test_bridge_status_isolated_per_club(app, client, db, club, other_club, kj):
         # чтобы не плодить лишнюю фикстуру ради одной проверки изоляции.
         from vdj import bridge_status
         assert bridge_status.is_connected(other_club.club_id) is False
+    finally:
+        bridge.disconnect(namespace="/bridge")
+
+
+# --- Третий индикатор панели обзора KJ: "Мост↔VirtualDJ" (запрос
+# пользователя 2026-09-17) — мост сам отчитывается событием
+# "bridge_vdj_status", видит ли он сейчас VirtualDJ на своём компьютере.
+
+def test_bridge_vdj_status_true_after_report(app, client, db, club, kj):
+    club.bridge_token = "secret-token"
+    db.session.commit()
+
+    bridge = _connect_bridge(app, client, club.club_id, "secret-token")
+    try:
+        bridge.emit("bridge_vdj_status", {"reachable": True}, namespace="/bridge")
+        resp = client.get(f"/api/kj/bridge/status/{club.club_id}", headers=_kj_headers(kj))
+        assert resp.get_json()["data"]["vdj_reachable"] is True
+    finally:
+        bridge.disconnect(namespace="/bridge")
+
+
+def test_bridge_vdj_status_false_after_report(app, client, db, club, kj):
+    club.bridge_token = "secret-token"
+    db.session.commit()
+
+    bridge = _connect_bridge(app, client, club.club_id, "secret-token")
+    try:
+        bridge.emit("bridge_vdj_status", {"reachable": False}, namespace="/bridge")
+        resp = client.get(f"/api/kj/bridge/status/{club.club_id}", headers=_kj_headers(kj))
+        assert resp.get_json()["data"]["vdj_reachable"] is False
+    finally:
+        bridge.disconnect(namespace="/bridge")
+
+
+def test_bridge_reconnect_resets_vdj_reachable_to_none(app, client, db, club, kj):
+    """Новое подключение моста (например, после перезапуска программы) не
+    должно унаследовать старый статус VirtualDJ — пока новый мост ещё сам
+    не проверил, мы не знаем, жива ли VirtualDJ прямо сейчас."""
+    club.bridge_token = "secret-token"
+    db.session.commit()
+
+    bridge = _connect_bridge(app, client, club.club_id, "secret-token")
+    bridge.emit("bridge_vdj_status", {"reachable": True}, namespace="/bridge")
+    bridge.disconnect(namespace="/bridge")
+
+    bridge2 = _connect_bridge(app, client, club.club_id, "secret-token")
+    try:
+        resp = client.get(f"/api/kj/bridge/status/{club.club_id}", headers=_kj_headers(kj))
+        assert resp.get_json()["data"]["vdj_reachable"] is None
+    finally:
+        bridge2.disconnect(namespace="/bridge")
+
+
+def test_bridge_vdj_status_ignored_with_malformed_payload(app, client, db, club, kj):
+    """Мусорный payload (не bool/не dict) не должен падать и не должен
+    менять уже известный статус."""
+    club.bridge_token = "secret-token"
+    db.session.commit()
+
+    bridge = _connect_bridge(app, client, club.club_id, "secret-token")
+    try:
+        bridge.emit("bridge_vdj_status", {"reachable": True}, namespace="/bridge")
+        bridge.emit("bridge_vdj_status", {"reachable": "yes"}, namespace="/bridge")
+        bridge.emit("bridge_vdj_status", "not-a-dict", namespace="/bridge")
+
+        resp = client.get(f"/api/kj/bridge/status/{club.club_id}", headers=_kj_headers(kj))
+        assert resp.get_json()["data"]["vdj_reachable"] is True
     finally:
         bridge.disconnect(namespace="/bridge")
