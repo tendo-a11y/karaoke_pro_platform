@@ -138,9 +138,16 @@ def register_handlers():
         # моста ("подключён"/"не подключён") — см. vdj/bridge_status.py про
         # то, почему это простое состояние процесса, а не запись в БД.
         # Рассылаем в комнату клуба (не моста!) — именно там сидит KJ Panel,
-        # см. handle_connect выше.
+        # см. handle_connect выше. vdj_reachable здесь всегда None — мост
+        # только что подключился и ещё не успел ни разу проверить VirtualDJ
+        # (первый отчёт придёт отдельным событием bridge_vdj_status, см.
+        # handle_bridge_vdj_status ниже).
         bridge_status.mark_connected(request.sid, club_id)
-        socketio.emit("bridge_status", {"connected": True}, room=_club_room(club_id))
+        socketio.emit(
+            "bridge_status",
+            {"connected": True, "vdj_reachable": None},
+            room=_club_room(club_id),
+        )
         return True
 
     @socketio.on("disconnect", namespace="/bridge")
@@ -161,7 +168,44 @@ def register_handlers():
             # мост подключён.
             return
         logger.info("Bridge: мост клуба %s отключился (sid=%s)", club_id, request.sid)
-        socketio.emit("bridge_status", {"connected": bridge_status.is_connected(club_id)}, room=_club_room(club_id))
+        socketio.emit(
+            "bridge_status",
+            {
+                "connected": bridge_status.is_connected(club_id),
+                "vdj_reachable": bridge_status.vdj_reachable(club_id),
+            },
+            room=_club_room(club_id),
+        )
+
+    @socketio.on("bridge_vdj_status", namespace="/bridge")
+    def handle_bridge_vdj_status(data):
+        """
+        Третий индикатор панели обзора KJ ("Мост↔VirtualDJ") — запрос
+        пользователя 2026-09-17: раньше KJ Panel видела только "мост
+        подключён к серверу", но не видела, отвечает ли VirtualDJ САМОМУ
+        мосту на компьютере KJ (мост мог быть на связи с сервером, пока
+        VirtualDJ выключена или зависла — KJ узнавал об этом только когда
+        песня не появлялась в очереди). Мост присылает этот отчёт сам, раз
+        в QUEUE_REFRESH_SECONDS, из уже существующего фонового опроса
+        VirtualDJ (см. vdj_bridge_app.py::_queue_refresh_loop) — отдельного
+        опроса "жив ли VDJ" не заводим, переиспользуем то же обращение.
+        """
+        if not isinstance(data, dict):
+            return
+        reachable = data.get("reachable")
+        if not isinstance(reachable, bool):
+            return
+        club_id = bridge_status.mark_vdj_reachable(request.sid, reachable)
+        if club_id is None:
+            # sid не зарегистрирован как подключённый мост (гонка при
+            # отключении — отчёт пришёл чуть позже disconnect) — рассылать
+            # нечего.
+            return
+        socketio.emit(
+            "bridge_status",
+            {"connected": True, "vdj_reachable": reachable},
+            room=_club_room(club_id),
+        )
 
     @socketio.on("vdj_result", namespace="/bridge")
     def handle_vdj_result(data):
