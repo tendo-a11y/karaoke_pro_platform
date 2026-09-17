@@ -1258,6 +1258,99 @@ function KjLoginScreen({ onLoggedIn }) {
   );
 }
 
+// Панель обзора связи (запрос пользователя 2026-09-17: "небольшая панель
+// обзора для kj, везде ли есть подключение"). Три звена одной цепочки
+// "гость заказал -> KJ увидел -> песня попала в VirtualDJ" — раньше KJ
+// узнавал о разрыве где-то в середине только когда песня просто не
+// появлялась в очереди, без единой подсказки, где именно оборвалось.
+// Каждый кружок кликабелен — по клику разворачивается пояснение обычными
+// словами, без терминов вроде "WebSocket"/"namespace" (KJ не техник).
+const OVERVIEW_ITEMS = [
+  {
+    key: "guest_kj",
+    label: "Гость → KJ",
+    explain: (ok, unknown) =>
+      unknown
+        ? "Проверяем связь панели с сервером…"
+        : ok
+        ? "Ваша панель на связи с сервером — новые заказы гостей и обновления очереди приходят сразу, без задержки."
+        : "Панель потеряла связь с сервером — заказы гостей могут не появляться сами собой. Обновите страницу (F5).",
+  },
+  {
+    key: "kj_bridge",
+    label: "Сервер → Мост",
+    explain: (ok, unknown) =>
+      unknown
+        ? "Проверяем, подключена ли программа-мост к серверу…"
+        : ok
+        ? "Программа-мост (на компьютере, где стоит VirtualDJ) на связи с сервером — подтверждённые заказы могут доходить до VirtualDJ."
+        : "Программа-мост не подключена к серверу. Откройте программу-мост на компьютере с VirtualDJ и нажмите «Подключиться» — иначе подтверждённые заказы не попадут в очередь VirtualDJ.",
+  },
+  {
+    key: "bridge_vdj",
+    label: "Мост → VirtualDJ",
+    explain: (ok, unknown) =>
+      unknown
+        ? "Мост ещё не проверил связь с VirtualDJ — подождите несколько секунд после подключения."
+        : ok
+        ? "Мост видит VirtualDJ на своём компьютере — песни должны добавляться в очередь нормально."
+        : "Мост не видит VirtualDJ. Проверьте на компьютере с VirtualDJ: сама VirtualDJ запущена и в ней включён Network Control Plugin (в настройках VirtualDJ).",
+  },
+];
+
+function OverviewDot({ state }) {
+  // state: true (зелёный) | false (красный) | "unknown" (серый — ещё не знаем)
+  const cls =
+    state === "unknown" ? "overview-dot--unknown" : state ? "overview-dot--ok" : "overview-dot--off";
+  return <span className={`overview-dot ${cls}`} aria-hidden="true" />;
+}
+
+function ConnectionOverviewPanel({ connected, bridgeStatus }) {
+  const [openKey, setOpenKey] = useState(null);
+
+  // bridgeStatus === null — ещё не пришёл ни разу (первые мгновения после
+  // входа, пока не отработал ни начальный GET, ни первое событие сокета).
+  const bridgeConnectedState = bridgeStatus == null ? "unknown" : bridgeStatus.connected;
+  const vdjReachableState =
+    bridgeStatus == null || !bridgeStatus.connected || bridgeStatus.vdj_reachable == null
+      ? "unknown"
+      : bridgeStatus.vdj_reachable;
+
+  const states = {
+    guest_kj: connected,
+    kj_bridge: bridgeConnectedState,
+    bridge_vdj: vdjReachableState,
+  };
+
+  return (
+    <div className="overview-panel">
+      <div className="overview-panel__row">
+        {OVERVIEW_ITEMS.map((item) => (
+          <button
+            key={item.key}
+            type="button"
+            className={`overview-item${openKey === item.key ? " overview-item--open" : ""}`}
+            onClick={() => setOpenKey((prev) => (prev === item.key ? null : item.key))}
+          >
+            <OverviewDot state={states[item.key]} />
+            <span className="overview-item__label">{item.label}</span>
+            <span className="overview-item__info" aria-hidden="true">ⓘ</span>
+          </button>
+        ))}
+      </div>
+      {openKey && (
+        <div className="overview-panel__explain">
+          {(() => {
+            const item = OVERVIEW_ITEMS.find((i) => i.key === openKey);
+            const state = states[openKey];
+            return item.explain(state === true, state === "unknown");
+          })()}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function App() {
   const [token, setToken] = useState(() => resolveToken());
   const [me, setMe] = useState(null);
@@ -1267,6 +1360,11 @@ export default function App() {
   const [actionError, setActionError] = useState(null);
   const [busyOrderId, setBusyOrderId] = useState(null);
   const [connected, setConnected] = useState(false);
+  // Панель обзора связи (запрос пользователя 2026-09-17) — null, пока не
+  // пришёл ни начальный GET /api/kj/bridge/status, ни первое сокет-событие
+  // "bridge_status"; дальше обновляется живым сокетом без поллинга (тот же
+  // принцип, что и остальные live-обновления панели).
+  const [bridgeStatus, setBridgeStatus] = useState(null);
   const [draggingOrderId, setDraggingOrderId] = useState(null);
   const [dropActive, setDropActive] = useState(false);
   const [manualAddBusy, setManualAddBusy] = useState(false);
@@ -1289,8 +1387,9 @@ export default function App() {
     let cancelled = false;
 
     async function bootstrap() {
+      let meData;
       try {
-        const meData = await api.me(token);
+        meData = await api.me(token);
         if (cancelled) return;
         setMe(meData);
 
@@ -1303,6 +1402,19 @@ export default function App() {
         setQueue(queueData);
       } catch (err) {
         if (!cancelled) setLoadError(err instanceof ApiError ? err.message : String(err));
+        return;
+      }
+
+      // Отдельно от основной загрузки (см. докстринг GET /api/kj/bridge/
+      // status в routes/kj.py) — только чтобы показать правильное
+      // состояние ДО первого сокет-события, а не после него. Не критично,
+      // если не удастся: панель обзора просто покажет "проверяем…", пока
+      // не придёт первое событие "bridge_status".
+      try {
+        const status = await api.getBridgeStatus(token, meData.club_id);
+        if (!cancelled) setBridgeStatus(status);
+      } catch {
+        // см. комментарий выше — не критично.
       }
     }
 
@@ -1320,6 +1432,13 @@ export default function App() {
       setSocketInstance(socket);
     });
     socket.on("disconnect", () => setConnected(false));
+
+    // Панель обзора связи: сервер сам рассылает это событие в комнату
+    // клуба при каждом изменении состояния моста (подключился/отключился/
+    // отчитался о VirtualDJ) — см. sockets.py::handle_bridge_connect/
+    // handle_bridge_disconnect/handle_bridge_vdj_status. Никакого поллинга
+    // не нужно, ровно как и для остальных live-обновлений этой панели.
+    socket.on("bridge_status", (payload) => setBridgeStatus(payload));
 
     socket.on("order_created", (order) => {
       setOrders((prev) => (prev.some((o) => o.id === order.id) ? prev : [...prev, order]));
@@ -1506,6 +1625,8 @@ export default function App() {
           )}
         </div>
       </header>
+
+      <ConnectionOverviewPanel connected={connected} bridgeStatus={bridgeStatus} />
 
       {actionError && <div className="banner banner--error">{actionError}</div>}
 
