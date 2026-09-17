@@ -28,6 +28,22 @@ const STATUS_LABELS = {
   error: "⚠️ Ошибка VDJ",
 };
 
+// Запрос пользователя 2026-09-17: раньше карточка заказа пропадала из списка
+// сразу же, как только VirtualDJ не смог добавить песню (order_updated со
+// статусом "error" приходил через тот же обработчик, что и успешное
+// "queued" — оба считались "заказ ушёл из списка ожидания"). В итоге KJ
+// видел только всплывающее "не удалось добавить песню" и не мог прочитать
+// настоящую причину (order.error_message), которая рендерится в самой
+// карточке (см. OrderCard ниже) — карточка исчезала раньше, чем эту причину
+// можно было увидеть. Теперь из списка пропадают только по-настоящему
+// завершённые заказы (успешно поставлены в очередь или отклонены KJ) — заказ
+// с ошибкой остаётся на экране с текстом причины, пока KJ сам не отклонит
+// его или не перетащит повторно (после того как поправит дело в VirtualDJ).
+const ORDER_LEAVES_LIST_STATUSES = new Set(["queued", "rejected"]);
+function isOrderStillRelevant(status) {
+  return !ORDER_LEAVES_LIST_STATUSES.has(status);
+}
+
 function formatOrderTime(isoString) {
   if (!isoString) return "";
   const date = new Date(isoString);
@@ -49,7 +65,11 @@ function formatOrderTime(isoString) {
 // библиотека с pointer-событиями (например dnd-kit) — отдельный шаг.
 function OrderCard({ order, busy, dragging, onReject, onDragStart, onDragEnd }) {
   const tableLabel = order.table_no == null ? "Без стола" : `Стол ${order.table_no}`;
-  const draggable = order.status === "pending" && !busy;
+  // "error" тоже можно перетащить повторно — например, KJ включил в
+  // VirtualDJ Network Control Plugin или переключился на вкладку Karaoke
+  // после первой неудачи, и хочет попробовать добавить тот же заказ снова,
+  // не заставляя гостя оформлять его заново.
+  const draggable = (order.status === "pending" || order.status === "error") && !busy;
   return (
     <div
       className={`order-card status-${order.status}${dragging ? " order-card--dragging" : ""}`}
@@ -66,8 +86,12 @@ function OrderCard({ order, busy, dragging, onReject, onDragStart, onDragEnd }) 
       </div>
       <div className="order-card__status">{STATUS_LABELS[order.status] || order.status}</div>
       {order.error_message && <div className="order-card__error">{order.error_message}</div>}
-      {draggable && <div className="order-card__drag-hint">⠿ Перетащите в очередь, чтобы подтвердить</div>}
-      {order.status === "pending" && (
+      {draggable && (
+        <div className="order-card__drag-hint">
+          ⠿ Перетащите в очередь, чтобы {order.status === "error" ? "попробовать снова" : "подтвердить"}
+        </div>
+      )}
+      {(order.status === "pending" || order.status === "error") && (
         <div className="order-card__actions">
           <button className="btn btn--reject" disabled={busy} onClick={() => onReject(order.id)}>
             ОТКЛОНИТЬ
@@ -1393,12 +1417,17 @@ export default function App() {
         if (cancelled) return;
         setMe(meData);
 
+        // "all", а не "pending" — иначе заказы со статусом "error" (не
+        // удалось добавить в VirtualDJ) не подгрузятся обратно после
+        // перезагрузки страницы, хотя реально ещё висят "в работе" у KJ.
+        // Завершённые статусы (queued/rejected) отфильтровываем сами через
+        // isOrderStillRelevant — см. её докстринг выше.
         const [ordersData, queueData] = await Promise.all([
-          api.listOrders(token, meData.club_id, "pending"),
+          api.listOrders(token, meData.club_id, "all"),
           api.getQueue(token, meData.club_id),
         ]);
         if (cancelled) return;
-        setOrders(ordersData);
+        setOrders(ordersData.filter((o) => isOrderStillRelevant(o.status)));
         setQueue(queueData);
       } catch (err) {
         if (!cancelled) setLoadError(err instanceof ApiError ? err.message : String(err));
@@ -1446,10 +1475,12 @@ export default function App() {
 
     const upsertOrRemove = (order) => {
       setOrders((prev) => {
-        if (order.status !== "pending") {
+        if (!isOrderStillRelevant(order.status)) {
           return prev.filter((o) => o.id !== order.id);
         }
-        return prev.map((o) => (o.id === order.id ? order : o));
+        return prev.some((o) => o.id === order.id)
+          ? prev.map((o) => (o.id === order.id ? order : o))
+          : [...prev, order];
       });
     };
 
@@ -1511,8 +1542,12 @@ export default function App() {
     } catch (err) {
       setActionError(err instanceof ApiError ? err.message : String(err));
       if (me) {
-        const fresh = await api.listOrders(token, me.club_id, "pending");
-        setOrders(fresh);
+        // "all" + фильтр — та же причина, что и в bootstrap() выше: этот
+        // самый catch срабатывает именно на ошибке VirtualDJ, и заказ,
+        // который нужно тут же показать с текстом ошибки, имеет статус
+        // "error", а не "pending".
+        const fresh = await api.listOrders(token, me.club_id, "all");
+        setOrders(fresh.filter((o) => isOrderStillRelevant(o.status)));
       }
     } finally {
       setBusyOrderId(null);
@@ -1527,8 +1562,8 @@ export default function App() {
     } catch (err) {
       setActionError(err instanceof ApiError ? err.message : String(err));
       if (me) {
-        const fresh = await api.listOrders(token, me.club_id, "pending");
-        setOrders(fresh);
+        const fresh = await api.listOrders(token, me.club_id, "all");
+        setOrders(fresh.filter((o) => isOrderStillRelevant(o.status)));
       }
     } finally {
       setBusyOrderId(null);
