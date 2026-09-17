@@ -1,172 +1,151 @@
-"""
-Тесты GET/PUT /api/kj/table-settings/<club_id> (доп. ТЗ "KJ Pro", KJ-04) —
-у каждого клуба своё количество столов, роль 2 (KJ) сама может это менять.
-В старом боте это тоже была настройка KJ, а не админа (handlers/kj.py:
-tables_count_edit/tables_settings_save), здесь тот же смысл, отдельным
-эндпоинтом на стороне KJ Panel (Club.table_count уже существует в модели и
-уже используется Admin App — см. services/club_service.py). None означает
-"не ограничено" — поведение по умолчанию, пока KJ явно не задал число.
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
 
-2026-09-17: добавлено второе поле — songs_per_table (сколько песен от
-одного стола может быть в очереди одновременно; запрос пользователя, пока
-только хранение числа, без переключения самого лимита заказа на него).
-Оба поля живут в одном и том же эндпоинте, но PUT обновляет только те
-ключи, что реально присутствуют в теле запроса (см. test_update_table_count_
-alone_does_not_touch_songs_per_table ниже) — это важно из-за раздельного
-деплоя фронтенда и бэкенда.
-"""
-from models import Club
+const TOKEN_STORAGE_KEY = "kj_panel_token";
 
+// 2026-09: "доступ KJ Pro определяется Google-аккаунтом клуба" — Client ID
+// не секрет (виден в открытом виде на любой странице с кнопкой входа
+// Google), поэтому хранится прямо в коде фронтенда, как и в guest-app.
+export const GOOGLE_CLIENT_ID = "798456512733-iiel465aq3g5nprap64mq8ovrvcjqsfd.apps.googleusercontent.com";
 
-def _headers(token):
-    return {"Authorization": f"Bearer {token}"}
+export function resolveToken() {
+  const url = new URL(window.location.href);
+  const fromUrl = url.searchParams.get("token");
+  if (fromUrl) {
+    localStorage.setItem(TOKEN_STORAGE_KEY, fromUrl);
+    // Убираем токен из адресной строки, чтобы он не остался в истории браузера.
+    url.searchParams.delete("token");
+    window.history.replaceState({}, "", url.toString());
+    return fromUrl;
+  }
+  return localStorage.getItem(TOKEN_STORAGE_KEY);
+}
 
+// Токен, полученный входом через Google (см. loginWithGoogle ниже),
+// сохраняется тем же способом, что и токен из ссылки бота — дальше оба
+// неотличимы друг от друга для остального кода панели.
+export function storeToken(token) {
+  localStorage.setItem(TOKEN_STORAGE_KEY, token);
+}
 
-def test_requires_auth(client, db, club):
-    resp = client.get(f"/api/kj/table-settings/{club.club_id}")
-    assert resp.status_code == 401
+export function clearToken() {
+  localStorage.removeItem(TOKEN_STORAGE_KEY);
+}
 
+class ApiError extends Error {
+  constructor(status, code, message) {
+    super(message);
+    this.status = status;
+    this.code = code;
+  }
+}
 
-def test_get_default_is_unbounded(client, db, club, kj):
-    resp = client.get(f"/api/kj/table-settings/{club.club_id}", headers=_headers(kj["token"]))
-    assert resp.status_code == 200
-    assert resp.get_json()["data"]["table_count"] is None
-    assert resp.get_json()["data"]["songs_per_table"] is None
+async function request(path, { method = "GET", token, body } = {}) {
+  const resp = await fetch(`${BACKEND_URL}${path}`, {
+    method,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
 
+  let json = null;
+  try {
+    json = await resp.json();
+  } catch {
+    // тело может отсутствовать
+  }
 
-def test_scoped_to_own_club(client, db, club, other_club, kj, other_kj):
-    resp = client.get(f"/api/kj/table-settings/{other_club.club_id}", headers=_headers(kj["token"]))
-    assert resp.status_code == 403
+  if (!resp.ok) {
+    const code = json?.error || "UNKNOWN_ERROR";
+    const message = json?.message || `Ошибка запроса (${resp.status})`;
+    throw new ApiError(resp.status, code, message);
+  }
 
+  return json?.data;
+}
 
-def test_update_sets_table_count(client, db, club, kj):
-    resp = client.put(
-        f"/api/kj/table-settings/{club.club_id}", json={"table_count": 16}, headers=_headers(kj["token"]),
-    )
-    assert resp.status_code == 200
-    assert resp.get_json()["data"]["table_count"] == 16
+export const api = {
+  // Без токена — это как раз тот эндпоинт, который его выдаёт (см.
+  // routes/kj.py::kj_google_login). credential — {id_token} от настоящей
+  // кнопки Google Identity Services (см. KjLoginScreen в App.jsx).
+  loginWithGoogle: (credential) =>
+    request("/api/kj/auth/google", { method: "POST", body: { credential } }),
+  me: (token) => request("/api/kj/me", { token }),
+  listOrders: (token, clubId, status = "pending") =>
+    request(`/api/kj/orders/${clubId}?status=${status}`, { token }),
+  confirmOrder: (token, orderId) =>
+    request(`/api/kj/order/${orderId}/confirm`, { method: "PUT", token }),
+  rejectOrder: (token, orderId) =>
+    request(`/api/kj/order/${orderId}/reject`, { method: "PUT", token }),
+  getQueue: (token, clubId) => request(`/api/kj/queue/${clubId}`, { token }),
+  addManualOrder: (token, { songTitle, artist, tableNo }) =>
+    request(`/api/kj/order/manual`, {
+      method: "POST",
+      token,
+      body: { song_title: songTitle, artist: artist || null, table_no: tableNo },
+    }),
+  listVipRequests: (token, clubId, status = "pending") =>
+    request(`/api/kj/vip-requests/${clubId}?status=${status}`, { token }),
+  approveVipRequest: (token, requestId) =>
+    request(`/api/kj/vip-requests/${requestId}/approve`, { method: "PUT", token }),
+  rejectVipRequest: (token, requestId) =>
+    request(`/api/kj/vip-requests/${requestId}/reject`, { method: "PUT", token }),
+  listVipClients: (token, clubId) => request(`/api/kj/vip-clients/${clubId}`, { token }),
+  updateVipCashback: (token, vipClientId, cashbackPercent) =>
+    request(`/api/kj/vip-clients/${vipClientId}/cashback`, {
+      method: "PUT", token, body: { cashback_percent: cashbackPercent },
+    }),
+  topupVipBalance: (token, vipClientId, amount) =>
+    request(`/api/kj/vip-clients/${vipClientId}/topup`, { method: "POST", token, body: { amount } }),
+  debitVipBalance: (token, vipClientId, amount) =>
+    request(`/api/kj/vip-clients/${vipClientId}/debit`, { method: "POST", token, body: { amount } }),
+  setVipBalance: (token, vipClientId, balance) =>
+    request(`/api/kj/vip-clients/${vipClientId}/balance`, { method: "PUT", token, body: { balance } }),
+  listCategories: (token, clubId) => request(`/api/kj/categories/${clubId}`, { token }),
+  createCategory: (token, clubId, { name, description, price, isFree }) =>
+    request(`/api/kj/categories/${clubId}`, {
+      method: "POST", token, body: { name, description: description || null, price, is_free: isFree },
+    }),
+  updateCategory: (token, clubId, categoryId, fields) =>
+    request(`/api/kj/categories/${clubId}/${categoryId}`, { method: "PUT", token, body: fields }),
+  deleteCategory: (token, clubId, categoryId) =>
+    request(`/api/kj/categories/${clubId}/${categoryId}`, { method: "DELETE", token }),
+  getTableSettings: (token, clubId) => request(`/api/kj/table-settings/${clubId}`, { token }),
+  // fields — объект с любым подмножеством {table_count, songs_per_table};
+  // бэкенд меняет только те ключи, что реально присутствуют в теле запроса
+  // (см. routes/kj.py::update_table_settings), остальные не трогает.
+  updateTableSettings: (token, clubId, fields) =>
+    request(`/api/kj/table-settings/${clubId}`, { method: "PUT", token, body: fields }),
+  updateOrderTable: (token, orderId, tableNo) =>
+    request(`/api/kj/order/${orderId}/table`, { method: "PUT", token, body: { table_no: tableNo } }),
+  updateOrderCategory: (token, orderId, serviceId) =>
+    request(`/api/kj/order/${orderId}/category`, { method: "PUT", token, body: { service_id: serviceId } }),
+  removeFromVdjQueue: (token, vdjItemId) =>
+    request(`/api/vdj/queue/${encodeURIComponent(vdjItemId)}`, { method: "DELETE", token }),
+  claimQueueItem: (token, { vdjItemId, songTitle, artist, tableNo, serviceId }) =>
+    request(`/api/kj/queue/claim`, {
+      method: "POST",
+      token,
+      body: {
+        vdj_item_id: vdjItemId,
+        song_title: songTitle,
+        artist: artist || null,
+        table_no: tableNo,
+        service_id: serviceId,
+      },
+    }),
+  listGuests: (token, clubId, guestType) =>
+    request(`/api/kj/guests/${clubId}${guestType ? `?type=${encodeURIComponent(guestType)}` : ""}`, { token }),
+  getGuest: (token, clubId, guestId) =>
+    request(`/api/kj/guests/${clubId}/${encodeURIComponent(guestId)}`, { token }),
+  blockGuest: (token, guestId) =>
+    request(`/api/kj/guests/${encodeURIComponent(guestId)}/block`, { method: "POST", token }),
+  unblockGuest: (token, guestId) =>
+    request(`/api/kj/guests/${encodeURIComponent(guestId)}/unblock`, { method: "POST", token }),
+  removeGuestFromTable: (token, guestId) =>
+    request(`/api/kj/guests/${encodeURIComponent(guestId)}/remove-table`, { method: "POST", token }),
+  getBridgeStatus: (token, clubId) => request(`/api/kj/bridge/status/${clubId}`, { token }),
+};
 
-    stored = db.session.get(Club, club.club_id)
-    assert stored.table_count == 16
-
-
-def test_update_can_clear_back_to_unbounded(client, db, club, kj):
-    client.put(f"/api/kj/table-settings/{club.club_id}", json={"table_count": 10}, headers=_headers(kj["token"]))
-
-    resp = client.put(
-        f"/api/kj/table-settings/{club.club_id}", json={"table_count": None}, headers=_headers(kj["token"]),
-    )
-    assert resp.status_code == 200
-    assert resp.get_json()["data"]["table_count"] is None
-
-
-def test_update_rejects_zero_or_negative(client, db, club, kj):
-    resp = client.put(f"/api/kj/table-settings/{club.club_id}", json={"table_count": 0}, headers=_headers(kj["token"]))
-    assert resp.status_code == 400
-    assert resp.get_json()["error"] == "VALIDATION_ERROR"
-
-    resp2 = client.put(
-        f"/api/kj/table-settings/{club.club_id}", json={"table_count": -1}, headers=_headers(kj["token"]),
-    )
-    assert resp2.status_code == 400
-
-
-def test_update_rejects_non_integer(client, db, club, kj):
-    resp = client.put(
-        f"/api/kj/table-settings/{club.club_id}", json={"table_count": "16"}, headers=_headers(kj["token"]),
-    )
-    assert resp.status_code == 400
-    assert resp.get_json()["error"] == "VALIDATION_ERROR"
-
-
-def test_update_scoped_to_own_club(client, db, club, other_club, kj, other_kj):
-    resp = client.put(
-        f"/api/kj/table-settings/{other_club.club_id}", json={"table_count": 5}, headers=_headers(kj["token"]),
-    )
-    assert resp.status_code == 403
-
-    unaffected = db.session.get(Club, other_club.club_id)
-    assert unaffected.table_count is None
-
-
-# --- songs_per_table ---
-
-def test_update_sets_songs_per_table(client, db, club, kj):
-    resp = client.put(
-        f"/api/kj/table-settings/{club.club_id}", json={"songs_per_table": 3}, headers=_headers(kj["token"]),
-    )
-    assert resp.status_code == 200
-    assert resp.get_json()["data"]["songs_per_table"] == 3
-
-    stored = db.session.get(Club, club.club_id)
-    assert stored.songs_per_table == 3
-
-
-def test_update_rejects_zero_or_negative_songs_per_table(client, db, club, kj):
-    resp = client.put(
-        f"/api/kj/table-settings/{club.club_id}", json={"songs_per_table": 0}, headers=_headers(kj["token"]),
-    )
-    assert resp.status_code == 400
-    assert resp.get_json()["error"] == "VALIDATION_ERROR"
-
-
-def test_update_rejects_non_integer_songs_per_table(client, db, club, kj):
-    resp = client.put(
-        f"/api/kj/table-settings/{club.club_id}", json={"songs_per_table": "3"}, headers=_headers(kj["token"]),
-    )
-    assert resp.status_code == 400
-    assert resp.get_json()["error"] == "VALIDATION_ERROR"
-
-
-def test_update_can_set_both_fields_together(client, db, club, kj):
-    resp = client.put(
-        f"/api/kj/table-settings/{club.club_id}",
-        json={"table_count": 16, "songs_per_table": 2},
-        headers=_headers(kj["token"]),
-    )
-    assert resp.status_code == 200
-    data = resp.get_json()["data"]
-    assert data["table_count"] == 16
-    assert data["songs_per_table"] == 2
-
-
-def test_update_table_count_alone_does_not_touch_songs_per_table(client, db, club, kj):
-    """Живой сценарий раздельного деплоя: старый фронтенд знает только про
-    table_count и никогда не присылает songs_per_table в теле запроса.
-    Такое сохранение не должно тихо обнулять уже заданное значение
-    songs_per_table — обновляются только ключи, реально пришедшие в JSON."""
-    client.put(f"/api/kj/table-settings/{club.club_id}", json={"songs_per_table": 2}, headers=_headers(kj["token"]))
-
-    resp = client.put(
-        f"/api/kj/table-settings/{club.club_id}", json={"table_count": 16}, headers=_headers(kj["token"]),
-    )
-    assert resp.status_code == 200
-    data = resp.get_json()["data"]
-    assert data["table_count"] == 16
-    assert data["songs_per_table"] == 2
-
-    stored = db.session.get(Club, club.club_id)
-    assert stored.table_count == 16
-    assert stored.songs_per_table == 2
-
-
-def test_update_songs_per_table_alone_does_not_touch_table_count(client, db, club, kj):
-    client.put(f"/api/kj/table-settings/{club.club_id}", json={"table_count": 16}, headers=_headers(kj["token"]))
-
-    resp = client.put(
-        f"/api/kj/table-settings/{club.club_id}", json={"songs_per_table": 2}, headers=_headers(kj["token"]),
-    )
-    assert resp.status_code == 200
-    data = resp.get_json()["data"]
-    assert data["table_count"] == 16
-    assert data["songs_per_table"] == 2
-
-
-def test_update_can_clear_songs_per_table_back_to_unset(client, db, club, kj):
-    client.put(f"/api/kj/table-settings/{club.club_id}", json={"songs_per_table": 4}, headers=_headers(kj["token"]))
-
-    resp = client.put(
-        f"/api/kj/table-settings/{club.club_id}", json={"songs_per_table": None}, headers=_headers(kj["token"]),
-    )
-    assert resp.status_code == 200
-    assert resp.get_json()["data"]["songs_per_table"] is None
+export { ApiError, BACKEND_URL };
