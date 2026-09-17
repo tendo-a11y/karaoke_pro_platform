@@ -811,4 +811,9 @@ def get_bridge_status(club_id):
     return api_ok({
         "connected": bridge_status.is_connected(club_id),
         "connected_since": since.isoformat() if since else None,
+        # 2026-09-17 (панель обзора KJ, индикатор "Мост↔VirtualDJ"): True/
+        # False — мост проверял VirtualDJ и получил/не получил ответ; None —
+        # мост либо не подключён вовсе (connected=False), либо подключён,
+        # но ещё не успел ни разу проверить (первые секунды после connect).
+        "vdj_reachable": bridge_status.vdj_reachable(club_id),
     })
