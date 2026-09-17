@@ -946,8 +946,17 @@ function CategoriesPanel({ token, clubId }) {
 // столов. Здесь тот же смысл — одно число, пустое значение (null) означает
 // "не ограничено" (пока KJ явно не задал число, как было по умолчанию и в
 // старом боте до первой настройки).
+//
+// 2026-09-17, запрос пользователя: рядом со столами появилось второе поле —
+// сколько песен от одного стола может стоять в очереди одновременно.
+// Оба поля сохраняются вместе, одной кнопкой (см. handleSave ниже) —
+// это подстраховка от рассинхронизации бэкенда и фронтенда при раздельном
+// деплое (backend/routes/kj.py::update_table_settings меняет только те
+// ключи, что реально пришли в запросе, но раз оба поля тут в одной форме,
+// они и уходят вместе одним PUT).
 function TableSettingsPanel({ token, clubId }) {
-  const [draft, setDraft] = useState("");
+  const [tableCountDraft, setTableCountDraft] = useState("");
+  const [songsPerTableDraft, setSongsPerTableDraft] = useState("");
   const [loadError, setLoadError] = useState(null);
   const [actionError, setActionError] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -956,7 +965,8 @@ function TableSettingsPanel({ token, clubId }) {
   async function reload() {
     try {
       const data = await api.getTableSettings(token, clubId);
-      setDraft(data.table_count == null ? "" : String(data.table_count));
+      setTableCountDraft(data.table_count == null ? "" : String(data.table_count));
+      setSongsPerTableDraft(data.songs_per_table == null ? "" : String(data.songs_per_table));
       setLoadError(null);
     } catch (err) {
       setLoadError(err instanceof ApiError ? err.message : String(err));
@@ -968,16 +978,30 @@ function TableSettingsPanel({ token, clubId }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clubId]);
 
+  function parseDraft(draft) {
+    const trimmed = draft.trim();
+    if (trimmed === "") return { ok: true, value: null };
+    const value = Number(trimmed);
+    if (!Number.isInteger(value) || value < 1) return { ok: false, value: null };
+    return { ok: true, value };
+  }
+
   async function handleSave(event) {
     event.preventDefault();
-    const value = draft.trim() === "" ? null : Number(draft);
-    if (value !== null && (!Number.isInteger(value) || value < 1)) return;
+    const tableCount = parseDraft(tableCountDraft);
+    const songsPerTable = parseDraft(songsPerTableDraft);
+    if (!tableCount.ok || !songsPerTable.ok) return;
+
     setBusy(true);
     setActionError(null);
     setSaved(false);
     try {
-      const data = await api.updateTableSettings(token, clubId, value);
-      setDraft(data.table_count == null ? "" : String(data.table_count));
+      const data = await api.updateTableSettings(token, clubId, {
+        table_count: tableCount.value,
+        songs_per_table: songsPerTable.value,
+      });
+      setTableCountDraft(data.table_count == null ? "" : String(data.table_count));
+      setSongsPerTableDraft(data.songs_per_table == null ? "" : String(data.songs_per_table));
       setSaved(true);
     } catch (err) {
       setActionError(err instanceof ApiError ? err.message : String(err));
@@ -998,17 +1022,34 @@ function TableSettingsPanel({ token, clubId }) {
         </p>
         {actionError && <div className="banner banner--error">{actionError}</div>}
         <form className="table-settings-form" onSubmit={handleSave}>
-          <input
-            type="number"
-            min="1"
-            placeholder="Без ограничения"
-            value={draft}
-            onChange={(e) => {
-              setDraft(e.target.value);
-              setSaved(false);
-            }}
-            disabled={busy}
-          />
+          <label className="table-settings-field">
+            <span>Столов в клубе</span>
+            <input
+              type="number"
+              min="1"
+              placeholder="Без ограничения"
+              value={tableCountDraft}
+              onChange={(e) => {
+                setTableCountDraft(e.target.value);
+                setSaved(false);
+              }}
+              disabled={busy}
+            />
+          </label>
+          <label className="table-settings-field">
+            <span>Песен на стол одновременно</span>
+            <input
+              type="number"
+              min="1"
+              placeholder="Не задано"
+              value={songsPerTableDraft}
+              onChange={(e) => {
+                setSongsPerTableDraft(e.target.value);
+                setSaved(false);
+              }}
+              disabled={busy}
+            />
+          </label>
           <button type="submit" className="btn btn--accent" disabled={busy}>
             {busy ? "Сохраняем…" : "Сохранить"}
           </button>
