@@ -105,6 +105,14 @@ def reject_order(order_id: int, kj):
     """
     ТЗ п.19: отклонение заказа, ещё не переданного в VirtualDJ. Тоже атомарно —
     отклонить можно только заказ, всё ещё находящийся в pending.
+
+    2026-09-17, следом за исправлением App.jsx (карточка с ошибкой VDJ больше
+    не пропадает сама, а ждёт решения KJ, и кнопка "ОТКЛОНИТЬ" на ней теперь
+    показывается): здесь этого не учли, из-за чего кнопка нажималась, но
+    сервер отвечал 409 "заказ уже обработан" и ничего не менял — на практике
+    заказы с ошибкой оказывались вообще неудаляемыми. Поэтому отклонить
+    теперь можно и STATUS_PENDING (обычный случай — новый заказ), и
+    STATUS_ERROR (KJ разобрался с ошибкой и убирает карточку).
     """
     order = db.session.get(Order, order_id)
     if order is None:
@@ -115,7 +123,7 @@ def reject_order(order_id: int, kj):
 
     updated_rows = (
         db.session.query(Order)
-        .filter(Order.id == order_id, Order.status == STATUS_PENDING)
+        .filter(Order.id == order_id, Order.status.in_([STATUS_PENDING, STATUS_ERROR]))
         .update({"status": STATUS_REJECTED, "rejected_at": _utcnow()}, synchronize_session=False)
     )
     db.session.commit()
