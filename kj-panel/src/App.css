@@ -42,6 +42,66 @@ body { margin: 0; background: var(--bg); color: var(--text); }
 .conn-badge--ok { color: var(--ok); background: rgba(47, 191, 113, 0.12); }
 .conn-badge--off { color: var(--muted); background: rgba(139, 145, 165, 0.12); }
 
+/* Панель обзора связи (запрос пользователя 2026-09-17) — три кликабельных
+   индикатора "Гость→KJ / Сервер→Мост / Мост→VirtualDJ", видны на любом
+   экране панели, под шапкой. */
+.overview-panel {
+  margin: 0 0 16px;
+  padding: 10px 14px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.overview-panel__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.overview-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--panel-alt);
+  color: var(--text);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.overview-item:hover,
+.overview-item--open {
+  border-color: var(--accent);
+}
+
+.overview-item__info {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.overview-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.overview-dot--ok { background: var(--ok); }
+.overview-dot--off { background: var(--danger); }
+.overview-dot--unknown { background: var(--muted); }
+
+.overview-panel__explain {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
 .app-main {
   display: grid;
   grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
