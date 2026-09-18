@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 
 from extensions import db
 from models import (
+    STATUS_COMPLETED,
     STATUS_ERROR,
     STATUS_PENDING,
     STATUS_PROCESSING,
@@ -23,11 +24,30 @@ def _utcnow():
 def confirm_order(order_id: int, kj):
     """
     Реализует ТЗ п.14-18: проверка прав/принадлежности клубу, атомарный переход
-    pending -> processing (защита от двойного нажатия, п.15), передача в
-    VirtualDJ, финальный статус queued/error, уведомление гостя, WebSocket.
+    pending -> processing (защита от двойного нажатия, п.15), уведомление
+    гостя, WebSocket.
+
+    2026-09-18, запрос пользователя: подтверждение заказа больше НЕ передаёт
+    песню в VirtualDJ само (раньше — vdj.add_to_queue() прямо здесь, с
+    финальным статусом queued при успехе или error при сбое моста/VDJ). На
+    практике мост VirtualDJ регулярно недоступен или нестабилен, и тогда
+    кнопка "Принять" на карточке стола отвечала 502 VDJ_UNAVAILABLE, хотя KJ
+    ничего не просил у VirtualDJ — он просто хочет сказать гостю "заказ
+    принят", а саму песню в плеер поставит сам, вручную, когда дойдёт
+    очередь (тем же способом, что и для любой другой песни — экран "➕
+    Добавить" / AddManualSongForm). Поэтому теперь подтверждение сразу и
+    безусловно переводит заказ в STATUS_QUEUED, минуя VirtualDJ вообще —
+    vdj_item_id у такого заказа остаётся пустым.
+
+    Место на карточке стола (services/table_board_service.py) для такого
+    заказа освобождается уже не автоматически через реконсиляцию с живой
+    очередью VirtualDJ (get_kj_queue_view() теперь сознательно игнорирует
+    STATUS_QUEUED-заказы без vdj_item_id — см. её докстринг ниже), а явным
+    действием KJ — кнопкой "Готово" (см. complete_order() ниже), когда
+    песня реально отыграна.
 
     Возвращает (order, outcome), где outcome — один из:
-        "not_found", "forbidden", "conflict", "queued", "vdj_error"
+        "not_found", "forbidden", "conflict", "queued"
     """
     order = db.session.get(Order, order_id)
     if order is None:
@@ -60,29 +80,10 @@ def confirm_order(order_id: int, kj):
     db.session.refresh(order)
     emit_order_confirmed(order)
 
-    vdj = get_vdj_client(order.club_id)
-    try:
-        vdj_item_id = vdj.add_to_queue(order.song_title, order.artist, order.table_no)
-    except VirtualDJError as exc:
-        order.status = STATUS_ERROR
-        order.error_message = str(exc)
-        db.session.commit()
-        emit_order_updated(order)
-        return order, "vdj_error"
-
     order.status = STATUS_QUEUED
-    order.vdj_item_id = vdj_item_id
     order.queued_at = _utcnow()
     db.session.commit()
     emit_order_updated(order)
-
-    # Раньше здесь список строился прямо из vdj.get_queue() (table_no —
-    # как есть у драйвера), без сопоставления с заказами — тот же пробел,
-    # что был у GET /api/kj/queue/<club_id> и который закрыл
-    # get_kj_queue_view() (см. её докстринг ниже): у настоящего
-    # NetworkControlVDJDriver номера стола там никогда и не было бы.
-    # get_kj_queue_view() делает то же самое, но правильно — через Order.
-    emit_queue_updated(order.club_id, get_kj_queue_view(order.club_id))
 
     # Уведомляем через Telegram Bot API только тех гостей, что реально
     # пришли через настоящего Telegram-бота (channel="telegram") — у гостей
@@ -95,7 +96,7 @@ def confirm_order(order_id: int, kj):
         song_line = f"{order.artist} — {order.song_title}" if order.artist else order.song_title
         notify_guest(
             order.telegram_user_id,
-            f"✅ Ваша песня добавлена в очередь.\n\n🎵 {song_line}",
+            f"✅ Ваш заказ принят!\n\n🎵 {song_line}",
         )
 
     return order, "queued"
@@ -141,6 +142,59 @@ def reject_order(order_id: int, kj):
         notify_guest(order.telegram_user_id, f"❌ Ваш заказ отклонён KJ.\n\n🎵 {song_line}")
 
     return order, "rejected"
+
+
+def complete_order(order_id: int, kj):
+    """
+    Запрос пользователя 2026-09-18: раз подтверждение заказа (confirm_order
+    выше) больше не заводит его в реальную очередь VirtualDJ — KJ сам решает,
+    когда фактически поставить песню в плеер — прежней автоматической
+    реконсиляции для таких заказов тоже больше нет и быть не может: у них
+    нет vdj_item_id, по которому раньше get_kj_queue_view() отслеживала
+    "песня пропала из живой очереди => доиграла => освобождаем место".
+
+    Вместо этого место на карточке стола (services/table_board_service.py,
+    ACTIVE_TABLE_STATUSES — STATUS_COMPLETED туда сознательно не входит)
+    освобождается явным действием KJ: кнопка "Готово" на занятой карточке
+    переводит заказ STATUS_QUEUED -> STATUS_COMPLETED. STATUS_COMPLETED и
+    completed_at существовали в модели заранее (см. models.py), но нигде не
+    проставлялись — это первое место, где они реально используются.
+    completion_source="manual" — второе предусмотренное в модели значение
+    ("automatic" зарезервировано под будущее сопоставление с историей
+    воспроизведения VirtualDJ, здесь не реализуется).
+
+    Возвращает (order, outcome), где outcome — один из:
+        "not_found", "forbidden", "conflict", "completed"
+    """
+    order = db.session.get(Order, order_id)
+    if order is None:
+        return None, "not_found"
+
+    if order.club_id != kj.club_id:
+        return None, "forbidden"
+
+    updated_rows = (
+        db.session.query(Order)
+        .filter(Order.id == order_id, Order.status == STATUS_QUEUED)
+        .update(
+            {
+                "status": STATUS_COMPLETED,
+                "completed_at": _utcnow(),
+                "completion_source": "manual",
+            },
+            synchronize_session=False,
+        )
+    )
+    db.session.commit()
+
+    if updated_rows == 0:
+        db.session.refresh(order)
+        return order, "conflict"
+
+    db.session.refresh(order)
+    emit_order_updated(order)
+
+    return order, "completed"
 
 
 def _queue_rank(vdj, vdj_item_id: str):
@@ -428,13 +482,29 @@ def get_kj_queue_view(club_id: int) -> list[dict]:
     "orphaned": true, чтобы уже существующая кнопка "Удалить" в KJ Pro (см.
     remove_from_vdj_queue выше — она ищет заказ по vdj_item_id независимо от
     того, жив ли он в самом VirtualDJ) могла закрыть и их тоже.
+
+    2026-09-18, запрос пользователя: confirm_order() больше не передаёт
+    песню в VirtualDJ сама — такой STATUS_QUEUED-заказ рождается сразу без
+    vdj_item_id (он остаётся пустым навсегда, пока KJ явно не нажмёт
+    "Готово", см. complete_order()). Без явного исключения такие заказы
+    выше просто никогда бы не нашли себе пару в live_queue (не с чем
+    сравнивать) и на следующей же строчке ниже были бы молча объявлены
+    "потерянными" и отклонены — притом что песню никто никуда не терял, KJ
+    просто ещё не успел поставить её в плеер вручную. Поэтому такие заказы
+    здесь целиком исключены из рассмотрения: их жизненным циклом теперь
+    управляет только явное действие KJ (кнопка "Готово"), а не сверка с
+    живой очередью VirtualDJ.
     """
     vdj = get_vdj_client(club_id)
     live_queue = vdj.get_queue()
 
     unused_orders = (
         db.session.query(Order)
-        .filter(Order.club_id == club_id, Order.status == STATUS_QUEUED)
+        .filter(
+            Order.club_id == club_id,
+            Order.status == STATUS_QUEUED,
+            Order.vdj_item_id.isnot(None),
+        )
         .order_by(Order.queued_at.asc())
         .all()
     )
