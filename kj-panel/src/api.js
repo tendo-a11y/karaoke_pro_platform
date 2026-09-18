@@ -74,6 +74,10 @@ export const api = {
   me: (token) => request("/api/kj/me", { token }),
   listOrders: (token, clubId, status = "pending") =>
     request(`/api/kj/orders/${clubId}?status=${status}`, { token }),
+  // Доп. ТЗ "KJ Pro", запрос пользователя 2026-09-18: сетка карточек
+  // столов — по одной на стол, с местами по числу Club.songs_per_table
+  // (см. routes/kj.py::orders_board, services/table_board_service.py).
+  getOrdersBoard: (token, clubId) => request(`/api/kj/orders-board/${clubId}`, { token }),
   confirmOrder: (token, orderId) =>
     request(`/api/kj/order/${orderId}/confirm`, { method: "PUT", token }),
   rejectOrder: (token, orderId) =>
