@@ -6,7 +6,7 @@ from auth import issue_guest_token, require_guest
 from errors import api_error, api_ok
 from extensions import db
 from models import STATUS_ERROR, STATUS_REJECTED, ChatMessage, Club, Order, Service
-from services import ai_search_service, guest_account_service, guest_status_service, song_service, table_group_service, vdj_service, vip_service
+from services import ai_search_service, guest_account_service, guest_status_service, song_service, table_board_service, table_group_service, vdj_service, vip_service
 from services.google_auth_service import GoogleAuthError, verify_google_credential
 from sockets import emit_chat_message, emit_order_created, emit_vip_request_created
 from vdj import get_vdj_client
@@ -686,6 +686,13 @@ def list_my_orders():
     там только то, что ещё в очереди/играется, и то, что уже спето. У KJ в
     его собственной панели эти заказы по-прежнему видны как обычно, этот
     фильтр касается только эндпоинта гостя.
+
+    waiting_position (доп. ТЗ "KJ Pro", запрос пользователя 2026-09-18) —
+    номер места (с 1) в невидимом для KJ ожидании, если заказ превышает
+    лимит песен на стол (см. docstring services/table_board_service.py::
+    get_waiting_positions) — null у заказа, который уже виден KJ на
+    карточке стола (в очереди, ждёт решения) или не привязан к столу
+    вообще.
     """
     query = Order.query.filter_by(club_id=g.club_id, telegram_user_id=g.guest_id).filter(
         Order.status.notin_([STATUS_REJECTED, STATUS_ERROR])
@@ -697,10 +704,12 @@ def list_my_orders():
         query = query.filter(Order.created_at >= cutoff)
     orders = query.order_by(Order.created_at.asc()).all()
     vdj = get_vdj_client(g.club_id)
+    waiting_positions = table_board_service.get_waiting_positions(g.club_id, g.guest_id)
     result = []
     for order in orders:
         data = order.to_dict()
         data["can_replace"] = vdj_service.can_replace_order(order, vdj)
+        data["waiting_position"] = waiting_positions.get(order.id)
         result.append(data)
     return api_ok(result)
 
