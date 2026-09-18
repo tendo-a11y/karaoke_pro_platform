@@ -18,101 +18,12 @@ import "./App.css";
 // 10с достаточно для подстраховки.
 const POLL_QUEUE_MS = 10000;
 
-const STATUS_LABELS = {
-  pending: "⏳ Ожидает",
-  processing: "⚙️ Обрабатывается",
-  queued: "🎶 В очереди VDJ",
-  playing: "▶️ Играет",
-  completed: "✅ Завершено",
-  rejected: "❌ Отклонено",
-  error: "⚠️ Ошибка VDJ",
-};
-
-// Запрос пользователя 2026-09-17: раньше карточка заказа пропадала из списка
-// сразу же, как только VirtualDJ не смог добавить песню (order_updated со
-// статусом "error" приходил через тот же обработчик, что и успешное
-// "queued" — оба считались "заказ ушёл из списка ожидания"). В итоге KJ
-// видел только всплывающее "не удалось добавить песню" и не мог прочитать
-// настоящую причину (order.error_message), которая рендерится в самой
-// карточке (см. OrderCard ниже) — карточка исчезала раньше, чем эту причину
-// можно было увидеть. Теперь заказ с ошибкой остаётся на экране с текстом
-// причины, пока KJ сам не отклонит его или не перетащит повторно (после
-// того как поправит дело в VirtualDJ).
-//
-// 2026-09-17, найденная сразу же после этого ошибка: список заказов теперь
-// грузится целиком ("all" вместо "pending"), а не только новыми — то есть
-// сюда попадает вся история клуба. Раньше это было не страшно, потому что
-// со статусом отличным от "pending" карточка тут же пропадала. Но список
-// "какие статусы пропадают" не включал "completed" (уже отыгранная песня) и
-// "playing" (играет прямо сейчас) — из-за этого в панели зависали десятки
-// старых, давно сыгранных заказов "за всё время". Поэтому вместо списка "что
-// пропадает" здесь теперь явный список "что должно остаться на экране": это
-// только заказ, который реально ждёт решения KJ (pending), и заказ с
-// ошибкой, которую KJ ещё не разобрал (error). Всё остальное — поставлено в
-// очередь, отклонено, играет прямо сейчас или уже отыграно — с этого экрана
-// уходит.
-const ORDER_STAYS_IN_LIST_STATUSES = new Set(["pending", "error"]);
-function isOrderStillRelevant(status) {
-  return ORDER_STAYS_IN_LIST_STATUSES.has(status);
-}
-
-function formatOrderTime(isoString) {
-  if (!isoString) return "";
-  const date = new Date(isoString);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-}
-
-// Drag-and-drop вместо кнопки "Подтвердить" — новое мастер-ТЗ требует
-// управлять очередью перетаскиванием, без confirm-кнопок (карточка
-// заказа перетаскивается в панель "Очередь VirtualDJ", это и есть
-// подтверждение — вызывает тот же PUT /api/kj/order/<id>/confirm, что
-// раньше вызывала кнопка). "Отклонить" остаётся кнопкой: это решение по
-// приёму заказа, а не операция над очередью, ТЗ её не запрещает.
-//
-// Реализовано на нативном HTML5 Drag and Drop API, без новой зависимости
-// — сознательное ограничение первого шага: нативный DnD не работает на
-// touch-устройствах (нет тач-событий), только мышью на десктопе. Если KJ
-// Pro должен открываться с планшета/телефона, здесь потребуется
-// библиотека с pointer-событиями (например dnd-kit) — отдельный шаг.
-function OrderCard({ order, busy, dragging, onReject, onDragStart, onDragEnd }) {
-  const tableLabel = order.table_no == null ? "Без стола" : `Стол ${order.table_no}`;
-  // "error" тоже можно перетащить повторно — например, KJ включил в
-  // VirtualDJ Network Control Plugin или переключился на вкладку Karaoke
-  // после первой неудачи, и хочет попробовать добавить тот же заказ снова,
-  // не заставляя гостя оформлять его заново.
-  const draggable = (order.status === "pending" || order.status === "error") && !busy;
-  return (
-    <div
-      className={`order-card status-${order.status}${dragging ? " order-card--dragging" : ""}`}
-      draggable={draggable}
-      onDragStart={draggable ? (e) => onDragStart(e, order.id) : undefined}
-      onDragEnd={draggable ? onDragEnd : undefined}
-    >
-      <div className="order-card__table">{tableLabel}</div>
-      <div className="order-card__song">🎵 {order.song_title}</div>
-      {order.artist && <div className="order-card__artist">🎤 {order.artist}</div>}
-      <div className="order-card__meta">
-        <span className="order-card__user">👤 Гость #{order.telegram_user_id}</span>
-        <span className="order-card__time">🕒 {formatOrderTime(order.created_at)}</span>
-      </div>
-      <div className="order-card__status">{STATUS_LABELS[order.status] || order.status}</div>
-      {order.error_message && <div className="order-card__error">{order.error_message}</div>}
-      {draggable && (
-        <div className="order-card__drag-hint">
-          ⠿ Перетащите в очередь, чтобы {order.status === "error" ? "попробовать снова" : "подтвердить"}
-        </div>
-      )}
-      {(order.status === "pending" || order.status === "error") && (
-        <div className="order-card__actions">
-          <button className="btn btn--reject" disabled={busy} onClick={() => onReject(order.id)}>
-            ОТКЛОНИТЬ
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
+// До 2026-09-18 здесь была карточка заявки (OrderCard) со списком
+// подтверждения через drag-and-drop в "Живую очередь VirtualDJ" — доп. ТЗ
+// "KJ Pro" (запрос пользователя "только на карточке") убрало этот список с
+// экрана "Заказы" целиком в пользу мест на карточках столов (см.
+// OrdersBoard ниже) с кнопками "Принять"/"Отклонить" прямо на месте —
+// решение по каждому месту принимается на карточке его стола.
 
 // KJ Pro: смена стола/категории и удаление песни, уже стоящей в очереди
 // (запрос пользователя, после того как выяснилось, что перестановку порядка
@@ -121,7 +32,7 @@ function OrderCard({ order, busy, dragging, onReject, onDragStart, onDragEnd }) 
 // песен отложен). Категории подтягиваются тем же способом, что и в
 // CategoriesPanel (см. её reload()) — свой собственный небольшой список
 // внутри компонента, отдельный от него.
-function QueueTable({ queue, dropActive, onDragOver, onDragLeave, onDrop, token, clubId }) {
+function QueueTable({ queue, token, clubId }) {
   const [categories, setCategories] = useState([]);
   const [tableDrafts, setTableDrafts] = useState({});
   const [busyKey, setBusyKey] = useState(null);
@@ -256,17 +167,7 @@ function QueueTable({ queue, dropActive, onDragOver, onDragLeave, onDrop, token,
   }
 
   return (
-    <div
-      className={`queue-dropzone${dropActive ? " queue-dropzone--active" : ""}`}
-      onDragOver={onDragOver}
-      onDragLeave={onDragLeave}
-      onDrop={onDrop}
-    >
-      {/* Постоянная подсказка — видна всегда, а не только при пустой
-          очереди, чтобы было понятно, куда именно тащить карточку заказа
-          (пользователь жаловался, что после первой же песни в очереди
-          подсказка пропадала). */}
-      <p className="queue-dropzone__hint">⬇ Сюда перетаскивайте карточку заказа из списка «Заказы»</p>
+    <div className="queue-dropzone">
       {queue.length === 0 ? (
         <p className="empty-hint">Очередь VirtualDJ пока пуста.</p>
       ) : (
@@ -1281,6 +1182,168 @@ function GuestsPanel({ token, clubId }) {
   );
 }
 
+// Доп. ТЗ "KJ Pro", запрос пользователя 2026-09-18 — обсуждение перед
+// реализацией, см. backend/services/table_board_service.py за полным
+// докстрингом механики. Место на карточке, которое ждёт решения KJ (ещё
+// не подтверждено/отклонено, включая "error" — не удалось добавить в
+// VirtualDJ, KJ может нажать "Принять" ещё раз, чтобы попробовать снова),
+// показывает две маленькие кнопки прямо на себе, а не как раньше — списком
+// заявок с drag-and-drop (см. OrderCard выше, из которого этот список
+// подтверждения на экране "Заказы" теперь убран целиком, по решению
+// пользователя "только на карточке").
+const BOARD_SLOT_NEEDS_DECISION = new Set(["pending", "processing", "error"]);
+
+function OrdersBoardSlot({ slot, categories, busy, onAccept, onReject, onOpenGuest }) {
+  if (slot == null) {
+    return <div className="table-slot table-slot--empty">Свободен</div>;
+  }
+  const needsDecision = BOARD_SLOT_NEEDS_DECISION.has(slot.status);
+  const categoryName = categories.find((c) => c.id === slot.service_id)?.name;
+  return (
+    <div className={`table-slot table-slot--${needsDecision ? "pending" : "queued"}`}>
+      <button type="button" className="table-slot__body" onClick={() => onOpenGuest(slot.guest_id)}>
+        <div className="table-slot__song">🎵 {slot.song_title}</div>
+        {slot.artist && <div className="table-slot__artist">🎤 {slot.artist}</div>}
+        {categoryName && <div className="table-slot__category">{categoryName}</div>}
+        {!needsDecision && <div className="table-slot__badge">🎶 В очереди</div>}
+        {slot.status === "error" && slot.error_message && (
+          <div className="table-slot__error">{slot.error_message}</div>
+        )}
+      </button>
+      {needsDecision && (
+        <div className="table-slot__actions">
+          <button type="button" className="btn btn--accept" disabled={busy} onClick={() => onAccept(slot.order_id)}>
+            ✅ Принять
+          </button>
+          <button type="button" className="btn btn--reject" disabled={busy} onClick={() => onReject(slot.order_id)}>
+            ❌ Отклонить
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function OrdersBoard({ token, clubId, socket, onOpenGuest }) {
+  const [board, setBoard] = useState(null);
+  const [categories, setCategories] = useState([]);
+  const [loadError, setLoadError] = useState(null);
+  const [actionError, setActionError] = useState(null);
+  const [busyOrderId, setBusyOrderId] = useState(null);
+
+  async function reload() {
+    try {
+      const data = await api.getOrdersBoard(token, clubId);
+      setBoard(data);
+      setLoadError(null);
+    } catch (err) {
+      setLoadError(err instanceof ApiError ? err.message : String(err));
+    }
+  }
+
+  useEffect(() => {
+    reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clubId]);
+
+  useEffect(() => {
+    api
+      .listCategories(token, clubId)
+      .then(setCategories)
+      .catch(() => {
+        // Не критично — просто не покажем название категории в этот раз
+        // (см. тот же приём в QueueTable выше).
+      });
+  }, [token, clubId]);
+
+  // Живые обновления — те же события, что уже используются на этом экране
+  // для списка заявок и живой очереди VirtualDJ (см. эффект в App() ниже);
+  // здесь просто целиком перезапрашиваем доску, тем же приёмом, что и
+  // handleConfirm/handleReject в App() при ошибке.
+  useEffect(() => {
+    if (!socket) return undefined;
+    socket.on("order_created", reload);
+    socket.on("order_updated", reload);
+    socket.on("order_confirmed", reload);
+    socket.on("order_rejected", reload);
+    socket.on("queue_updated", reload);
+    return () => {
+      socket.off("order_created", reload);
+      socket.off("order_updated", reload);
+      socket.off("order_confirmed", reload);
+      socket.off("order_rejected", reload);
+      socket.off("queue_updated", reload);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [socket]);
+
+  async function handleAccept(orderId) {
+    setBusyOrderId(orderId);
+    setActionError(null);
+    try {
+      await api.confirmOrder(token, orderId);
+      await reload();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+      await reload();
+    } finally {
+      setBusyOrderId(null);
+    }
+  }
+
+  async function handleReject(orderId) {
+    setBusyOrderId(orderId);
+    setActionError(null);
+    try {
+      await api.rejectOrder(token, orderId);
+      await reload();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+      await reload();
+    } finally {
+      setBusyOrderId(null);
+    }
+  }
+
+  if (loadError) {
+    return <div className="banner banner--error">{loadError}</div>;
+  }
+  if (board == null) {
+    return <p className="empty-hint">Загрузка…</p>;
+  }
+  if (board.length === 0) {
+    return <p className="empty-hint">Сначала задайте число столов клуба на вкладке "Столы".</p>;
+  }
+
+  return (
+    <div className="orders-board">
+      {actionError && <div className="banner banner--error">{actionError}</div>}
+      <div className="orders-board__grid">
+        {board.map((table) => (
+          <div className="table-card" key={table.table_no}>
+            <div className="table-card__title">Стол {table.table_no}</div>
+            <div className="table-card__slots">
+              {table.slots.map((slot, index) => (
+                <OrdersBoardSlot
+                  // order_id не подходит на ключ — свободное место (null)
+                  // повторяется у каждого стола, номер места стабилен
+                  key={index}
+                  slot={slot}
+                  categories={categories}
+                  busy={slot != null && busyOrderId === slot.order_id}
+                  onAccept={handleAccept}
+                  onReject={handleReject}
+                  onOpenGuest={onOpenGuest}
+                />
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // 2026-09: "доступ KJ Pro определяется Google-аккаунтом клуба" — основной
 // способ входа (см. docstring KJOperator в models.py и auth.py::
 // issue_kj_google_token), показывается только когда resolveToken() не
@@ -1431,19 +1494,14 @@ function ConnectionOverviewPanel({ connected, bridgeStatus }) {
 export default function App() {
   const [token, setToken] = useState(() => resolveToken());
   const [me, setMe] = useState(null);
-  const [orders, setOrders] = useState([]);
   const [queue, setQueue] = useState([]);
   const [loadError, setLoadError] = useState(null);
-  const [actionError, setActionError] = useState(null);
-  const [busyOrderId, setBusyOrderId] = useState(null);
   const [connected, setConnected] = useState(false);
   // Панель обзора связи (запрос пользователя 2026-09-17) — null, пока не
   // пришёл ни начальный GET /api/kj/bridge/status, ни первое сокет-событие
   // "bridge_status"; дальше обновляется живым сокетом без поллинга (тот же
   // принцип, что и остальные live-обновления панели).
   const [bridgeStatus, setBridgeStatus] = useState(null);
-  const [draggingOrderId, setDraggingOrderId] = useState(null);
-  const [dropActive, setDropActive] = useState(false);
   const [manualAddBusy, setManualAddBusy] = useState(false);
   const [manualAddError, setManualAddError] = useState(null);
   // 'orders' | 'vip' | 'categories' | 'tables' | 'guests' — переключение
@@ -1451,6 +1509,11 @@ export default function App() {
   // доп. ТЗ "KJ Pro", KJ-01/03/07 и KJ-04 соответственно; 'guests' — запрос
   // пользователя 2026-09, список гостей VIP/Простой/Без стола с карточкой).
   const [view, setView] = useState("orders");
+  // Доп. ТЗ "KJ Pro", запрос пользователя 2026-09-18: клик по месту на
+  // карточке стола проваливается в подробности о гости, тем же компонентом
+  // GuestCard, что и вкладка "Гости" (см. GuestsPanel::selectedGuestId
+  // выше) — здесь свой собственный стейт, потому что это разные экраны.
+  const [boardGuestId, setBoardGuestId] = useState(null);
   // Реф нужен эффекту ниже (disconnect в cleanup без пересоздания подписок),
   // а socketInstance в state — чтобы VipPanel мог реагировать на появление
   // сокета как на обычный проп (читать socketRef.current прямо в JSX во
@@ -1470,17 +1533,8 @@ export default function App() {
         if (cancelled) return;
         setMe(meData);
 
-        // "all", а не "pending" — иначе заказы со статусом "error" (не
-        // удалось добавить в VirtualDJ) не подгрузятся обратно после
-        // перезагрузки страницы, хотя реально ещё висят "в работе" у KJ.
-        // Завершённые статусы (queued/rejected) отфильтровываем сами через
-        // isOrderStillRelevant — см. её докстринг выше.
-        const [ordersData, queueData] = await Promise.all([
-          api.listOrders(token, meData.club_id, "all"),
-          api.getQueue(token, meData.club_id),
-        ]);
+        const queueData = await api.getQueue(token, meData.club_id);
         if (cancelled) return;
-        setOrders(ordersData.filter((o) => isOrderStillRelevant(o.status)));
         setQueue(queueData);
       } catch (err) {
         if (!cancelled) setLoadError(err instanceof ApiError ? err.message : String(err));
@@ -1522,24 +1576,11 @@ export default function App() {
     // не нужно, ровно как и для остальных live-обновлений этой панели.
     socket.on("bridge_status", (payload) => setBridgeStatus(payload));
 
-    socket.on("order_created", (order) => {
-      setOrders((prev) => (prev.some((o) => o.id === order.id) ? prev : [...prev, order]));
-    });
-
-    const upsertOrRemove = (order) => {
-      setOrders((prev) => {
-        if (!isOrderStillRelevant(order.status)) {
-          return prev.filter((o) => o.id !== order.id);
-        }
-        return prev.some((o) => o.id === order.id)
-          ? prev.map((o) => (o.id === order.id ? order : o))
-          : [...prev, order];
-      });
-    };
-
-    socket.on("order_updated", upsertOrRemove);
-    socket.on("order_confirmed", upsertOrRemove);
-    socket.on("order_rejected", upsertOrRemove);
+    // order_created/order_updated/order_confirmed/order_rejected раньше
+    // поддерживали здесь список заявок на подтверждение — он убран с этого
+    // экрана целиком (доп. ТЗ "KJ Pro", запрос пользователя 2026-09-18:
+    // "только на карточке"), теперь эти же события слушает сама OrdersBoard
+    // ниже, у себя.
 
     socket.on("queue_updated", (payload) => {
       setQueue(payload.queue || []);
@@ -1585,73 +1626,6 @@ export default function App() {
     } finally {
       setManualAddBusy(false);
     }
-  }
-
-  async function handleConfirm(orderId) {
-    setBusyOrderId(orderId);
-    setActionError(null);
-    try {
-      await api.confirmOrder(token, orderId);
-    } catch (err) {
-      setActionError(err instanceof ApiError ? err.message : String(err));
-      if (me) {
-        // "all" + фильтр — та же причина, что и в bootstrap() выше: этот
-        // самый catch срабатывает именно на ошибке VirtualDJ, и заказ,
-        // который нужно тут же показать с текстом ошибки, имеет статус
-        // "error", а не "pending".
-        const fresh = await api.listOrders(token, me.club_id, "all");
-        setOrders(fresh.filter((o) => isOrderStillRelevant(o.status)));
-      }
-    } finally {
-      setBusyOrderId(null);
-    }
-  }
-
-  async function handleReject(orderId) {
-    setBusyOrderId(orderId);
-    setActionError(null);
-    try {
-      await api.rejectOrder(token, orderId);
-    } catch (err) {
-      setActionError(err instanceof ApiError ? err.message : String(err));
-      if (me) {
-        const fresh = await api.listOrders(token, me.club_id, "all");
-        setOrders(fresh.filter((o) => isOrderStillRelevant(o.status)));
-      }
-    } finally {
-      setBusyOrderId(null);
-    }
-  }
-
-  function handleDragStart(event, orderId) {
-    event.dataTransfer.setData("text/plain", String(orderId));
-    event.dataTransfer.effectAllowed = "move";
-    setDraggingOrderId(orderId);
-  }
-
-  function handleDragEnd() {
-    setDraggingOrderId(null);
-    setDropActive(false);
-  }
-
-  function handleQueueDragOver(event) {
-    if (draggingOrderId == null) return;
-    event.preventDefault();
-    event.dataTransfer.dropEffect = "move";
-    setDropActive(true);
-  }
-
-  function handleQueueDragLeave() {
-    setDropActive(false);
-  }
-
-  async function handleQueueDrop(event) {
-    event.preventDefault();
-    setDropActive(false);
-    const orderId = Number(event.dataTransfer.getData("text/plain"));
-    setDraggingOrderId(null);
-    if (!Number.isFinite(orderId)) return;
-    await handleConfirm(orderId);
   }
 
   if (!token) {
@@ -1716,8 +1690,6 @@ export default function App() {
 
       <ConnectionOverviewPanel connected={connected} bridgeStatus={bridgeStatus} />
 
-      {actionError && <div className="banner banner--error">{actionError}</div>}
-
       {view === "vip" ? (
         <VipPanel token={token} clubId={me.club_id} socket={socketInstance} />
       ) : view === "categories" ? (
@@ -1726,24 +1698,25 @@ export default function App() {
         <TableSettingsPanel token={token} clubId={me.club_id} />
       ) : view === "guests" ? (
         <GuestsPanel token={token} clubId={me.club_id} />
+      ) : boardGuestId != null ? (
+        <div className="app-main">
+          <GuestCard
+            token={token}
+            clubId={me.club_id}
+            guestId={boardGuestId}
+            onBack={() => setBoardGuestId(null)}
+          />
+        </div>
       ) : (
         <main className="app-main">
           <section>
-            <h2>Заказы ({orders.length})</h2>
-            {orders.length === 0 && <p className="empty-hint">Новых заказов нет.</p>}
-            <div className="orders-grid">
-              {orders.map((order) => (
-                <OrderCard
-                  key={order.id}
-                  order={order}
-                  busy={busyOrderId === order.id}
-                  dragging={draggingOrderId === order.id}
-                  onReject={handleReject}
-                  onDragStart={handleDragStart}
-                  onDragEnd={handleDragEnd}
-                />
-              ))}
-            </div>
+            <h2>Заказы по столам</h2>
+            <OrdersBoard
+              token={token}
+              clubId={me.club_id}
+              socket={socketInstance}
+              onOpenGuest={setBoardGuestId}
+            />
           </section>
 
           <section>
@@ -1757,15 +1730,7 @@ export default function App() {
 
           <section>
             <h2>Живая очередь VirtualDJ</h2>
-            <QueueTable
-              queue={queue}
-              dropActive={dropActive}
-              onDragOver={handleQueueDragOver}
-              onDragLeave={handleQueueDragLeave}
-              onDrop={handleQueueDrop}
-              token={token}
-              clubId={me.club_id}
-            />
+            <QueueTable queue={queue} token={token} clubId={me.club_id} />
           </section>
         </main>
       )}
