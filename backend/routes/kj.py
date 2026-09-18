@@ -10,6 +10,7 @@ from services import category_service, guest_directory_service, guest_status_ser
 from services.guest_directory_service import GUEST_TYPES, GuestDirectoryError
 from services.category_service import CategoryServiceError
 from services.google_auth_service import GoogleAuthError, verify_google_credential
+from services.table_board_service import get_orders_board
 from services.vdj_service import (
     add_manual_song,
     claim_vdj_queue_item,
@@ -116,6 +117,23 @@ def list_orders(club_id):
         query = query.filter_by(status=status)
     orders = query.order_by(Order.created_at.asc()).all()
     return api_ok([o.to_dict() for o in orders])
+
+
+@bp.get("/orders-board/<int:club_id>")
+@require_kj
+def orders_board(club_id):
+    """
+    Доп. ТЗ "KJ Pro" (запрос пользователя 2026-09-18): сетка карточек
+    столов для экрана "Заказы" — по одной карточке на стол, с местами по
+    числу Club.songs_per_table. См. докстринг
+    services/table_board_service.py::get_orders_board про то, что именно
+    попадает на карточку и почему заказы сверх лимита стола сюда не
+    попадают вовсе.
+    """
+    denied = _ensure_own_club(club_id)
+    if denied:
+        return denied
+    return api_ok(get_orders_board(club_id))
 
 
 @bp.get("/order/<int:order_id>")
