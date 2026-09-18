@@ -114,43 +114,70 @@ body { margin: 0; background: var(--bg); color: var(--text); }
 
 h2 { font-size: 16px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
 
-.orders-grid {
+/* Доп. ТЗ "KJ Pro", запрос пользователя 2026-09-18: сетка карточек столов
+   на экране "Заказы" — см. OrdersBoard/OrdersBoardSlot, kj-panel/src/App.jsx.
+   Заменила собой старый список заявок (.orders-grid/.order-card, до
+   2026-09-18 — карточка со списком подтверждения через drag-and-drop). */
+.orders-board__grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 14px;
 }
 
-.order-card {
+.table-card {
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 12px;
-  padding: 14px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.table-card__title { font-weight: 600; color: var(--accent); }
+
+.table-card__slots { display: flex; flex-direction: column; gap: 8px; }
+
+.table-slot {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 
-.order-card.status-error { border-color: var(--danger); }
-.order-card.status-queued { border-color: var(--ok); }
-
-.order-card[draggable="true"] { cursor: grab; }
-.order-card--dragging { opacity: 0.4; cursor: grabbing; }
-.order-card__drag-hint {
-  font-size: 11px;
-  color: var(--accent);
-  border-top: 1px dashed var(--border);
-  padding-top: 6px;
-  margin-top: 2px;
+.table-slot--empty {
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+  border-style: dashed;
 }
 
-.order-card__table { font-weight: 600; color: var(--accent); }
-.order-card__song { font-size: 16px; }
-.order-card__artist { color: var(--muted); }
-.order-card__meta { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); }
-.order-card__status { font-size: 13px; color: var(--muted); }
-.order-card__error { font-size: 12px; color: var(--danger); }
+.table-slot--pending { border-color: var(--accent); }
+.table-slot--queued { border-color: var(--ok); }
 
-.order-card__actions { display: flex; gap: 8px; margin-top: 8px; }
+.table-slot__body {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.table-slot__song { font-size: 15px; }
+.table-slot__artist { color: var(--muted); font-size: 13px; }
+.table-slot__category { color: var(--accent); font-size: 12px; }
+.table-slot__badge { color: var(--ok); font-size: 12px; font-weight: 600; }
+.table-slot__error { color: var(--danger); font-size: 12px; }
+
+.table-slot__actions { display: flex; gap: 8px; }
 
 .btn {
   flex: 1;
@@ -165,22 +192,12 @@ h2 { font-size: 16px; color: var(--muted); text-transform: uppercase; letter-spa
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .btn--reject { background: var(--panel-alt); color: var(--danger); border: 1px solid var(--danger); }
+.btn--accept { background: var(--panel-alt); color: var(--ok); border: 1px solid var(--ok); }
 
 .queue-dropzone {
   border-radius: 12px;
-  border: 2px dashed var(--border);
+  border: 1px solid var(--border);
   padding: 10px;
-  transition: border-color 0.15s ease, background-color 0.15s ease;
-}
-.queue-dropzone--active {
-  border-color: var(--accent);
-  background: rgba(255, 176, 32, 0.08);
-}
-.queue-dropzone__hint {
-  margin: 0 0 10px;
-  color: var(--accent);
-  font-size: 13px;
-  font-weight: 600;
 }
 
 .queue-list-vertical { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
