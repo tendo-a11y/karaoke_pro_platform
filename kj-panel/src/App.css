@@ -102,14 +102,15 @@ body { margin: 0; background: var(--bg); color: var(--text); }
   line-height: 1.4;
 }
 
+/* Запрос пользователя 2026-09-18: форма "Добавить песню" переехала на свой
+   отдельный экран (см. view === "manual", kj-panel/src/App.jsx), поэтому на
+   экране "Заказы" в этом контейнере остались только панель столов и живая
+   очередь VirtualDJ — простой вертикальный стек вместо прежней двухколоночной
+   сетки под три блока. */
 .app-main {
-  display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   gap: 28px;
-}
-
-@media (max-width: 900px) {
-  .app-main { grid-template-columns: 1fr; }
 }
 
 h2 { font-size: 16px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
@@ -120,8 +121,21 @@ h2 { font-size: 16px; color: var(--muted); text-transform: uppercase; letter-spa
    2026-09-18 — карточка со списком подтверждения через drag-and-drop). */
 .orders-board__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  grid-template-columns: repeat(6, 1fr);
   gap: 14px;
+}
+
+/* Запрос пользователя 2026-09-18: "слишком большая панель, давай по шесть
+   в ряд" — фиксированные 6 колонок вместо auto-fill(220px), который на
+   широких экранах растягивал карточки и делал панель визуально громоздкой.
+   На узких экранах сужаем сетку, чтобы карточки не сжимались до нечитаемого
+   состояния. */
+@media (max-width: 1100px) {
+  .orders-board__grid { grid-template-columns: repeat(4, 1fr); }
+}
+
+@media (max-width: 700px) {
+  .orders-board__grid { grid-template-columns: repeat(2, 1fr); }
 }
 
 .table-card {
