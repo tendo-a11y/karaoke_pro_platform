@@ -14,6 +14,7 @@ from services.table_board_service import get_orders_board
 from services.vdj_service import (
     add_manual_song,
     claim_vdj_queue_item,
+    complete_order,
     confirm_order,
     get_kj_queue_view,
     reject_order,
@@ -152,7 +153,6 @@ _OUTCOME_HTTP = {
     "not_found": (404, "ORDER_NOT_FOUND", "Заказ не найден"),
     "forbidden": (403, "FORBIDDEN", "Нет доступа к этому заказу"),
     "conflict": (409, "ORDER_ALREADY_PROCESSED", "Заказ уже обработан"),
-    "vdj_error": (502, "VDJ_UNAVAILABLE", "Не удалось добавить песню в VirtualDJ"),
 }
 
 
@@ -182,6 +182,30 @@ def reject(order_id):
     order, outcome = reject_order(order_id, g.kj)
 
     if outcome == "rejected":
+        return api_ok(order.to_dict())
+
+    if outcome in _OUTCOME_HTTP:
+        status_code, error_code, message = _OUTCOME_HTTP[outcome]
+        return api_error(status_code, error_code, message)
+
+    return api_error(500, "INTERNAL_ERROR", "Неизвестный результат обработки заказа")
+
+
+@bp.put("/order/<int:order_id>/complete")
+@require_kj
+def complete(order_id):
+    """
+    Запрос пользователя 2026-09-18: KJ сам ставит принятую песню в
+    VirtualDJ и сам же отмечает, когда она отыграна — эта кнопка ("Готово"
+    на занятой карточке стола, см. OrdersBoardSlot в kj-panel/src/App.jsx)
+    и есть единственный способ освободить место на карточке для следующего
+    ожидающего заказа того же стола (см. docstring complete_order() в
+    services/vdj_service.py про то, почему это больше не делает сама
+    реконсиляция с живой очередью VirtualDJ).
+    """
+    order, outcome = complete_order(order_id, g.kj)
+
+    if outcome == "completed":
         return api_ok(order.to_dict())
 
     if outcome in _OUTCOME_HTTP:
