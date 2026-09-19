@@ -11,6 +11,7 @@ from models import (
     Order,
     Service,
 )
+from services.billing_service import charge_at_completion
 from services.notify import notify_guest
 from sockets import emit_order_confirmed, emit_order_rejected, emit_order_updated, emit_queue_updated
 from vdj import get_vdj_client
@@ -163,15 +164,31 @@ def complete_order(order_id: int, kj):
     ("automatic" зарезервировано под будущее сопоставление с историей
     воспроизведения VirtualDJ, здесь не реализуется).
 
-    Возвращает (order, outcome), где outcome — один из:
+    ИСПРАВЛЕНО (2026-09-19, жалоба пользователя "Готово что означает" ->
+    "означает что можно снимать оплату по тарифу"): списание денег
+    (services/billing_service.py::charge_at_completion) было написано и
+    покрыто тестами, но нигде не вызывалось из самой кнопки "Готово" — по
+    факту деньги никогда не списывались. Теперь вызывается прямо здесь,
+    сразу после того как заказ реально помечен завершённым. Сама функция
+    списания уже содержит все нужные проверки (см. её докстринг) и
+    списывает только у VIP-гостей с ненулевой платной услугой — для
+    обычных (не-VIP) заказов она безопасный no-op, поэтому отдельно
+    проверять guest_type здесь не нужно.
+    ChargeResult из неё не влияет на исход/outcome этой функции — списание
+    не должно блокировать сам факт завершения заказа, даже если что-то
+    пошло не так с деньгами (тот же принцип, что и раньше: complete_order
+    сама по себе НЕ проверяла деньги вообще).
+
+    Возвращает (order, outcome, charge), где outcome — один из:
         "not_found", "forbidden", "conflict", "completed"
+    charge — ChargeResult при outcome == "completed", иначе None.
     """
     order = db.session.get(Order, order_id)
     if order is None:
-        return None, "not_found"
+        return None, "not_found", None
 
     if order.club_id != kj.club_id:
-        return None, "forbidden"
+        return None, "forbidden", None
 
     updated_rows = (
         db.session.query(Order)
@@ -189,12 +206,57 @@ def complete_order(order_id: int, kj):
 
     if updated_rows == 0:
         db.session.refresh(order)
-        return order, "conflict"
+        return order, "conflict", None
 
     db.session.refresh(order)
     emit_order_updated(order)
 
-    return order, "completed"
+    charge = charge_at_completion(order)
+
+    return order, "completed", charge
+
+
+def close_table_orders(club_id: int, table_no: int):
+    """
+    Запрос пользователя 2026-09-19 ("Закрыть стол" из карточки гостя, когда
+    компания встала и ушла, а на карточке стола ещё висят непроигранные
+    заказы): массово отклоняет ВСЕ ещё активные заказы этого стола — тот
+    же набор статусов, что занимает место на табло (см.
+    services/table_board_service.py::ACTIVE_TABLE_STATUSES) —
+    STATUS_PENDING/STATUS_PROCESSING/STATUS_QUEUED/STATUS_ERROR.
+
+    Стол — общий физический ресурс: закрываются заказы ВСЕХ гостей этого
+    стола, а не только того, чью карточку открыли (за столом могла сидеть
+    компания из нескольких аккаунтов). Ничего не списывает — деньги
+    (charge_at_completion) начисляются только за реально сыгранную и
+    отмеченную "Готово" песню, а не за отменённые из-за ухода гостей.
+
+    Возвращает список фактически затронутых Order (для сокет-уведомлений).
+    """
+    orders = (
+        Order.query
+        .filter(
+            Order.club_id == club_id,
+            Order.table_no == table_no,
+            Order.status.in_([STATUS_PENDING, STATUS_PROCESSING, STATUS_QUEUED, STATUS_ERROR]),
+        )
+        .all()
+    )
+    if not orders:
+        return []
+
+    order_ids = [order.id for order in orders]
+    db.session.query(Order).filter(Order.id.in_(order_ids)).update(
+        {"status": STATUS_REJECTED, "rejected_at": _utcnow()},
+        synchronize_session=False,
+    )
+    db.session.commit()
+
+    for order in orders:
+        db.session.refresh(order)
+        emit_order_rejected(order)
+
+    return orders
 
 
 def _queue_rank(vdj, vdj_item_id: str):
