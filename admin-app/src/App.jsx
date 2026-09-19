@@ -968,7 +968,25 @@ export default function App() {
           setSelectedClubId(clubsData[0].club_id);
         }
       } catch (err) {
-        if (!cancelled) setLoadError(err instanceof ApiError ? err.message : String(err));
+        if (cancelled) return;
+        // ИСПРАВЛЕНО (2026-09-19, жалоба пользователя "Срок действия токена
+        // истёк, что за ерунда"): раньше при 401 от бэкенда (просроченный
+        // или недействительный токен) это просто уходило в loadError, а
+        // экран ниже для loadError — тупик без единой кнопки (ни "Выйти",
+        // ни назад на логин), пользователь застревал на нём навсегда, даже
+        // после того как токен на бэкенде продлевали — старый токен из
+        // localStorage никуда не девался и просто продолжал быть просроченным.
+        // Теперь именно на 401 (TOKEN_EXPIRED/UNAUTHORIZED) стираем токен и
+        // возвращаемся на экран входа автоматически — ровно то же самое,
+        // что делает кнопка "Выйти" ниже. Прочие ошибки (сеть, 500 и т.п.)
+        // по-прежнему показываются как есть — тут терять их не нужно.
+        if (err instanceof ApiError && err.status === 401) {
+          clearToken();
+          setToken(null);
+          setMe(null);
+          return;
+        }
+        setLoadError(err instanceof ApiError ? err.message : String(err));
       }
     }
 
