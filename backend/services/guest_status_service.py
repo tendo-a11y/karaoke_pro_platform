@@ -9,6 +9,8 @@ from datetime import datetime, timezone
 
 from extensions import db
 from models import GuestStatus
+from services import guest_directory_service
+from services.vdj_service import close_table_orders
 
 
 def _utcnow():
@@ -58,3 +60,37 @@ def unblock(club_id: int, guest_id: int) -> GuestStatus | None:
     status.blocked_by = None
     db.session.commit()
     return status
+
+
+def close_table(club_id: int, guest_id: int, kj) -> dict:
+    """
+    "Закрыть стол" (запрос пользователя 2026-09-19) — одно действие из
+    карточки гостя в KJ Panel на случай, когда компания встала и ушла:
+    убрать гостя со стола (set_table(None)) + заблокировать его
+    (block()) — ровно то же самое, что KJ раньше делал вручную двумя
+    отдельными кнопками "Снять со стола" и "Заблокировать" (обе кнопки
+    остаются на месте как есть, это просто их объединение в один клик) —
+    ПЛЮС, чего раньше не делала ни одна из них: отклоняет все ещё активные
+    (непроигранные) заказы этого стола (close_table_orders), чтобы места
+    на табло реально освободились, а не остались висеть "принят" навсегда
+    (см. table_board_service.py — раньше единственным способом освободить
+    место было "Готово" по каждой песне отдельно, а для этого сценария
+    "гости просто ушли" это неудобно и не подходит).
+
+    Стол определяется тем же способом, что и в самой карточке гостя (см.
+    guest_directory_service.get_guest_detail -> table_no) — текущий живой
+    стол гостя (GuestStatus.table_no), а если строки статуса ещё нет —
+    стол его последнего заказа. Если стола нет вообще (guest.table_no is
+    None) — отклонять нечего, просто блокируем.
+
+    Возвращает {"status": GuestStatus, "closed_orders": [Order, ...]}.
+    """
+    detail = guest_directory_service.get_guest_detail(club_id, guest_id)
+    table_no = detail.get("table_no")
+
+    closed_orders = close_table_orders(club_id, table_no) if table_no is not None else []
+
+    set_table(club_id, guest_id, None)
+    status = block(club_id, guest_id, kj)
+
+    return {"status": status, "closed_orders": closed_orders}
