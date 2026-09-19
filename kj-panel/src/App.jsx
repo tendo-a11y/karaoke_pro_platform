@@ -1032,6 +1032,26 @@ function GuestCard({ token, clubId, guestId, onBack, onChanged }) {
     }
   }
 
+  // ДОБАВЛЕНО (2026-09-19, запрос пользователя "закрыть стол... убрать со
+  // стола и заблокировать, это всё внутри карточки"): один клик вместо
+  // двух отдельных ("Снять со стола" + "Заблокировать" ниже, они остаются
+  // на месте как есть) — плюс, чего эти две кнопки сами по себе не делали,
+  // отклоняет всё ещё непроигранное с этого стола, чтобы места на табло
+  // "Заказы" реально освободились (см. guest_status_service.close_table).
+  async function handleCloseTable() {
+    setBusy(true);
+    setActionError(null);
+    try {
+      await api.closeGuestTable(token, guestId);
+      await reload();
+      onChanged?.();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="guest-card">
       <button type="button" className="btn-link" onClick={onBack}>← К списку гостей</button>
@@ -1077,6 +1097,11 @@ function GuestCard({ token, clubId, guestId, onBack, onChanged }) {
             {guest.table_no != null && (
               <button type="button" className="btn-link" disabled={busy} onClick={handleRemoveTable}>
                 Снять со стола
+              </button>
+            )}
+            {!guest.is_blocked && (
+              <button type="button" className="btn btn--complete" disabled={busy} onClick={handleCloseTable}>
+                🚪 Закрыть стол
               </button>
             )}
           </div>
@@ -1193,7 +1218,7 @@ function GuestsPanel({ token, clubId }) {
 // пользователя "только на карточке").
 const BOARD_SLOT_NEEDS_DECISION = new Set(["pending", "processing", "error"]);
 
-function OrdersBoardSlot({ slot, categories, busy, onAccept, onReject, onComplete, onOpenGuest }) {
+function OrdersBoardSlot({ slot, categories, busy, onAccept, onReject, onComplete, onChangeCategory, onOpenGuest }) {
   if (slot == null) {
     return <div className="table-slot table-slot--empty">Свободен</div>;
   }
@@ -1205,17 +1230,55 @@ function OrdersBoardSlot({ slot, categories, busy, onAccept, onReject, onComplet
   // backend/services/vdj_service.py), а не само по себе.
   const isQueued = slot.status === "queued";
   const categoryName = categories.find((c) => c.id === slot.service_id)?.name;
+  // ИСПРАВЛЕНО (2026-09-19, жалоба пользователя "не сделано изменение
+  // категории песни"): смена категории у уже принятого заказа была только
+  // в QueueTable (строки живой очереди VirtualDJ) — но после отвязки
+  // confirm_order() от VirtualDJ (см. коммит выше) заказ обычно сидит в
+  // статусе "queued" на этой самой карточке места ЗАДОЛГО до того, как KJ
+  // нажмёт "Готово" и он попадёт в живую очередь. До этой правки сменить
+  // категорию в этот промежуток было нельзя — на карточке было только
+  // название категории текстом, без выбора. Бэкенд (PUT
+  // /order/<id>/category, см. update_order_category в vdj_service.py)
+  // всегда это позволял для queued-заказов — не хватало только кнопки
+  // здесь. QueueTable и её выпадающий список остаются как есть — тот
+  // экран отвечает уже за позиции в самой очереди VirtualDJ (после
+  // "Готово" или чужие, добавленные мимо приложения).
+  const canEditCategory = isQueued && categories.length > 0;
+  // ДОБАВЛЕНО (2026-09-19, запрос пользователя "оплата происходит только у
+  // випа, если человек не вип то у него и не должна появляться кнопка
+  // готово"): "Готово" теперь и списывает деньги по тарифу (см.
+  // complete_order/charge_at_completion на бэкенде) — для обычных гостей
+  // списывать нечего, а значит и кнопке тут делать нечего. Их заказы со
+  // стола убираются не по одной песне, а разом кнопкой "Закрыть стол" из
+  // карточки гостя (см. GuestCard.handleCloseTable), когда компания ушла.
+  const isVip = slot.guest_type === "vip";
+  const canComplete = isQueued && isVip;
   return (
     <div className={`table-slot table-slot--${needsDecision ? "pending" : "queued"}`}>
       <button type="button" className="table-slot__body" onClick={() => onOpenGuest(slot.guest_id)}>
         <div className="table-slot__song">🎵 {slot.song_title}</div>
         {slot.artist && <div className="table-slot__artist">🎤 {slot.artist}</div>}
-        {categoryName && <div className="table-slot__category">{categoryName}</div>}
+        {!canEditCategory && categoryName && <div className="table-slot__category">{categoryName}</div>}
         {isQueued && <div className="table-slot__badge">✅ Принят</div>}
         {slot.status === "error" && slot.error_message && (
           <div className="table-slot__error">{slot.error_message}</div>
         )}
       </button>
+      {canEditCategory && (
+        <select
+          className="table-slot__category-select"
+          value={slot.service_id ?? categories[0]?.id ?? ""}
+          disabled={busy}
+          onClick={(event) => event.stopPropagation()}
+          onChange={(event) => onChangeCategory(slot.order_id, Number(event.target.value))}
+        >
+          {categories.map((category) => (
+            <option key={category.id} value={category.id}>
+              {category.name}
+            </option>
+          ))}
+        </select>
+      )}
       {needsDecision && (
         <div className="table-slot__actions">
           <button type="button" className="btn btn--accept" disabled={busy} onClick={() => onAccept(slot.order_id)}>
@@ -1226,7 +1289,7 @@ function OrdersBoardSlot({ slot, categories, busy, onAccept, onReject, onComplet
           </button>
         </div>
       )}
-      {isQueued && (
+      {canComplete && (
         <div className="table-slot__actions">
           <button type="button" className="btn btn--complete" disabled={busy} onClick={() => onComplete(slot.order_id)}>
             🏁 Готово
@@ -1335,6 +1398,24 @@ function OrdersBoard({ token, clubId, socket, onOpenGuest }) {
     }
   }
 
+  // ДОБАВЛЕНО (2026-09-19, жалоба пользователя "не сделано изменение
+  // категории песни"): смена категории прямо на карточке места, пока заказ
+  // ещё "queued" (см. onChangeCategory в OrdersBoardSlot выше) — та же
+  // схема busy/reload, что и у остальных действий на доске.
+  async function handleChangeCategory(orderId, serviceId) {
+    setBusyOrderId(orderId);
+    setActionError(null);
+    try {
+      await api.updateOrderCategory(token, orderId, serviceId);
+      await reload();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+      await reload();
+    } finally {
+      setBusyOrderId(null);
+    }
+  }
+
   if (loadError) {
     return <div className="banner banner--error">{loadError}</div>;
   }
@@ -1364,6 +1445,7 @@ function OrdersBoard({ token, clubId, socket, onOpenGuest }) {
                   onAccept={handleAccept}
                   onReject={handleReject}
                   onComplete={handleComplete}
+                  onChangeCategory={handleChangeCategory}
                   onOpenGuest={onOpenGuest}
                 />
               ))}
