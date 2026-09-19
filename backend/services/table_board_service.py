@@ -89,6 +89,14 @@ def _slot_dict(order: Order) -> dict:
         "service_id": order.service_id,
         "status": order.status,
         "error_message": order.error_message,
+        # Запрос пользователя 2026-09-19: "Готово" (списывает оплату по
+        # тарифу, см. complete_order/charge_at_completion) должно быть
+        # видно только у VIP-заказов — обычным гостям оплата не положена
+        # в принципе. Фронтенду нужен guest_type самого заказа (а не
+        # текущий guest_type гостя из guest_status/directory — берём
+        # именно "снимок" на момент заказа, ту же колонку, которую уже
+        # читает charge_at_completion), чтобы решить, показывать кнопку.
+        "guest_type": order.guest_type,
     }
 
 
