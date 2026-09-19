@@ -202,11 +202,27 @@ def complete(order_id):
     ожидающего заказа того же стола (см. docstring complete_order() в
     services/vdj_service.py про то, почему это больше не делает сама
     реконсиляция с живой очередью VirtualDJ).
+
+    2026-09-19: эта же кнопка теперь и списывает оплату по тарифу
+    (charge_at_completion, вызывается внутри complete_order) — фронтенд
+    показывает её только для VIP-заказов (см. slot.guest_type в
+    OrdersBoardSlot), но сам списание безопасно ничего не делает и для
+    остальных, так что здесь дополнительная проверка не нужна. В ответ
+    добавляем краткую сводку по списанию — на будущее, для возможного
+    отображения суммы в KJ Panel.
     """
-    order, outcome = complete_order(order_id, g.kj)
+    order, outcome, charge = complete_order(order_id, g.kj)
 
     if outcome == "completed":
-        return api_ok(order.to_dict())
+        payload = order.to_dict()
+        if charge is not None:
+            payload["charge"] = {
+                "charged": charge.charged,
+                "charge_amount": float(charge.charge_amount) if charge.charge_amount is not None else None,
+                "cashback_amount": float(charge.cashback_amount) if charge.cashback_amount is not None else None,
+                "skipped_reason": charge.skipped_reason,
+            }
+        return api_ok(payload)
 
     if outcome in _OUTCOME_HTTP:
         status_code, error_code, message = _OUTCOME_HTTP[outcome]
@@ -856,6 +872,28 @@ def remove_guest_from_table(guest_id):
         return api_error(400, "VALIDATION_ERROR", "guest_id должен быть числом")
     status = guest_status_service.set_table(g.club_id, parsed_id, None)
     return api_ok(status.to_dict())
+
+
+@bp.post("/guests/<guest_id>/close-table")
+@require_kj
+def close_guest_table(guest_id):
+    """
+    "Закрыть стол" (запрос пользователя 2026-09-19, из карточки гостя):
+    снимает гостя со стола, блокирует его и отклоняет всё ещё непроигранное
+    с этого стола одним действием — см. докстринг guest_status_service.
+    close_table для полной мотивации.
+    """
+    parsed_id = _parse_guest_id(guest_id)
+    if parsed_id is None:
+        return api_error(400, "VALIDATION_ERROR", "guest_id должен быть числом")
+    try:
+        result = guest_status_service.close_table(g.club_id, parsed_id, g.kj)
+    except GuestDirectoryError as exc:
+        return api_error(exc.status_code, exc.code, exc.message)
+    return api_ok({
+        "status": result["status"].to_dict(),
+        "closed_order_ids": [order.id for order in result["closed_orders"]],
+    })
 
 
 # --- Статус моста VirtualDJ (запрос пользователя 2026-09: "переключатель"
