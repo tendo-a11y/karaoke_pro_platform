@@ -155,6 +155,11 @@ export const api = {
     request(`/api/kj/guests/${encodeURIComponent(guestId)}/unblock`, { method: "POST", token }),
   removeGuestFromTable: (token, guestId) =>
     request(`/api/kj/guests/${encodeURIComponent(guestId)}/remove-table`, { method: "POST", token }),
+  // Запрос пользователя 2026-09-19 "Закрыть стол": снять со стола +
+  // заблокировать + отклонить оставшиеся заказы стола одним действием —
+  // см. guest_status_service.close_table на бэкенде.
+  closeGuestTable: (token, guestId) =>
+    request(`/api/kj/guests/${encodeURIComponent(guestId)}/close-table`, { method: "POST", token }),
   getBridgeStatus: (token, clubId) => request(`/api/kj/bridge/status/${clubId}`, { token }),
 };
 
