@@ -191,6 +191,19 @@ h2 { font-size: 16px; color: var(--muted); text-transform: uppercase; letter-spa
 .table-slot__badge { color: var(--ok); font-size: 12px; font-weight: 600; }
 .table-slot__error { color: var(--danger); font-size: 12px; }
 
+/* Смена категории прямо на карточке места (запрос пользователя 2026-09-19),
+   тот же внешний вид, что и у .queue-row__category-select, только на всю
+   ширину карточки места. */
+.table-slot__category-select {
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 13px;
+  width: 100%;
+}
+
 .table-slot__actions { display: flex; gap: 8px; }
 
 .btn {
