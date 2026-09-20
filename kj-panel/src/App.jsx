@@ -1,968 +1,1876 @@
-import secrets
-
-from flask import Blueprint, current_app, g, request
-
-from auth import issue_guest_token, require_guest
-from errors import api_error, api_ok
-from extensions import db
-from models import STATUS_ERROR, STATUS_REJECTED, ChatMessage, Club, Order, Service
-from services import ai_search_service, guest_account_service, guest_status_service, song_service, table_board_service, table_group_service, vdj_service, vip_service
-from services.google_auth_service import GoogleAuthError, verify_google_credential
-from sockets import emit_chat_message, emit_order_created, emit_vip_request_created
-from vdj import get_vdj_client
-
-bp = Blueprint("guest", __name__, url_prefix="/api/guest")
-
-
-def _new_guest_id() -> int:
-    """
-    Случайный идентификатор анонимного гостя. Помещается в то же поле
-    Order.telegram_user_id (BigInteger), что и настоящие Telegram ID из
-    старого бота-пути (/api/client/order) — оба пути пишут в одну и ту же
-    колонку, оба вида значений одинаково уникальны и используются в коде
-    только как непрозрачный идентификатор "чей это заказ", так что
-    смешивать их в одной колонке безопасно на этом шаге. Сам вопрос
-    переименования/типизации этого поля под Guest App (ТЗ §54) остаётся
-    открытым — см. комментарий у Order.telegram_user_id в models.py.
-    62 бита — гарантированно помещается в BigInteger и практически
-    исключает коллизии в пределах одного клуба за вечер.
-    """
-    return secrets.randbits(62)
-
-
-@bp.post("/session")
-def create_session():
-    """
-    Первый вызов Guest App при открытии ссылки/QR-кода — аналог старого
-    deep-link venue{id}_table{n} в Telegram-боте (bot.py), но по
-    финальной единой модели входа (ТЗ п.45) QR-код НИКОГДА не содержит
-    номер стола: сессия всегда создаётся без стола (table_no всегда
-    null), независимо от того, какой QR отсканирован. Без авторизации —
-    сама возможность создать сессию для club_id и есть право находиться
-    в этом клубе (см. issue_guest_token в auth.py — подробное обоснование
-    модели доверия).
-
-    Стол выбирается позже, вместе с обязательным входом через Google, в
-    одном действии — см. POST /api/guest/profile/link-google. До этого
-    момента доступны только просмотр очереди и выбор песни в форму
-    (Role 5); сам заказ недоступен.
-    """
-    payload = request.get_json(silent=True) or {}
-    club_id = payload.get("club_id")
-
-    if not isinstance(club_id, int):
-        return api_error(400, "VALIDATION_ERROR", "club_id обязателен и должен быть числом")
-
-    club = db.session.get(Club, club_id)
-    if club is None or not club.is_active:
-        return api_error(404, "CLUB_NOT_FOUND", "Клуб не найден или отключён")
-
-    guest_id = _new_guest_id()
-    token = issue_guest_token(
-        guest_id, club_id, None,
-        current_app.config["GUEST_JWT_SECRET"], current_app.config["GUEST_JWT_TTL_SECONDS"],
-    )
-
-    # guest_id — строкой в JSON: см. комментарий у TableGroup.to_dict()
-    # (models.py) — 62-битные значения теряют точность в JS Number, и
-    # своя идентичность (сравнение "это я?" в TableGroupPanel) должна
-    # совпадать посимвольно с guest_id из /table-group, который отдаётся
-    # строкой по той же причине.
-    return api_ok({"guest_id": str(guest_id), "club_id": club_id, "table_no": None, "token": token})
-
-
-def _guest_type_and_vip(club_id: int, guest_id: int):
-    """
-    Единое место, где решается роль гостя (Role 3 vs Role 4/5) — по факту
-    наличия VipClient с этим (club_id, guest_id), см. services/vip_service.py.
-    VIP определяется так же, как определялся бы Telegram-VIP в старом боте
-    (наличие строки vip_clients) — постоянство личности при этом
-    обеспечивает GuestAccount (ТЗ п.45), а не сам факт быть VIP.
-    """
-    vip = vip_service.get_vip_client(club_id, guest_id)
-    if vip is not None:
-        return "vip", vip
-    return None, None
-
-
-@bp.get("/me")
-@require_guest
-def me():
-    """
-    Нужна фронтенду сразу после создания сессии, чтобы знать, за каким
-    столом/в каком клубе он находится — по образцу /api/kj/me,
-    /api/admin/me. С этого шага также определяет VIP-статус (Role 3) —
-    см. _guest_type_and_vip выше.
-    """
-    club = db.session.get(Club, g.club_id)
-    guest_type, vip = _guest_type_and_vip(g.club_id, g.guest_id)
-
-    pending_request = vip_service.get_pending_vip_request(g.club_id, g.guest_id)
-    account = guest_account_service.get_by_guest_id(g.club_id, g.guest_id)
-    has_permanent_profile = account is not None
-
-    # Групповой стол — статус пересчитывается заново на каждый опрос (а не
-    # берётся из токена), потому что JWT не переиздаётся при одобрении
-    # (см. docstring table_group_service) — фронтенд узнаёт об одобрении
-    # именно через периодический опрос этого поля.
-    table_group_status = None
-    if g.table_no is not None:
-        group = table_group_service.get_group(g.club_id, g.table_no)
-        if group is not None and group.admin_guest_id == g.guest_id:
-            table_group_status = "admin"
-        elif table_group_service.is_member(g.club_id, g.table_no, g.guest_id):
-            table_group_status = "member"
-        elif table_group_service.has_pending_request(g.club_id, g.table_no, g.guest_id):
-            table_group_status = "pending"
-        else:
-            # Гостя кикнули, он сам вышел, или его заявку отклонили — не
-            # трактуем это как "pending" (заявки сейчас нет вообще), фронтенд
-            # должен предложить запросить присоединение заново
-            # (POST /table-group/request-join), а не показывать "ждите".
-            table_group_status = "not_joined"
-
-    return api_ok({
-        # Строкой — см. комментарий в create_session выше.
-        "guest_id": str(g.guest_id),
-        "club_id": g.club_id,
-        "table_no": g.table_no,
-        "table_group_status": table_group_status,
-        "club_name": club.name if club else None,
-        # Guest App использует это, чтобы решить, показывать ли вообще UI
-        # чата — а не только полагаться на 403 CHAT_DISABLED после попытки
-        # отправить сообщение (POST /chat уже проверяет это на сервере
-        # независимо, см. send_chat_message ниже — здесь только для UX).
-        "chat_enabled": bool(club.chat_enabled) if club else False,
-        "is_vip": guest_type == "vip",
-        # ТЗ п.45 — есть ли у гостя постоянный профиль (Google уже
-        # привязан). Фронтенд использует это вместе с table_no==null, чтобы решить,
-        # показывать ли единственный экран "выберите стол и войдите через
-        # Google" (см. POST /profile/link-google) — до входа стола нет и
-        # заказ недоступен, независимо от того, каким QR открыто приложение.
-        "has_permanent_profile": has_permanent_profile,
-        # Имя, которое гость сам себе задал (запрос пользователя 2026-09,
-        # "самопереименование гостя") — null, пока не задано или пока нет
-        # постоянного профиля вообще, см. PUT /profile/name ниже.
-        "display_name": account.display_name if account else None,
-        # Старое: handlers/vip.py::vip_profile (баланс/кэшбэк), п.9-10-11
-        # отчёта по Role 3/4/5. join date (added_at) старый бот тоже нигде
-        # не показывал — не добавляем и здесь, чтобы не изобретать поле,
-        # которого не было в UI старой системы.
-        "vip": {"balance": float(vip.balance), "cashback_percent": float(vip.cashback_percent)}
-        if vip else None,
-        "vip_request_pending": pending_request is not None,
-    })
-
-
-@bp.post("/order")
-@require_guest
-def create_order():
-    """
-    Гостевое создание заказа через Guest App — параллельный путь к
-    /api/client/order (тот остаётся для старого Telegram-бота, ТЗ п.7,
-    старая система не должна сломаться до полной миграции). club_id/
-    table_no/telegram_user_id(=guest_id) берутся ТОЛЬКО из проверенного
-    токена (g.*), а не из тела запроса — тело даёт только сами данные
-    песни.
-
-    guest_type: определяется по факту VIP-идентификации (см.
-    _guest_type_and_vip выше) — "vip", иначе "no_table" при отсутствии
-    стола, иначе "client" (1:1 старое деление ролей 3/4/5).
-
-    ТЗ п.45 (финальная единая модель входа): стол и постоянный профиль
-    появляются только вместе, одним действием, через POST
-    /api/guest/profile/link-google — до этого гость (Role 5) может
-    смотреть очередь и выбрать песню в форму, но не может нажать
-    "Заказать": сначала он получит TABLE_REQUIRED (стола ещё нет вообще),
-    а если стол уже выбран, но профиль почему-то не подтверждён —
-    GOOGLE_LINK_REQUIRED (см. проверки ниже).
-
-    service_id (тариф) — необязателен (заказ без выбранной услуги
-    по-прежнему допустим, как и раньше в этом шаге), но если передан,
-    должен существовать и принадлежать этому же клубу — иначе на
-    completion (services/billing_service.py) он просто тихо не будет
-    найден, лучше отклонить сразу с понятной ошибкой.
-
-    Лимит активных песен (старое: MAX_ACTIVE_SONGS_PER_USER=2, аудит Role
-    3/4/5 п.6) — проверяется здесь так же, как в старом коде, ДО создания
-    заказа.
-
-    Групповой стол (утверждённая спецификация, вариант А — полноценный
-    шлюз): если у гостя есть стол, заказывать можно только будучи
-    одобренным участником (или админом) группы этого стола — единственная
-    проверка шлюза во всём этом эндпоинте, без переиздания токена (см.
-    docstring table_group_service.ensure_session_group_state).
-    """
-    payload = request.get_json(silent=True) or {}
-    song_title = payload.get("song_title")
-    artist = payload.get("artist")
-    service_id = payload.get("service_id")
-
-    if not song_title or not isinstance(song_title, str):
-        return api_error(400, "VALIDATION_ERROR", "song_title обязателен")
-
-    # ТЗ п.45: смотреть очередь и выбирать песню в форму можно сразу после
-    # открытия приложения, а заказывать — только выбрав стол (единственный
-    # способ это сделать — POST /api/guest/profile/link-google ниже, где
-    # стол выбирается вместе со входом через Google, одним действием).
-    if g.table_no is None:
-        return api_error(
-            409, "TABLE_REQUIRED",
-            "Чтобы заказать песню, сначала выберите стол",
-        )
-
-    if guest_account_service.get_by_guest_id(g.club_id, g.guest_id) is None:
-        return api_error(
-            409, "GOOGLE_LINK_REQUIRED",
-            "Чтобы заказать песню, сначала войдите через Google",
-        )
-
-    if not table_group_service.is_member(g.club_id, g.table_no, g.guest_id):
-        return api_error(
-            403, "TABLE_ACCESS_REQUIRED",
-            "У вас нет доступа к заказам за этим столом — нужно быть одобренным участником группы",
-        )
-
-    if service_id is not None:
-        if not isinstance(service_id, int):
-            return api_error(400, "VALIDATION_ERROR", "service_id должен быть числом")
-        service = db.session.get(Service, service_id)
-        if service is None or service.club_id != g.club_id:
-            return api_error(404, "SERVICE_NOT_FOUND", "Услуга не найдена")
-
-    active_count = vip_service.count_active_orders(g.club_id, g.guest_id)
-    max_active = current_app.config["MAX_ACTIVE_SONGS_PER_GUEST"]
-    if active_count >= max_active:
-        return api_error(
-            409, "ACTIVE_SONGS_LIMIT",
-            f"Можно иметь не более {max_active} заказов одновременно — дождитесь, пока сыграет текущий",
-        )
-
-    detected_guest_type, _vip = _guest_type_and_vip(g.club_id, g.guest_id)
-    guest_type = detected_guest_type or ("no_table" if g.table_no is None else "client")
-
-    order = Order(
-        telegram_user_id=g.guest_id,
-        club_id=g.club_id,
-        table_no=g.table_no,
-        guest_type=guest_type,
-        song_title=song_title,
-        artist=artist,
-        service_id=service_id,
-        source="guest",
-        channel="webapp",
-    )
-    db.session.add(order)
-    db.session.commit()
-
-    emit_order_created(order)
-
-    # Запрос пользователя 2026-09-19: сразу в ответе на отправку — номер
-    # места в общей очереди клуба (см. docstring
-    # table_board_service.get_club_queue_positions), чтобы фронтенд
-    # написал "Заказ отправлен! Ваш номер в очереди: N", а не звучал так,
-    # будто нужно чьё-то отдельное подтверждение.
-    data = order.to_dict()
-    data["queue_position"] = table_board_service.get_club_queue_positions(g.club_id).get(order.id)
-    return api_ok(data, status_code=201)
-
-
-@bp.get("/services")
-@require_guest
-def list_services():
-    """Тарифы клуба (старое: services/venue_services, аудит п.12) — гость
-    видит одинаковый прайс независимо от роли; VIP просто может расплатиться
-    балансом при завершении песни (billing_service), не-VIP — вне бота."""
-    services = Service.query.filter_by(club_id=g.club_id).order_by(Service.id.asc()).all()
-    return api_ok([s.to_dict() for s in services])
-
-
-@bp.get("/songs/search")
-@require_guest
-def search_songs():
-    """
-    Старое: bot.py::inline_search без спецпрефиксов "kj:"/"replace:" (аудит
-    п.1) — доступно любому гостю клуба (VIP/клиент со столом/без стола,
-    Role 3/4/5 — старый код тоже не ограничивал по роли, только по наличию
-    venue_id). Префиксы "kj:" (ручное добавление KJ) и "replace:" (замена
-    песни, к тому же не проверявшая в старом коде владельца заказа — аудит,
-    находка №3) сюда сознательно не перенесены: это отдельные, ещё не
-    реализованные функции, а не часть самого поиска.
-    """
-    query = request.args.get("q", "")
-    songs = song_service.search_songs(g.club_id, query)
-    return api_ok([s.to_dict() for s in songs])
-
-
-@bp.post("/songs/ai-search")
-@require_guest
-def ai_search_songs():
-    """
-    Старое: /ai команда бота + ai_search_handlers.py + ai_search.py (аудит
-    п.2) — свободное текстовое описание песни -> Claude извлекает 1-3
-    вероятных "исполнитель - название" -> Genius ищет реальные треки.
-    Доступно любому типу гостя, как и старая команда /ai (проверки роли не
-    было). Результат — НЕ из каталога клуба (нет id) и не создаёт заказ сам
-    по себе; выбор конкретного варианта на фронтенде заполняет обычную форму
-    заказа — та же самая адаптация под веб-UI, что и у GET /songs/search
-    (п.1), тот же существующий /api/guest/order с лимитом активных песен
-    подхватывается автоматически, без дублирования этой логики здесь.
-    """
-    payload = request.get_json(silent=True) or {}
-    text = payload.get("text", "")
-    if not isinstance(text, str) or not text.strip():
-        return api_error(400, "VALIDATION_ERROR", "text обязателен и должен быть непустой строкой")
-
-    results = ai_search_service.ai_powered_search(text.strip())
-    return api_ok(results)
-
-
-# Скриншот сжимается до разумного размера ещё на фронтенде (canvas, см.
-# guest-app/src/App.jsx) — это ограничение просто честный верхний предел,
-# чтобы случайно присланный огромный оригинал (гость обошёл сжатие,
-# прислав файл напрямую через API) не улетел в Claude API как есть.
-MAX_SCREENSHOT_BASE64_LEN = 8_000_000
-
-
-@bp.post("/songs/screenshot-search")
-@require_guest
-def screenshot_search_songs():
-    """
-    Третий способ поиска песни (см. ai_search_songs выше) — гость вместо
-    текста присылает скриншот (например, из Shazam/Spotify/ВК), где видно
-    название и исполнителя. Картинка приходит как base64 в теле JSON (без
-    multipart — так проще на фронтенде через FileReader/canvas). Дальше
-    Клод смотрит на картинку вместо текста (ai_search_service._ask_claude_vision),
-    а остальной путь (iTunes-поиск, выбор варианта гостем, обычный
-    /api/guest/order) не отличается от ai_search_songs.
-    """
-    payload = request.get_json(silent=True) or {}
-    image_base64 = payload.get("image_base64", "")
-    media_type = payload.get("media_type", "")
-
-    if not isinstance(image_base64, str) or not image_base64.strip():
-        return api_error(400, "VALIDATION_ERROR", "image_base64 обязателен и должен быть непустой строкой")
-    if len(image_base64) > MAX_SCREENSHOT_BASE64_LEN:
-        return api_error(400, "IMAGE_TOO_LARGE", "Изображение слишком большое")
-    if media_type not in ai_search_service.ALLOWED_SCREENSHOT_TYPES:
-        return api_error(400, "VALIDATION_ERROR", "media_type должен быть image/jpeg, image/png или image/webp")
-
-    results = ai_search_service.screenshot_powered_search(image_base64.strip(), media_type)
-    return api_ok(results)
-
-
-@bp.post("/vip/request")
-@require_guest
-def request_vip():
-    """Старое: handlers/client.py::request_vip_status (аудит п.8А)."""
-    existing = vip_service.get_pending_vip_request(g.club_id, g.guest_id)
-    if existing is not None:
-        return api_error(409, "VIP_REQUEST_PENDING", "Заявка уже отправлена, ждите решения KJ")
-
-    existing_vip = vip_service.get_vip_client(g.club_id, g.guest_id)
-    if existing_vip is not None:
-        return api_error(409, "ALREADY_VIP", "Вы уже VIP")
-
-    result = vip_service.create_vip_request(g.club_id, g.guest_id, g.table_no)
-    if result.outcome == "requires_google_link":
-        return api_error(
-            409, "GOOGLE_LINK_REQUIRED",
-            "Чтобы подать заявку на VIP, сначала сохраните профиль через Google",
-        )
-
-    emit_vip_request_created(result.request)
-    return api_ok(result.request.to_dict(), status_code=201)
-
-
-@bp.post("/profile/link-google")
-@require_guest
-def link_google():
-    """
-    ТЗ п.45 — единственный экран "выберите стол и войдите через Google":
-    номер стола и постоянная идентификация гостя устанавливаются здесь
-    ОДНИМ действием (заменяет прежний механизм access_code/redeem,
-    удалён целиком, и прежнее деление на "способ 1"/"способ 2" — QR
-    больше никогда не приносит номер стола сам по себе). table_no
-    обязателен в теле запроса, если у гостя ещё вообще нет стола (до этого
-    вызова он может только смотреть очередь и выбирать песню в форму, но
-    не заказывать); если стол уже выбран этим же способом ранее, а гость
-    сейчас лишь переключается на другой уже существующий Google-аккаунт —
-    table_no можно не передавать снова, тогда используется уже известный
-    стол. После успешного вызова гость получает стол, постоянный профиль и
-    становится Role 4 (или 3, если уже был одобрен как VIP).
-
-    guest_account_service.link_google САМ решает: если для этого
-    Google-аккаунта в этом клубе уже есть постоянный профиль — им
-    становится ОН (то немногое, что гость успел сделать в текущей сессии
-    ДО этого вызова, теряется — редкий случай "уже привязывал с другого
-    устройства", решение по п.45); если аккаунта ещё нет — постоянным
-    номером становится ТЕКУЩИЙ guest_id этой сессии, поэтому всё, что
-    гость уже заказал/добавил в избранное до этого вызова, никуда не
-    девается — оно и так уже записано на этот номер.
-    """
-    payload = request.get_json(silent=True) or {}
-    credential = payload.get("google_credential")
-    table_no = payload.get("table_no")
-
-    if table_no is None:
-        if g.table_no is None:
-            return api_error(400, "VALIDATION_ERROR", "table_no обязателен — сначала выберите стол")
-        effective_table_no = g.table_no
-    else:
-        if not isinstance(table_no, int) or isinstance(table_no, bool) or table_no <= 0:
-            return api_error(400, "VALIDATION_ERROR", "table_no должен быть положительным числом")
-        # KJ-04 доп. ТЗ "KJ Pro": у клуба может быть настроено количество
-        # столов (Club.table_count, KJ управляет им через
-        # PUT /api/kj/table-settings/<club_id>) — старый бот проверял именно
-        # здесь (bot.py/handlers/client.py: table_number > venue.table_count
-        # -> "table_count_exceeded"). table_count=None означает "без
-        # ограничения" (клуб ещё не настроил) — тогда пропускаем проверку.
-        club = db.session.get(Club, g.club_id)
-        if club is not None and club.table_count is not None and table_no > club.table_count:
-            return api_error(
-                400, "TABLE_OUT_OF_RANGE",
-                f"В этом клубе {club.table_count} столов — выберите номер от 1 до {club.table_count}",
-            )
-        effective_table_no = table_no
-
-    try:
-        identity = verify_google_credential(
-            current_app.config["GOOGLE_AUTH_MODE"], current_app.config["GOOGLE_CLIENT_ID"], credential,
-        )
-    except GoogleAuthError as exc:
-        return api_error(401, "GOOGLE_AUTH_FAILED", exc.message)
-
-    result = guest_account_service.link_google(g.club_id, g.guest_id, identity["sub"], identity.get("email"))
-    new_guest_id = result.account.telegram_user_id
-
-    # Групповой стол: если постоянная личность отличается от текущей
-    # (нашёлся уже существовавший профиль) — переносим членство/заявку по
-    # той же логике, что раньше применялась к погашению VIP-кода (см.
-    # docstring table_group_service.transfer_identity — сама разбирается,
-    # что переносить нечего, если у гостя ещё не было стола). Групповое
-    # состояние на выбранном столе создаётся/подтверждается для итоговой
-    # личности в любом случае — стол выбирается здесь всегда впервые.
-    if new_guest_id != g.guest_id:
-        table_group_service.transfer_identity(g.club_id, effective_table_no, g.guest_id, new_guest_id)
-    table_group_state = table_group_service.ensure_session_group_state(g.club_id, effective_table_no, new_guest_id)
-
-    # Живой стол в БД (см. models.py::GuestStatus, auth.py::require_guest) —
-    # чтобы список гостей в KJ Panel видел актуальный стол сразу, не
-    # дожидаясь первого заказа этого гостя.
-    guest_status_service.set_table(g.club_id, new_guest_id, effective_table_no)
-
-    token = issue_guest_token(
-        new_guest_id, g.club_id, effective_table_no,
-        current_app.config["GUEST_JWT_SECRET"], current_app.config["GUEST_JWT_TTL_SECONDS"],
-    )
-    return api_ok({
-        # Строкой — см. комментарий в create_session выше.
-        "guest_id": str(new_guest_id), "club_id": g.club_id, "table_no": effective_table_no,
-        "token": token, "table_group_status": table_group_state.status,
-        "account": result.account.to_dict(),
-    })
-
-
-@bp.put("/profile/name")
-@require_guest
-def set_display_name():
-    """
-    Гость задаёт/меняет своё отображаемое имя (запрос пользователя 2026-09,
-    "самопереименование гостя") — это имя видит KJ в списке гостей и в
-    карточке гостя KJ Panel (см. services/guest_directory_service.py)
-    вместо (точнее, в дополнение к) голого номера guest_id. Хранится на
-    постоянном профиле (models.py::GuestAccount.display_name), как и email
-    — поэтому доступно только ПОСЛЕ входа через Google (см. link_google
-    выше): до этого у гостя ещё нет записи, к которой можно привязать имя,
-    тот же принцип, что и у request_vip/add_favorite. Менять можно сколько
-    угодно раз — это не разовая настройка при активации, а именно
-    "переименование".
-    """
-    payload = request.get_json(silent=True) or {}
-    raw_name = payload.get("display_name")
-
-    if not isinstance(raw_name, str):
-        return api_error(400, "VALIDATION_ERROR", "display_name обязателен и должен быть строкой")
-
-    name = raw_name.strip()
-    if not name:
-        return api_error(400, "VALIDATION_ERROR", "Имя не может быть пустым")
-    if len(name) > guest_account_service.MAX_DISPLAY_NAME_LEN:
-        return api_error(
-            400, "VALIDATION_ERROR",
-            f"Имя не должно быть длиннее {guest_account_service.MAX_DISPLAY_NAME_LEN} символов",
-        )
-
-    account = guest_account_service.set_display_name(g.club_id, g.guest_id, name)
-    if account is None:
-        return api_error(
-            409, "GOOGLE_LINK_REQUIRED",
-            "Чтобы задать имя, сначала войдите через Google",
-        )
-
-    return api_ok(account.to_dict())
-
-
-@bp.get("/vip/transactions")
-@require_guest
-def list_vip_transactions():
-    """
-    Старое: handlers/vip.py::vip_finances (аудит-отчёт по Finance/cashback
-    history) — 4 отдельные секции по типу с промежуточными итогами,
-    Telegram-сообщение. Здесь по решению — единая хронологическая лента
-    (мобильный React-список), одним запросом, включая ручные корректировки
-    KJ (topup/manual_debit), которые в старом боте гостю не были видны
-    вообще (аудит, найденный баг №7 по VIP-пополнению).
-
-    ?days=N — необязательный период (как старые кнопки
-    сегодня/неделя/месяц), без параметра — последние `limit` операций без
-    ограничения по дате.
-    """
-    days = request.args.get("days", type=int)
-    transactions = vip_service.list_transactions(g.club_id, g.guest_id, days=days)
-    return api_ok([
-        {
-            "id": tx.id,
-            "amount": float(tx.amount),
-            "type": tx.type,
-            "description": tx.description,
-            "order_id": tx.order_id,
-            "created_at": tx.created_at.isoformat() if tx.created_at else None,
-        }
-        for tx in transactions
-    ])
-
-
-@bp.post("/favorites")
-@require_guest
-def add_favorite():
-    """Старое: handlers/client.py::order_favorite (аудит п.3). Здесь без
-    привязки к каталогу песен (его пока нет, см. отчёт п.1) — песня
-    сохраняется как есть."""
-    payload = request.get_json(silent=True) or {}
-    song_title = payload.get("song_title")
-    artist = payload.get("artist")
-    service_id = payload.get("service_id")
-
-    if not song_title or not isinstance(song_title, str):
-        return api_error(400, "VALIDATION_ERROR", "song_title обязателен")
-    if service_id is not None:
-        if not isinstance(service_id, int):
-            return api_error(400, "VALIDATION_ERROR", "service_id должен быть числом")
-        service = db.session.get(Service, service_id)
-        if service is None or service.club_id != g.club_id:
-            return api_error(404, "SERVICE_NOT_FOUND", "Услуга не найдена")
-
-    favorite = vip_service.add_favorite(g.club_id, g.guest_id, song_title, artist, service_id)
-    return api_ok(favorite.to_dict(), status_code=201)
-
-
-@bp.get("/favorites")
-@require_guest
-def list_favorites():
-    favorites = vip_service.list_favorites(g.club_id, g.guest_id)
-    return api_ok([f.to_dict() for f in favorites])
-
-
-@bp.delete("/favorites/<int:favorite_id>")
-@require_guest
-def delete_favorite(favorite_id):
-    result = vip_service.remove_favorite(g.club_id, g.guest_id, favorite_id)
-    if result.outcome == "not_found":
-        return api_error(404, "FAVORITE_NOT_FOUND", "Не найдено")
-    if result.outcome == "forbidden":
-        return api_error(403, "FORBIDDEN", "Это не ваше избранное")
-    return api_ok({"deleted": True})
-
-
-@bp.post("/favorites/<int:favorite_id>/reorder")
-@require_guest
-def reorder_favorite(favorite_id):
-    """Старое: handlers/client.py|vip.py::fav_reorder (аудит п.3-4) —
-    "повторный заказ" в старой системе — это и есть заказ из избранного,
-    отдельного экрана истории с кнопкой "заказать снова" не было.
-
-    Тот же шлюз группового стола, что и в create_order выше — заказ из
-    избранного создаёт настоящий Order за столом гостя, поэтому проверка
-    членства обязательна и здесь, а не только в основном пути заказа.
-
-    ТЗ п.45: тот же гейт "без стола заказ недоступен" и "без Google заказ
-    недоступен", что и в create_order.
-    """
-    if g.table_no is None:
-        return api_error(409, "TABLE_REQUIRED", "Чтобы заказать песню, сначала выберите стол")
-
-    if guest_account_service.get_by_guest_id(g.club_id, g.guest_id) is None:
-        return api_error(409, "GOOGLE_LINK_REQUIRED", "Чтобы заказать песню, сначала войдите через Google")
-
-    if not table_group_service.is_member(g.club_id, g.table_no, g.guest_id):
-        return api_error(
-            403, "TABLE_ACCESS_REQUIRED",
-            "У вас нет доступа к заказам за этим столом — нужно быть одобренным участником группы",
-        )
-
-    guest_type, _vip = _guest_type_and_vip(g.club_id, g.guest_id)
-    guest_type = guest_type or ("no_table" if g.table_no is None else "client")
-    max_active = current_app.config["MAX_ACTIVE_SONGS_PER_GUEST"]
-
-    result = vip_service.reorder_favorite(
-        g.club_id, g.guest_id, g.table_no, guest_type, favorite_id, max_active,
-    )
-    if result.outcome == "not_found":
-        return api_error(404, "FAVORITE_NOT_FOUND", "Не найдено")
-    if result.outcome == "forbidden":
-        return api_error(403, "FORBIDDEN", "Это не ваше избранное")
-    if result.outcome == "limit_reached":
-        return api_error(
-            409, "ACTIVE_SONGS_LIMIT",
-            f"Можно иметь не более {max_active} заказов одновременно — дождитесь, пока сыграет текущий",
-        )
-
-    emit_order_created(result.order)
-    return api_ok(result.order.to_dict(), status_code=201)
-
-
-@bp.post("/order/<int:order_id>/replace")
-@require_guest
-def replace_order(order_id):
-    """
-    Замена песни в уже созданном заказе (старое: handlers/client.py
-    order_action/order_replace/replace_svc_execute — согласованная и
-    утверждённая пользователем спецификация замены песни).
-
-    club_id/guest_id берутся ТОЛЬКО из проверенного токена (g.*), как и в
-    create_order выше — владелец заказа проверяется в vdj_service.replace_order,
-    HTTP-слой лишь маппит её outcome на коды ответа.
-    """
-    payload = request.get_json(silent=True) or {}
-    song_title = payload.get("song_title")
-    artist = payload.get("artist")
-    service_id = payload.get("service_id")
-
-    if not song_title or not isinstance(song_title, str):
-        return api_error(400, "VALIDATION_ERROR", "song_title обязателен")
-    if service_id is not None and not isinstance(service_id, int):
-        return api_error(400, "VALIDATION_ERROR", "service_id должен быть числом")
-
-    order, outcome = vdj_service.replace_order(
-        order_id, g.guest_id, g.club_id, song_title, artist, service_id,
-    )
-
-    if outcome == "not_found":
-        return api_error(404, "ORDER_NOT_FOUND", "Заказ не найден")
-    if outcome == "forbidden":
-        return api_error(403, "FORBIDDEN", "Это не ваш заказ")
-    if outcome == "not_allowed":
-        return api_error(
-            409, "REPLACE_NOT_ALLOWED",
-            "Эту песню уже нельзя заменить — заказ обрабатывается или скоро прозвучит",
-        )
-    if outcome == "service_not_found":
-        return api_error(404, "SERVICE_NOT_FOUND", "Услуга не найдена")
-
-    return api_ok(order.to_dict())
-
-
-# ДОБАВЛЕНО (2026-09-20, жалоба пользователя "нет возможности удалить /
-# заменить / сменить категорию" в "Мои заказы"): раньше гость мог только
-# заменить песню в заказе (replace_order выше) или ждать решения KJ —
-# отменить свой собственный ещё не сыгранный заказ самостоятельно было
-# нельзя. Разрешённые статусы — см. vdj_service.CANCELABLE_BY_GUEST_STATUSES
-# (те же PENDING/QUEUED, что и у замены песни).
-@bp.post("/order/<int:order_id>/cancel")
-@require_guest
-def cancel_order(order_id):
-    """Гость отменяет свой заказ, пока он ещё не сыгран (см.
-    vdj_service.cancel_order_by_guest) — владелец заказа проверяется там
-    же, HTTP-слой только маппит outcome на коды ответа."""
-    order, outcome = vdj_service.cancel_order_by_guest(order_id, g.guest_id, g.club_id)
-
-    if outcome == "not_found":
-        return api_error(404, "ORDER_NOT_FOUND", "Заказ не найден")
-    if outcome == "forbidden":
-        return api_error(403, "FORBIDDEN", "Это не ваш заказ")
-    if outcome == "not_allowed":
-        return api_error(
-            409, "CANCEL_NOT_ALLOWED",
-            "Этот заказ уже нельзя отменить — он обрабатывается или уже сыгран",
-        )
-
-    return api_ok(order.to_dict())
-
-
-@bp.get("/orders")
-@require_guest
-def list_my_orders():
-    """
-    Заказы этого же гостя (той же анонимной сессии) в этом клубе.
-
-    can_replace — вычисляется здесь же (по утверждённой матрице замены песни,
-    см. vdj_service.can_replace_order), а не отдельным эндпоинтом: фронтенду
-    нужно решить, показывать ли кнопку "Заменить" уже в списке заказов, без
-    лишнего round-trip на каждую строку.
-
-    ?days=N — необязательный фильтр по периоду (старое: handlers/vip.py
-    ::vip_order_history, только для VIP, аудит по "Фильтрация истории
-    заказов"). Здесь доступно всем ролям — это не новая бизнес-логика, а
-    следствие того, что /orders в новой архитектуре и так один общий
-    эндпоинт для всех, старое разделение по ролям для этого экрана не
-    переносилось. Фильтруем по created_at (когда заказан), а не completed_at
-    — иначе из ленты пропадали бы ещё не сыгранные заказы текущего периода
-    (completed_at у них NULL), что было бы регрессией: гость смотрит на
-    "мои заказы" как на живой список, а не только на историю сыгранного.
-    Сравнение — timezone-aware datetime (тот же приём, что и в
-    vip_service.list_transactions), без старого бага со строковым
-    DATE('now', ...) и без бага отображения UTC как локального времени.
-
-    Отклонённые (rejected) и с ошибкой (error) заказы сюда намеренно не
-    попадают (решение пользователя, живой тест 2026-09): гостю в его
-    собственном списке они не нужны и только захламляют историю — он видит
-    там только то, что ещё в очереди/играется, и то, что уже спето. У KJ в
-    его собственной панели эти заказы по-прежнему видны как обычно, этот
-    фильтр касается только эндпоинта гостя.
-
-    waiting_position (доп. ТЗ "KJ Pro", запрос пользователя 2026-09-18) —
-    номер места (с 1) в невидимом для KJ ожидании, если заказ превышает
-    лимит песен на стол (см. docstring services/table_board_service.py::
-    get_waiting_positions) — null у заказа, который уже виден KJ на
-    карточке стола (в очереди, ждёт решения) или не привязан к столу
-    вообще.
-    """
-    query = Order.query.filter_by(club_id=g.club_id, telegram_user_id=g.guest_id).filter(
-        Order.status.notin_([STATUS_REJECTED, STATUS_ERROR])
-    )
-    days = request.args.get("days", type=int)
-    if days is not None:
-        from datetime import datetime, timedelta, timezone
-        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
-        query = query.filter(Order.created_at >= cutoff)
-    orders = query.order_by(Order.created_at.asc()).all()
-    vdj = get_vdj_client(g.club_id)
-    waiting_positions = table_board_service.get_waiting_positions(g.club_id, g.guest_id)
-    # Запрос пользователя 2026-09-19: номер места гостя в ОБЩЕЙ очереди
-    # клуба (по всем столам) — см. docstring
-    # table_board_service.get_club_queue_positions. Пересчитывается заново
-    # при каждом опросе, поэтому список "Мои заказы" сам покажет, как номер
-    # уменьшается по ходу вечера, без отдельных действий гостя.
-    queue_positions = table_board_service.get_club_queue_positions(g.club_id)
-    result = []
-    for order in orders:
-        data = order.to_dict()
-        data["can_replace"] = vdj_service.can_replace_order(order, vdj)
-        data["waiting_position"] = waiting_positions.get(order.id)
-        data["queue_position"] = queue_positions.get(order.id)
-        result.append(data)
-    return api_ok(result)
-
-
-def _require_table(f):
-    """Общая проверка для всех /table-group/* эндпоинтов ниже — они имеют
-    смысл только у гостя со столом (Role 5 эта механика не касается,
-    утверждённое решение)."""
-    from functools import wraps
-
-    @wraps(f)
-    def wrapper(*args, **kwargs):
-        if g.table_no is None:
-            return api_error(400, "NO_TABLE", "У вас нет стола — групповой стол недоступен")
-        return f(*args, **kwargs)
-    return wrapper
-
-
-@bp.get("/table-group")
-@require_guest
-@_require_table
-def get_table_group():
-    """
-    Состояние группового стола гостя — участники (в порядке входа, кто
-    админ) и, только если сам вызывающий админ, список ожидающих заявок на
-    вход (аналог старого table_group_manage, bot.py:1064-1098, но без
-    сокрытия самого факта существования группы от не-админов — им тоже
-    нужно видеть список участников и свою кнопку "Покинуть стол").
-    """
-    view = table_group_service.get_group_view(g.club_id, g.table_no, g.guest_id)
-    if view.outcome == "no_group":
-        return api_ok({"group": None, "members": [], "pending_requests": [], "is_admin": False})
-
-    return api_ok({
-        "group": view.group.to_dict(),
-        "is_admin": view.group.admin_guest_id == g.guest_id,
-        "members": [
-            {**m.to_dict(), "is_admin": m.guest_id == view.group.admin_guest_id}
-            for m in view.members
-        ],
-        "pending_requests": [r.to_dict() for r in view.pending_requests],
-    })
-
-
-@bp.post("/table-group/request-join")
-@require_guest
-@_require_table
-def request_table_group_join():
-    """
-    Явный повторный запрос присоединения — например, после того как гостя
-    кикнули, он сам вышел, или его заявку отклонили (table_group_status
-    "not_joined" в /me, см. выше). В отличие от POST /api/guest/session, НЕ
-    выдаёт новый guest_id/токен — гость не должен терять историю своих
-    заказов ради того, чтобы попроситься обратно. Просто повторяет ту же
-    атомарную логику ensure_session_group_state под уже существующей
-    личностью (той же, что и раньше — быть может, снова станет админом,
-    если стол за это время опустел).
-    """
-    state = table_group_service.ensure_session_group_state(g.club_id, g.table_no, g.guest_id)
-    return api_ok({"status": state.status})
-
-
-@bp.post("/table-group/join-requests/<int:request_id>/approve")
-@require_guest
-@_require_table
-def approve_table_join_request(request_id):
-    """Только текущий админ стола (bot.py:1000-1003) — авторизация внутри
-    table_group_service.approve_join_request по admin_guest_id из
-    TableGroup, а не по значению из тела запроса."""
-    result = table_group_service.approve_join_request(
-        g.club_id, g.table_no, g.guest_id, request_id, current_app.config["MAX_GROUP_SIZE"],
-    )
-    if result.outcome == "not_found":
-        return api_error(404, "REQUEST_NOT_FOUND", "Заявка не найдена")
-    if result.outcome == "forbidden":
-        return api_error(403, "FORBIDDEN", "Только админ стола может одобрять заявки")
-    if result.outcome == "already_decided":
-        return api_error(409, "ALREADY_DECIDED", "Заявка уже обработана")
-    if result.outcome == "table_full":
-        return api_error(409, "TABLE_FULL", "Стол уже заполнен — заявка автоматически отклонена")
-    return api_ok(result.request.to_dict())
-
-
-@bp.post("/table-group/join-requests/<int:request_id>/reject")
-@require_guest
-@_require_table
-def reject_table_join_request(request_id):
-    result = table_group_service.reject_join_request(g.club_id, g.table_no, g.guest_id, request_id)
-    if result.outcome == "not_found":
-        return api_error(404, "REQUEST_NOT_FOUND", "Заявка не найдена")
-    if result.outcome == "forbidden":
-        return api_error(403, "FORBIDDEN", "Только админ стола может отклонять заявки")
-    if result.outcome == "already_decided":
-        return api_error(409, "ALREADY_DECIDED", "Заявка уже обработана")
-    return api_ok(result.request.to_dict())
-
-
-@bp.post("/table-group/kick/<int:target_guest_id>")
-@require_guest
-@_require_table
-def kick_table_group_member(target_guest_id):
-    """Настоящее удаление участника — НОВАЯ реализация (в старом коде
-    кнопка "Выгнать" на самом деле передавала права админа, реального кика
-    не было, см. аудит-отчёт по Групповому столу, утверждённое решение)."""
-    result = table_group_service.kick_member(g.club_id, g.table_no, g.guest_id, target_guest_id)
-    if result.outcome == "forbidden":
-        return api_error(403, "FORBIDDEN", "Только админ стола может убирать участников")
-    if result.outcome == "cannot_target_self":
-        return api_error(400, "CANNOT_KICK_SELF", "Нельзя выгнать самого себя — используйте выход")
-    if result.outcome == "not_a_member":
-        return api_error(404, "NOT_A_MEMBER", "Этот гость не состоит в группе")
-    return api_ok({"kicked": True})
-
-
-@bp.post("/table-group/transfer/<int:target_guest_id>")
-@require_guest
-@_require_table
-def transfer_table_group_admin(target_guest_id):
-    """Отдельное действие — перенос РАБОЧЕЙ старой механики set_table_admin
-    (bot.py:1108-1141, там ошибочно подписанной как кик), утверждённое
-    решение: держим отдельно от настоящего кика выше."""
-    result = table_group_service.transfer_admin(g.club_id, g.table_no, g.guest_id, target_guest_id)
-    if result.outcome == "forbidden":
-        return api_error(403, "FORBIDDEN", "Только текущий админ стола может передать права")
-    if result.outcome == "cannot_target_self":
-        return api_error(400, "VALIDATION_ERROR", "Вы уже админ стола")
-    if result.outcome == "not_a_member":
-        return api_error(404, "NOT_A_MEMBER", "Этот гость не состоит в группе")
-    return api_ok({"transferred": True})
-
-
-@bp.post("/table-group/leave")
-@require_guest
-@_require_table
-def leave_table_group():
-    """Самостоятельный выход — НОВАЯ реализация (в старом коде это были
-    нерабочие мёртвые строки локализации, ни одного обработчика, см. аудит,
-    утверждённое решение). При выходе админа права переходят старейшему
-    оставшемуся участнику; если участников не осталось — группа удаляется
-    (table_group_service._remove_member_and_reassign, 1:1 правильная
-    старая логика unbind_user_table, database.py:394-435)."""
-    result = table_group_service.leave_group(g.club_id, g.table_no, g.guest_id)
-    if result.outcome == "not_a_member":
-        return api_error(404, "NOT_A_MEMBER", "Вы не состоите в группе этого стола")
-    return api_ok({"left": True})
-
-
-@bp.post("/chat")
-@require_guest
-def send_chat_message():
-    """
-    Гость пишет KJ (ТЗ §20, §49). Работает только если у клуба включён
-    чат (Club.chat_enabled — 1:1 перенос старого venues.chat_enabled) —
-    так же, как в старом боте пункт меню чата вообще не показывался, если
-    флаг выключен; здесь дополнительно проверяем на сервере, а не только
-    прячем кнопку (старый баг класса "проверка только видимостью кнопки",
-    который новый ТЗ явно требует не повторять — см. PHASE1_AUDIT, §54/§61).
-    """
-    club = db.session.get(Club, g.club_id)
-    if club is None or not club.chat_enabled:
-        return api_error(403, "CHAT_DISABLED", "Чат отключён в этом клубе")
-
-    payload = request.get_json(silent=True) or {}
-    message_text = payload.get("message_text")
-    if not message_text or not isinstance(message_text, str):
-        return api_error(400, "VALIDATION_ERROR", "message_text обязателен")
-
-    message = ChatMessage(
-        club_id=g.club_id,
-        telegram_user_id=g.guest_id,
-        table_no=g.table_no,
-        from_guest=True,
-        message_text=message_text,
-    )
-    db.session.add(message)
-    db.session.commit()
-
-    emit_chat_message(message)
-
-    return api_ok(message.to_dict(), status_code=201)
-
-
-@bp.get("/chat")
-@require_guest
-def list_chat_messages():
-    """Вся переписка этого гостя с KJ, в обе стороны, по времени."""
-    messages = (
-        ChatMessage.query
-        .filter_by(club_id=g.club_id, telegram_user_id=g.guest_id)
-        .order_by(ChatMessage.created_at.asc())
-        .all()
-    )
-    return api_ok([m.to_dict() for m in messages])
-
-
-@bp.get("/queue")
-@require_guest
-def queue():
-    """
-    Живая очередь VirtualDJ клуба — единая для всех ролей (это требование
-    было с самого начала задачи: очередь видна и KJ Pro, и Guest App, без
-    различий по источнику заказа, ТЗ §22/§35). По структуре ответа
-    идентична /api/kj/queue/<club_id>.
-    """
-    vdj = get_vdj_client(g.club_id)
-    items = vdj.get_queue()
-    return api_ok([
-        {
-            "vdj_item_id": i.vdj_item_id,
-            "song_title": i.song_title,
-            "artist": i.artist,
-            "table_no": i.table_no,
-        }
-        for i in items
-    ])
+import { useCallback, useEffect, useRef, useState } from "react";
+import { GOOGLE_CLIENT_ID, api, ApiError, resolveToken, storeToken } from "./api";
+import { connectSocket } from "./socket";
+import "./App.css";
+
+// Фоновый опрос живой очереди VirtualDJ — та же идея, что и POLL_QUEUE_MS в
+// Guest App (guest-app/src/App.jsx): WebSocket ("queue_updated") ловит
+// изменения, сделанные ЧЕРЕЗ наш Backend (confirm_order), но ничего не знает
+// о песне, которую KJ добавил или переставил прямо в самом VirtualDJ, минуя
+// Guest App — такие изменения увидит только опрос. Согласовано с
+// пользователем (план "Шаг 4: добавляем постоянный polling live queue в
+// KJ Pro") — без перезагрузки страницы и без действий KJ.
+// Основные обновления очереди приходят мгновенно через WebSocket-событие
+// queue_updated — этот опрос лишь подстраховка на случай пропущенного
+// события. При настоящем VirtualDJ (мост через компьютер KJ) слишком частый
+// опрос вместе с гостевым приложением перегружает мост и подвешивает всю
+// систему (живой инцидент 2026-09-14 после включения VDJ_ADAPTER=bridge) —
+// 10с достаточно для подстраховки.
+const POLL_QUEUE_MS = 10000;
+
+// До 2026-09-18 здесь была карточка заявки (OrderCard) со списком
+// подтверждения через drag-and-drop в "Живую очередь VirtualDJ" — доп. ТЗ
+// "KJ Pro" (запрос пользователя "только на карточке") убрало этот список с
+// экрана "Заказы" целиком в пользу мест на карточках столов (см.
+// OrdersBoard ниже) с кнопками "Принять"/"Отклонить" прямо на месте —
+// решение по каждому месту принимается на карточке его стола.
+
+// KJ Pro: смена стола/категории и удаление песни, уже стоящей в очереди
+// (запрос пользователя, после того как выяснилось, что перестановку порядка
+// в самой очереди VirtualDJ пока не сделать надёжно — см. обсуждение про
+// vdj_bridge/driver.py — договорились начать с этих трёх пунктов, порядок
+// песен отложен). Категории подтягиваются тем же способом, что и в
+// CategoriesPanel (см. её reload()) — свой собственный небольшой список
+// внутри компонента, отдельный от него.
+function QueueTable({ queue, token, clubId }) {
+  const [categories, setCategories] = useState([]);
+  const [tableDrafts, setTableDrafts] = useState({});
+  const [busyKey, setBusyKey] = useState(null);
+  const [rowErrors, setRowErrors] = useState({});
+  // Черновики "Стол"/"Категория" для позиций БЕЗ заказа (order_id == null —
+  // KJ добавил песню прямо в VirtualDJ, минуя Guest App, см. докстринг
+  // tableCellLabel выше). Ключ — vdj_item_id, а не order_id, потому что у
+  // таких позиций order_id ещё нет вообще (запрос пользователя 2026-09-14,
+  // после первого живого теста: 3 песни, добавленные прямо в VirtualDJ,
+  // попали в живую очередь KJ Pro, но назначить им стол было нельзя).
+  const [claimDrafts, setClaimDrafts] = useState({});
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .listCategories(token, clubId)
+      .then((data) => {
+        if (!cancelled) setCategories(data);
+      })
+      .catch(() => {
+        // Список категорий здесь не критичен — если не загрузился, просто
+        // не покажем выпадающий список смены категории в этот раз.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token, clubId]);
+
+  function draftTableFor(item) {
+    return item.order_id in tableDrafts ? tableDrafts[item.order_id] : String(item.table_no ?? "");
+  }
+
+  function setRowError(orderId, message) {
+    setRowErrors((prev) => ({ ...prev, [orderId]: message }));
+  }
+
+  async function handleSaveTable(item) {
+    const raw = draftTableFor(item).trim();
+    const tableNo = raw === "" ? null : Number(raw);
+    if (raw !== "" && (!Number.isInteger(tableNo) || tableNo <= 0)) {
+      setRowError(item.order_id, "Стол — положительное число или пусто");
+      return;
+    }
+    setBusyKey(`table-${item.order_id}`);
+    setRowError(item.order_id, null);
+    try {
+      await api.updateOrderTable(token, item.order_id, tableNo);
+      setTableDrafts((prev) => {
+        const next = { ...prev };
+        delete next[item.order_id];
+        return next;
+      });
+    } catch (err) {
+      setRowError(item.order_id, err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  async function handleChangeCategory(item, rawValue) {
+    const serviceId = rawValue === "" ? null : Number(rawValue);
+    setBusyKey(`category-${item.order_id}`);
+    setRowError(item.order_id, null);
+    try {
+      await api.updateOrderCategory(token, item.order_id, serviceId);
+    } catch (err) {
+      setRowError(item.order_id, err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  function claimDraftFor(item) {
+    // По умолчанию сразу подставляем первую категорию (запрос пользователя
+    // 2026-09-14 — "Без категории" убрана из списка совсем, см. select
+    // ниже), чтобы то, что видно в форме, совпадало с тем, что реально
+    // отправится при нажатии "Присвоить".
+    const fallbackServiceId = categories[0] ? String(categories[0].id) : "";
+    return claimDrafts[item.vdj_item_id] || { table: "", serviceId: fallbackServiceId };
+  }
+
+  function setClaimDraft(item, patch) {
+    setClaimDrafts((prev) => ({
+      ...prev,
+      [item.vdj_item_id]: { ...claimDraftFor(item), ...patch },
+    }));
+  }
+
+  async function handleClaim(item) {
+    const draft = claimDraftFor(item);
+    const rawTable = draft.table.trim();
+    const tableNo = rawTable === "" ? null : Number(rawTable);
+    const errorKey = `claim-${item.vdj_item_id}`;
+    if (rawTable !== "" && (!Number.isInteger(tableNo) || tableNo <= 0)) {
+      setRowError(errorKey, "Стол — положительное число или пусто");
+      return;
+    }
+    const serviceId = draft.serviceId === "" ? null : Number(draft.serviceId);
+    setBusyKey(errorKey);
+    setRowError(errorKey, null);
+    try {
+      await api.claimQueueItem(token, {
+        vdjItemId: item.vdj_item_id,
+        songTitle: item.song_title,
+        artist: item.artist,
+        tableNo,
+        serviceId,
+      });
+      setClaimDrafts((prev) => {
+        const next = { ...prev };
+        delete next[item.vdj_item_id];
+        return next;
+      });
+    } catch (err) {
+      setRowError(errorKey, err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  async function handleRemove(item) {
+    const key = item.vdj_item_id ?? `no-id-${item.order_id}`;
+    setBusyKey(`remove-${key}`);
+    if (item.order_id != null) setRowError(item.order_id, null);
+    try {
+      await api.removeFromVdjQueue(token, item.vdj_item_id);
+    } catch (err) {
+      if (item.order_id != null) setRowError(item.order_id, err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  return (
+    <div className="queue-dropzone">
+      {queue.length === 0 ? (
+        <p className="empty-hint">Очередь VirtualDJ пока пуста.</p>
+      ) : (
+        // Вертикальный список вместо таблицы — тот же стиль строк, что и на
+        // экране "Категории" (.categories-list/.category-row), по просьбе
+        // пользователя. Порядок песен внутри самой очереди VirtualDJ пока не
+        // меняется отсюда — это отдельная задача (KJ-09, отложена).
+        <ul className="queue-list-vertical">
+          {queue.map((item, idx) => (
+            <li
+              key={item.vdj_item_id ?? `no-id-${idx}`}
+              className={`queue-row${item.orphaned ? " queue-row--orphaned" : ""}`}
+            >
+              <span className="queue-row__position">{idx + 1}</span>
+              <span className="queue-row__song">🎵 {item.song_title}</span>
+              <span className="queue-row__artist">{item.artist ? `🎤 ${item.artist}` : "—"}</span>
+              {item.orphaned && (
+                <span className="queue-row__orphaned-badge" title="Эта песня больше не найдена в самом VirtualDJ — например, из-за перезапуска сервера. Можно только удалить.">
+                  ⚠ нет в VDJ
+                </span>
+              )}
+              {item.order_id != null ? (
+                <>
+                  <span className="queue-row__edit">
+                    <input
+                      type="number"
+                      min="1"
+                      className="queue-row__table-input"
+                      placeholder="Стол"
+                      value={draftTableFor(item)}
+                      onChange={(event) =>
+                        setTableDrafts((prev) => ({ ...prev, [item.order_id]: event.target.value }))
+                      }
+                    />
+                    <button
+                      type="button"
+                      className="btn-link"
+                      disabled={busyKey === `table-${item.order_id}`}
+                      onClick={() => handleSaveTable(item)}
+                    >
+                      ✓
+                    </button>
+                  </span>
+                  {categories.length > 0 && (
+                    // "Без категории" убран из списка (запрос пользователя
+                    // 2026-09-14 — категория есть всегда). Если у заказа
+                    // категория исторически не назначена (service_id ==
+                    // null, заказы до этого изменения), показываем первую
+                    // из списка — но это только отображение, само по себе
+                    // оно ничего не сохраняет, пока KJ не тронет select.
+                    <select
+                      className="queue-row__category-select"
+                      value={item.service_id ?? categories[0]?.id ?? ""}
+                      disabled={busyKey === `category-${item.order_id}`}
+                      onChange={(event) => handleChangeCategory(item, event.target.value)}
+                    >
+                      {categories.map((category) => (
+                        <option key={category.id} value={category.id}>
+                          {category.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </>
+              ) : (
+                // Позиция реально есть в живой очереди VirtualDJ, но заказа
+                // на неё нет (KJ добавил песню прямо в VirtualDJ) — раньше
+                // тут был просто текст "без заказа" без возможности что-то
+                // назначить (запрос пользователя 2026-09-14 — сделать это
+                // возможным, см. claim_vdj_queue_item в vdj_service.py).
+                <span className="queue-row__edit">
+                  <input
+                    type="number"
+                    min="1"
+                    className="queue-row__table-input"
+                    placeholder="Стол"
+                    value={claimDraftFor(item).table}
+                    onChange={(event) => setClaimDraft(item, { table: event.target.value })}
+                  />
+                  {categories.length > 0 && (
+                    // "Без категории" убран из списка (запрос пользователя
+                    // 2026-09-14 — категория есть всегда), см. claimDraftFor
+                    // выше про то, чем заполняется значение по умолчанию.
+                    <select
+                      className="queue-row__category-select"
+                      value={claimDraftFor(item).serviceId}
+                      onChange={(event) => setClaimDraft(item, { serviceId: event.target.value })}
+                    >
+                      {categories.map((category) => (
+                        <option key={category.id} value={category.id}>
+                          {category.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  <button
+                    type="button"
+                    className="btn-link"
+                    disabled={busyKey === `claim-${item.vdj_item_id}`}
+                    onClick={() => handleClaim(item)}
+                  >
+                    ✓ Присвоить
+                  </button>
+                </span>
+              )}
+              <button
+                type="button"
+                className="btn-link queue-row__remove"
+                disabled={busyKey === `remove-${item.vdj_item_id ?? `no-id-${item.order_id}`}`}
+                onClick={() => handleRemove(item)}
+              >
+                🗑 Удалить
+              </button>
+              {item.order_id != null && rowErrors[item.order_id] && (
+                <p className="error-text queue-row__error">{rowErrors[item.order_id]}</p>
+              )}
+              {item.order_id == null && rowErrors[`claim-${item.vdj_item_id}`] && (
+                <p className="error-text queue-row__error">{rowErrors[`claim-${item.vdj_item_id}`]}</p>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+// KJ Pro, экран "Добавить песню" — KJ сам находит песню и указывает стол,
+// минуя гостя и экран "Заказы" целиком (полное обоснование решений — см.
+// add_manual_song() в backend/services/vdj_service.py). Сейчас это просто
+// поля названия/исполнителя, введённые вручную, той же цепочкой, что уже
+// сегодня добавляет песню по гостевому заказу (поиск в файлах VirtualDJ ->
+// добавление). Список из нескольких найденных вариантов на выбор — то, о
+// чём просил пользователь — здесь сознательно НЕ сделан: сначала нужно
+// вживую проверить, умеет ли VirtualDJ вообще отдавать больше одного
+// найденного файла за раз (открытый вопрос, ещё не проверен).
+function AddManualSongForm({ onSubmit, busy, error }) {
+  const [songTitle, setSongTitle] = useState("");
+  const [artist, setArtist] = useState("");
+  const [tableNo, setTableNo] = useState("");
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    const parsedTable = Number(tableNo);
+    if (!songTitle.trim() || !Number.isFinite(parsedTable) || parsedTable <= 0) return;
+
+    const ok = await onSubmit({ songTitle: songTitle.trim(), artist: artist.trim(), tableNo: parsedTable });
+    if (ok) {
+      setSongTitle("");
+      setArtist("");
+      setTableNo("");
+    }
+  }
+
+  return (
+    <form className="manual-add-form" onSubmit={handleSubmit}>
+      <input
+        type="text"
+        placeholder="Название песни"
+        value={songTitle}
+        onChange={(e) => setSongTitle(e.target.value)}
+        disabled={busy}
+      />
+      <input
+        type="text"
+        placeholder="Исполнитель (необязательно)"
+        value={artist}
+        onChange={(e) => setArtist(e.target.value)}
+        disabled={busy}
+      />
+      <input
+        type="number"
+        min="1"
+        placeholder="Стол"
+        value={tableNo}
+        onChange={(e) => setTableNo(e.target.value)}
+        disabled={busy}
+        className="manual-add-form__table"
+      />
+      <button
+        type="submit"
+        className="btn btn--accent"
+        disabled={busy || !songTitle.trim() || !tableNo}
+      >
+        {busy ? "Добавляем…" : "➕ Добавить в очередь"}
+      </button>
+      {error && <div className="banner banner--error">{error}</div>}
+    </form>
+  );
+}
+
+// Block D KJ Pro — заявки на VIP-статус (аудит handlers/kj.py:1291-1401,
+// vip_request_approve/reject) + список VIP-клиентов с ручными операциями
+// над балансом/кэшбэком (kj.py:2133-2229). ТЗ п.45 (финальная единая
+// модель входа): ручное назначение VIP "из ничего" без заявки гостя, и
+// одноразовый access_code, который оно выдавало, — удалены целиком вместе
+// со всем механизмом access_code/redeem (см. отчёт по п.45 и routes/kj.py
+// ::list_vip_clients). VIP теперь появляется только через заявку гостя,
+// уже подтвердившего личность через Google, + одобрение здесь.
+function VipPanel({ token, clubId, socket }) {
+  const [pending, setPending] = useState(null);
+  const [clients, setClients] = useState(null);
+  const [loadError, setLoadError] = useState(null);
+  const [actionError, setActionError] = useState(null);
+  const [busyKey, setBusyKey] = useState(null);
+  const [amountDrafts, setAmountDrafts] = useState({});
+  const [cashbackDrafts, setCashbackDrafts] = useState({});
+
+  async function reload() {
+    try {
+      const [pendingData, clientsData] = await Promise.all([
+        api.listVipRequests(token, clubId, "pending"),
+        api.listVipClients(token, clubId),
+      ]);
+      setPending(pendingData);
+      setClients(clientsData);
+      setLoadError(null);
+    } catch (err) {
+      setLoadError(err instanceof ApiError ? err.message : String(err));
+    }
+  }
+
+  useEffect(() => {
+    reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clubId]);
+
+  useEffect(() => {
+    if (!socket) return undefined;
+    const onCreated = (vipRequest) => {
+      setPending((prev) => {
+        const list = prev || [];
+        return list.some((r) => r.id === vipRequest.id) ? list : [...list, vipRequest];
+      });
+    };
+    socket.on("vip_request_created", onCreated);
+    return () => {
+      socket.off("vip_request_created", onCreated);
+    };
+  }, [socket]);
+
+  async function handleApprove(requestId) {
+    setBusyKey(`req-${requestId}`);
+    setActionError(null);
+    try {
+      await api.approveVipRequest(token, requestId);
+      await reload();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  async function handleReject(requestId) {
+    setBusyKey(`req-${requestId}`);
+    setActionError(null);
+    try {
+      await api.rejectVipRequest(token, requestId);
+      await reload();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  async function handleTopup(vipClientId) {
+    const amount = Number(amountDrafts[vipClientId]);
+    if (!amount || amount <= 0) return;
+    setBusyKey(`amt-${vipClientId}`);
+    setActionError(null);
+    try {
+      await api.topupVipBalance(token, vipClientId, amount);
+      await reload();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  async function handleDebit(vipClientId) {
+    const amount = Number(amountDrafts[vipClientId]);
+    if (!amount || amount <= 0) return;
+    setBusyKey(`amt-${vipClientId}`);
+    setActionError(null);
+    try {
+      await api.debitVipBalance(token, vipClientId, amount);
+      await reload();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  async function handleSetBalance(vipClientId) {
+    const amount = Number(amountDrafts[vipClientId]);
+    if (!Number.isFinite(amount) || amount < 0) return;
+    setBusyKey(`amt-${vipClientId}`);
+    setActionError(null);
+    try {
+      await api.setVipBalance(token, vipClientId, amount);
+      await reload();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  async function handleUpdateCashback(vipClientId) {
+    const value = Number(cashbackDrafts[vipClientId]);
+    if (!Number.isFinite(value) || value < 0 || value > 100) return;
+    setBusyKey(`cb-${vipClientId}`);
+    setActionError(null);
+    try {
+      await api.updateVipCashback(token, vipClientId, value);
+      await reload();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  if (loadError) return <div className="banner banner--error">{loadError}</div>;
+  if (!pending || !clients) return <p className="empty-hint">Загрузка…</p>;
+
+  return (
+    <div className="vip-panel">
+      {actionError && <div className="banner banner--error">{actionError}</div>}
+
+      <section>
+        <h2>Заявки на VIP ({pending.length})</h2>
+        {pending.length === 0 && <p className="empty-hint">Новых заявок нет.</p>}
+        <ul className="vip-list">
+          {pending.map((r) => (
+            <li key={r.id} className="vip-row">
+              <span>Стол {r.table_no ?? "—"} · гость #{r.telegram_user_id}</span>
+              <span className="vip-row__actions">
+                <button
+                  type="button" className="btn btn--accent" disabled={busyKey === `req-${r.id}`}
+                  onClick={() => handleApprove(r.id)}
+                >
+                  Одобрить
+                </button>
+                <button
+                  type="button" className="btn btn--reject" disabled={busyKey === `req-${r.id}`}
+                  onClick={() => handleReject(r.id)}
+                >
+                  Отклонить
+                </button>
+              </span>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section>
+        <h2>VIP-клиенты ({clients.length})</h2>
+        {clients.length === 0 && <p className="empty-hint">VIP-клиентов пока нет.</p>}
+        <ul className="vip-list">
+          {clients.map((c) => (
+            <li key={c.id} className="vip-row vip-row--client">
+              <div>
+                Гость #{c.telegram_user_id} · баланс <strong>{c.balance} MDL</strong>
+              </div>
+              <div className="vip-row__actions">
+                <input
+                  className="vip-amount-input"
+                  type="number"
+                  placeholder="Сумма"
+                  value={amountDrafts[c.id] ?? ""}
+                  onChange={(e) => setAmountDrafts((prev) => ({ ...prev, [c.id]: e.target.value }))}
+                />
+                <button type="button" className="btn-link" disabled={busyKey === `amt-${c.id}`} onClick={() => handleTopup(c.id)}>
+                  ➕ Начислить
+                </button>
+                <button type="button" className="btn-link" disabled={busyKey === `amt-${c.id}`} onClick={() => handleDebit(c.id)}>
+                  ➖ Списать
+                </button>
+                <button type="button" className="btn-link" disabled={busyKey === `amt-${c.id}`} onClick={() => handleSetBalance(c.id)}>
+                  🔄 Установить
+                </button>
+              </div>
+              <div className="vip-row__actions">
+                <input
+                  className="vip-amount-input"
+                  type="number"
+                  placeholder="Кэшбэк %"
+                  value={cashbackDrafts[c.id] ?? c.cashback_percent}
+                  onChange={(e) => setCashbackDrafts((prev) => ({ ...prev, [c.id]: e.target.value }))}
+                />
+                <button type="button" className="btn-link" disabled={busyKey === `cb-${c.id}`} onClick={() => handleUpdateCashback(c.id)}>
+                  Сохранить кэшбэк
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </section>
+    </div>
+  );
+}
+
+// Экран категорий песни (доп. ТЗ "KJ Pro", пункты KJ-01/KJ-03/KJ-07) —
+// категория это переиспользованная модель Service ("услуга/тариф"), её же
+// видит гость при заказе (routes/guest.py::list_services, не менялось);
+// здесь роль 2 (KJ) сама ведёт список — добавляет, меняет
+// название/описание/цену, включает "бесплатно" для конкретной категории
+// (галочка is_free — отдельный переключатель, НЕ совпадает с общим клубным
+// "Бесплатным вечером" из KJ-02, тот будет сделан отдельно) и удаляет
+// неиспользуемые. Деньги за категорию по факту не проходят через эту
+// систему как настоящий платёж (решение пользователя) — цена нужна для
+// учёта/отчётности. Если у клуба ещё нет ни одной категории, бэкенд сам
+// подставит набор по умолчанию из реальных данных старого бота (см.
+// backend/services/category_service.py::DEFAULT_CATEGORIES) — экран не
+// должен показывать пустой список при первом открытии.
+function CategoriesPanel({ token, clubId }) {
+  const [categories, setCategories] = useState(null);
+  const [loadError, setLoadError] = useState(null);
+  const [actionError, setActionError] = useState(null);
+  const [busyKey, setBusyKey] = useState(null);
+  const [drafts, setDrafts] = useState({});
+  const [newDraft, setNewDraft] = useState({ name: "", description: "", price: "", isFree: false });
+
+  async function reload() {
+    try {
+      const data = await api.listCategories(token, clubId);
+      setCategories(data);
+      setDrafts({});
+      setLoadError(null);
+    } catch (err) {
+      setLoadError(err instanceof ApiError ? err.message : String(err));
+    }
+  }
+
+  useEffect(() => {
+    reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clubId]);
+
+  function draftFor(category) {
+    return (
+      drafts[category.id] || {
+        name: category.name,
+        description: category.description || "",
+        price: String(category.price),
+        isFree: category.is_free,
+      }
+    );
+  }
+
+  function updateDraft(categoryId, category, patch) {
+    setDrafts((prev) => {
+      const base =
+        prev[categoryId] || {
+          name: category.name,
+          description: category.description || "",
+          price: String(category.price),
+          isFree: category.is_free,
+        };
+      return { ...prev, [categoryId]: { ...base, ...patch } };
+    });
+  }
+
+  async function handleSave(category) {
+    const draft = draftFor(category);
+    setBusyKey(`save-${category.id}`);
+    setActionError(null);
+    try {
+      await api.updateCategory(token, clubId, category.id, {
+        name: draft.name,
+        description: draft.description,
+        price: draft.price,
+        is_free: draft.isFree,
+      });
+      await reload();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  async function handleDelete(categoryId) {
+    setBusyKey(`del-${categoryId}`);
+    setActionError(null);
+    try {
+      await api.deleteCategory(token, clubId, categoryId);
+      await reload();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  async function handleCreate(event) {
+    event.preventDefault();
+    if (!newDraft.name.trim() || newDraft.price === "") return;
+    setBusyKey("create");
+    setActionError(null);
+    try {
+      await api.createCategory(token, clubId, {
+        name: newDraft.name.trim(),
+        description: newDraft.description.trim(),
+        price: newDraft.price,
+        isFree: newDraft.isFree,
+      });
+      setNewDraft({ name: "", description: "", price: "", isFree: false });
+      await reload();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  // KJ-02 "Бесплатный вечер" — по решению пользователя реализовано здесь же,
+  // одной кнопкой поверх уже существующих галочек "бесплатно" у каждой
+  // категории (is_free, KJ-07): "Выбрать все" одним действием проставляет
+  // (или снимает) is_free сразу всем категориям клуба — так роль 2 включает
+  // "весь вечер бесплатно" и выключает обратно, без отдельного клубного
+  // переключателя.
+  const allFree = categories != null && categories.length > 0 && categories.every((c) => c.is_free);
+
+  async function handleToggleAllFree(checked) {
+    setBusyKey("free-evening");
+    setActionError(null);
+    try {
+      await Promise.all(
+        categories
+          .filter((c) => c.is_free !== checked)
+          .map((c) => api.updateCategory(token, clubId, c.id, { is_free: checked }))
+      );
+      await reload();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  if (loadError) return <div className="banner banner--error">{loadError}</div>;
+  if (!categories) return <p className="empty-hint">Загрузка…</p>;
+
+  return (
+    <div className="categories-panel">
+      {actionError && <div className="banner banner--error">{actionError}</div>}
+
+      <section className="free-evening-banner">
+        <h2>🎉 Бесплатный вечер</h2>
+        <label className="category-row__free">
+          <input
+            type="checkbox"
+            checked={allFree}
+            disabled={busyKey === "free-evening"}
+            onChange={(e) => handleToggleAllFree(e.target.checked)}
+          />
+          {busyKey === "free-evening" ? "Применяем…" : "Выбрать все — сделать все категории бесплатными"}
+        </label>
+      </section>
+
+      <section>
+        <h2>Категории песни ({categories.length})</h2>
+        <ul className="categories-list">
+          {categories.map((category) => {
+            const draft = draftFor(category);
+            const saving = busyKey === `save-${category.id}`;
+            const deleting = busyKey === `del-${category.id}`;
+            return (
+              <li key={category.id} className="category-row">
+                <input
+                  className="category-row__name"
+                  type="text"
+                  value={draft.name}
+                  onChange={(e) => updateDraft(category.id, category, { name: e.target.value })}
+                  disabled={saving || deleting}
+                />
+                <input
+                  className="category-row__description"
+                  type="text"
+                  placeholder="Описание"
+                  value={draft.description}
+                  onChange={(e) => updateDraft(category.id, category, { description: e.target.value })}
+                  disabled={saving || deleting}
+                />
+                <input
+                  className="category-row__price"
+                  type="number"
+                  min="0"
+                  value={draft.price}
+                  onChange={(e) => updateDraft(category.id, category, { price: e.target.value })}
+                  disabled={saving || deleting}
+                />
+                <label className="category-row__free">
+                  <input
+                    type="checkbox"
+                    checked={draft.isFree}
+                    onChange={(e) => updateDraft(category.id, category, { isFree: e.target.checked })}
+                    disabled={saving || deleting}
+                  />
+                  Бесплатно
+                </label>
+                <div className="category-row__actions">
+                  <button
+                    type="button" className="btn-link" disabled={saving || deleting}
+                    onClick={() => handleSave(category)}
+                  >
+                    {saving ? "Сохраняем…" : "💾 Сохранить"}
+                  </button>
+                  <button
+                    type="button" className="btn btn--reject" disabled={saving || deleting}
+                    onClick={() => handleDelete(category.id)}
+                  >
+                    {deleting ? "Удаляем…" : "🗑 Удалить"}
+                  </button>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      </section>
+
+      <section>
+        <h2>Добавить категорию</h2>
+        <form className="category-add-form" onSubmit={handleCreate}>
+          <input
+            type="text"
+            placeholder="Название"
+            value={newDraft.name}
+            onChange={(e) => setNewDraft((prev) => ({ ...prev, name: e.target.value }))}
+            disabled={busyKey === "create"}
+          />
+          <input
+            type="text"
+            placeholder="Описание (необязательно)"
+            value={newDraft.description}
+            onChange={(e) => setNewDraft((prev) => ({ ...prev, description: e.target.value }))}
+            disabled={busyKey === "create"}
+          />
+          <input
+            type="number"
+            min="0"
+            placeholder="Цена"
+            value={newDraft.price}
+            onChange={(e) => setNewDraft((prev) => ({ ...prev, price: e.target.value }))}
+            disabled={busyKey === "create"}
+          />
+          <label className="category-row__free">
+            <input
+              type="checkbox"
+              checked={newDraft.isFree}
+              onChange={(e) => setNewDraft((prev) => ({ ...prev, isFree: e.target.checked }))}
+              disabled={busyKey === "create"}
+            />
+            Бесплатно
+          </label>
+          <button
+            type="submit" className="btn btn--accent"
+            disabled={busyKey === "create" || !newDraft.name.trim() || newDraft.price === ""}
+          >
+            {busyKey === "create" ? "Добавляем…" : "➕ Добавить категорию"}
+          </button>
+        </form>
+      </section>
+    </div>
+  );
+}
+
+// Настройки столов (доп. ТЗ "KJ Pro", KJ-04) — в старом боте это была
+// настройка самого KJ (handlers/kj.py: tables_count_edit/
+// tables_settings_save), не админа: у каждого клуба своё количество
+// столов. Здесь тот же смысл — одно число, пустое значение (null) означает
+// "не ограничено" (пока KJ явно не задал число, как было по умолчанию и в
+// старом боте до первой настройки).
+//
+// 2026-09-17, запрос пользователя: рядом со столами появилось второе поле —
+// сколько песен от одного стола может стоять в очереди одновременно.
+// Оба поля сохраняются вместе, одной кнопкой (см. handleSave ниже) —
+// это подстраховка от рассинхронизации бэкенда и фронтенда при раздельном
+// деплое (backend/routes/kj.py::update_table_settings меняет только те
+// ключи, что реально пришли в запросе, но раз оба поля тут в одной форме,
+// они и уходят вместе одним PUT).
+function TableSettingsPanel({ token, clubId }) {
+  const [tableCountDraft, setTableCountDraft] = useState("");
+  const [songsPerTableDraft, setSongsPerTableDraft] = useState("");
+  const [loadError, setLoadError] = useState(null);
+  const [actionError, setActionError] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  async function reload() {
+    try {
+      const data = await api.getTableSettings(token, clubId);
+      setTableCountDraft(data.table_count == null ? "" : String(data.table_count));
+      setSongsPerTableDraft(data.songs_per_table == null ? "" : String(data.songs_per_table));
+      setLoadError(null);
+    } catch (err) {
+      setLoadError(err instanceof ApiError ? err.message : String(err));
+    }
+  }
+
+  useEffect(() => {
+    reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clubId]);
+
+  function parseDraft(draft) {
+    const trimmed = draft.trim();
+    if (trimmed === "") return { ok: true, value: null };
+    const value = Number(trimmed);
+    if (!Number.isInteger(value) || value < 1) return { ok: false, value: null };
+    return { ok: true, value };
+  }
+
+  async function handleSave(event) {
+    event.preventDefault();
+    const tableCount = parseDraft(tableCountDraft);
+    const songsPerTable = parseDraft(songsPerTableDraft);
+    if (!tableCount.ok || !songsPerTable.ok) return;
+
+    setBusy(true);
+    setActionError(null);
+    setSaved(false);
+    try {
+      const data = await api.updateTableSettings(token, clubId, {
+        table_count: tableCount.value,
+        songs_per_table: songsPerTable.value,
+      });
+      setTableCountDraft(data.table_count == null ? "" : String(data.table_count));
+      setSongsPerTableDraft(data.songs_per_table == null ? "" : String(data.songs_per_table));
+      setSaved(true);
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (loadError) return <div className="banner banner--error">{loadError}</div>;
+
+  return (
+    <div className="table-settings-panel">
+      <section>
+        <h2>Настройки столов</h2>
+        <p className="empty-hint">
+          Сколько столов в клубе. Гость не сможет выбрать номер больше этого при входе, KJ — при ручном
+          добавлении песни. Оставьте поле пустым, если ограничивать не нужно.
+        </p>
+        {actionError && <div className="banner banner--error">{actionError}</div>}
+        <form className="table-settings-form" onSubmit={handleSave}>
+          <label className="table-settings-field">
+            <span>Столов в клубе</span>
+            <input
+              type="number"
+              min="1"
+              placeholder="Без ограничения"
+              value={tableCountDraft}
+              onChange={(e) => {
+                setTableCountDraft(e.target.value);
+                setSaved(false);
+              }}
+              disabled={busy}
+            />
+          </label>
+          <label className="table-settings-field">
+            <span>Песен на стол одновременно</span>
+            <input
+              type="number"
+              min="1"
+              placeholder="Не задано"
+              value={songsPerTableDraft}
+              onChange={(e) => {
+                setSongsPerTableDraft(e.target.value);
+                setSaved(false);
+              }}
+              disabled={busy}
+            />
+          </label>
+          <button type="submit" className="btn btn--accent" disabled={busy}>
+            {busy ? "Сохраняем…" : "Сохранить"}
+          </button>
+        </form>
+        {saved && <p className="empty-hint">Сохранено.</p>}
+      </section>
+    </div>
+  );
+}
+
+// Экран "Гости" (запрос пользователя 2026-09): сортировка/фильтр гостей по
+// типу VIP/Простой/Без стола, переход в карточку гостя, блокировка и
+// снятие со стола (реально действующие — см. backend/auth.py::
+// require_guest и models.py::GuestStatus, а не просто отметка в интерфейсе),
+// статистика по вечеру/неделе/месяцу, избранные песни гостя видны в карточке.
+const GUEST_TYPE_FILTERS = [
+  { key: "", label: "Все" },
+  { key: "vip", label: "⭐ VIP" },
+  { key: "client", label: "🙂 Простой" },
+  { key: "no_table", label: "🚪 Без стола" },
+];
+
+const GUEST_TYPE_BADGE = {
+  vip: "⭐ VIP",
+  client: "🙂 Простой",
+  no_table: "🚪 Без стола",
+};
+
+function GuestCard({ token, clubId, guestId, onBack, onChanged }) {
+  const [guest, setGuest] = useState(null);
+  const [loadError, setLoadError] = useState(null);
+  const [actionError, setActionError] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  async function reload() {
+    try {
+      const data = await api.getGuest(token, clubId, guestId);
+      setGuest(data);
+      setLoadError(null);
+    } catch (err) {
+      setLoadError(err instanceof ApiError ? err.message : String(err));
+    }
+  }
+
+  useEffect(() => {
+    reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [guestId]);
+
+  async function handleToggleBlock() {
+    setBusy(true);
+    setActionError(null);
+    try {
+      if (guest.is_blocked) {
+        await api.unblockGuest(token, guestId);
+      } else {
+        await api.blockGuest(token, guestId);
+      }
+      await reload();
+      onChanged?.();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleRemoveTable() {
+    setBusy(true);
+    setActionError(null);
+    try {
+      await api.removeGuestFromTable(token, guestId);
+      await reload();
+      onChanged?.();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // ДОБАВЛЕНО (2026-09-19, запрос пользователя "закрыть стол... убрать со
+  // стола и заблокировать, это всё внутри карточки"): один клик вместо
+  // двух отдельных ("Снять со стола" + "Заблокировать" ниже, они остаются
+  // на месте как есть) — плюс, чего эти две кнопки сами по себе не делали,
+  // отклоняет всё ещё непроигранное с этого стола, чтобы места на табло
+  // "Заказы" реально освободились (см. guest_status_service.close_table).
+  async function handleCloseTable() {
+    setBusy(true);
+    setActionError(null);
+    try {
+      await api.closeGuestTable(token, guestId);
+      await reload();
+      onChanged?.();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="guest-card">
+      <button type="button" className="btn-link" onClick={onBack}>← К списку гостей</button>
+
+      {loadError && <div className="banner banner--error">{loadError}</div>}
+      {!guest && !loadError && <p className="empty-hint">Загрузка…</p>}
+
+      {guest && (
+        <>
+          <h2>
+            {guest.display_name || `Гость #${guest.guest_id}`}{" "}
+            <span className="guest-type-badge">{GUEST_TYPE_BADGE[guest.guest_type] || guest.guest_type}</span>
+            {guest.is_blocked && <span className="guest-type-badge guest-type-badge--blocked">🚫 Заблокирован</span>}
+          </h2>
+          {/* Имя — самоназвание гостя (запрос пользователя 2026-09), ID
+          показываем отдельно всегда, чтобы не терять однозначную ссылку на
+          гостя, если имя выглядит неоднозначно (совпадает у двух гостей). */}
+          {guest.display_name && <p className="empty-hint">ID гостя: {guest.guest_id}</p>}
+          {guest.email && <p className="empty-hint">Почта: {guest.email}</p>}
+          <p className="empty-hint">
+            Стол: {guest.table_no ?? "—"}
+            {guest.last_song_title && (
+              <> · последняя песня: {guest.last_artist ? `${guest.last_artist} — ` : ""}{guest.last_song_title}</>
+            )}
+          </p>
+
+          {guest.vip_balance != null && (
+            <p className="empty-hint">
+              Баланс: <strong>{guest.vip_balance} MDL</strong> · кэшбэк {guest.vip_cashback_percent}%
+            </p>
+          )}
+
+          <div className="vip-stat-row"><span>Заказов за вечер</span><strong>{guest.orders_evening}</strong></div>
+          <div className="vip-stat-row"><span>Заказов за неделю</span><strong>{guest.orders_week}</strong></div>
+          <div className="vip-stat-row"><span>Заказов за месяц</span><strong>{guest.orders_month}</strong></div>
+
+          {actionError && <div className="banner banner--error">{actionError}</div>}
+
+          <div className="vip-row__actions" style={{ marginTop: 10 }}>
+            <button type="button" className="btn btn--reject" disabled={busy} onClick={handleToggleBlock}>
+              {guest.is_blocked ? "Разблокировать" : "🚫 Заблокировать"}
+            </button>
+            {guest.table_no != null && (
+              <button type="button" className="btn-link" disabled={busy} onClick={handleRemoveTable}>
+                Снять со стола
+              </button>
+            )}
+            {!guest.is_blocked && (
+              <button type="button" className="btn btn--complete" disabled={busy} onClick={handleCloseTable}>
+                🚪 Закрыть стол
+              </button>
+            )}
+          </div>
+
+          <h3 style={{ marginTop: 16 }}>Избранные песни ({guest.favorites.length})</h3>
+          {guest.favorites.length === 0 && <p className="empty-hint">Пока ничего не добавлено.</p>}
+          {guest.favorites.length > 0 && (
+            <ul className="song-search__results">
+              {guest.favorites.map((f) => (
+                <li key={f.id} style={{ padding: "8px 12px" }}>
+                  🎵 {f.artist ? `${f.artist} — ${f.song_title}` : f.song_title}
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function GuestsPanel({ token, clubId }) {
+  const [typeFilter, setTypeFilter] = useState("");
+  const [guests, setGuests] = useState(null);
+  const [loadError, setLoadError] = useState(null);
+  const [selectedGuestId, setSelectedGuestId] = useState(null);
+
+  async function reload() {
+    try {
+      const data = await api.listGuests(token, clubId, typeFilter || undefined);
+      setGuests(data);
+      setLoadError(null);
+    } catch (err) {
+      setLoadError(err instanceof ApiError ? err.message : String(err));
+    }
+  }
+
+  useEffect(() => {
+    reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clubId, typeFilter]);
+
+  if (selectedGuestId != null) {
+    return (
+      <div className="guests-panel">
+        <GuestCard
+          token={token}
+          clubId={clubId}
+          guestId={selectedGuestId}
+          onBack={() => setSelectedGuestId(null)}
+          onChanged={reload}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="guests-panel">
+      <section>
+        <h2>Гости</h2>
+        <div className="guest-type-filters">
+          {GUEST_TYPE_FILTERS.map((f) => (
+            <button
+              key={f.key || "all"}
+              type="button"
+              className={`btn-link${typeFilter === f.key ? " guest-type-filters__active" : ""}`}
+              onClick={() => setTypeFilter(f.key)}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+
+        {loadError && <div className="banner banner--error">{loadError}</div>}
+        {!guests && !loadError && <p className="empty-hint">Загрузка…</p>}
+        {guests && guests.length === 0 && <p className="empty-hint">Гостей пока нет.</p>}
+
+        {guests && guests.length > 0 && (
+          <ul className="vip-list">
+            {guests.map((guest) => (
+              <li key={guest.guest_id} className="vip-row vip-row--client">
+                <div>
+                  {guest.display_name || `Гость #${guest.guest_id}`} · {GUEST_TYPE_BADGE[guest.guest_type] || guest.guest_type}
+                  {guest.is_blocked && <span className="guest-type-badge guest-type-badge--blocked"> 🚫 Заблокирован</span>}
+                  <br />
+                  <span className="empty-hint">
+                    {guest.display_name && <>ID {guest.guest_id} · </>}
+                    Стол: {guest.table_no ?? "—"} · за вечер {guest.orders_evening} · за неделю {guest.orders_week} · за месяц {guest.orders_month}
+                    {guest.vip_balance != null && <> · баланс {guest.vip_balance} MDL</>}
+                  </span>
+                </div>
+                <div className="vip-row__actions">
+                  <button type="button" className="btn-link" onClick={() => setSelectedGuestId(guest.guest_id)}>
+                    Открыть карточку →
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </div>
+  );
+}
+
+// Доп. ТЗ "KJ Pro", запрос пользователя 2026-09-18 — обсуждение перед
+// реализацией, см. backend/services/table_board_service.py за полным
+// докстрингом механики. Место на карточке, которое ждёт решения KJ (ещё
+// не подтверждено/отклонено, включая "error" — не удалось добавить в
+// VirtualDJ, KJ может нажать "Принять" ещё раз, чтобы попробовать снова),
+// показывает две маленькие кнопки прямо на себе, а не как раньше — списком
+// заявок с drag-and-drop (см. OrderCard выше, из которого этот список
+// подтверждения на экране "Заказы" теперь убран целиком, по решению
+// пользователя "только на карточке").
+const BOARD_SLOT_NEEDS_DECISION = new Set(["pending", "processing", "error"]);
+
+function OrdersBoardSlot({ slot, categories, busy, onAccept, onReject, onComplete, onChangeCategory, onOpenGuest }) {
+  if (slot == null) {
+    return <div className="table-slot table-slot--empty">Свободен</div>;
+  }
+  const needsDecision = BOARD_SLOT_NEEDS_DECISION.has(slot.status);
+  // Запрос пользователя 2026-09-18: подтверждение заказа больше не ставит
+  // песню в VirtualDJ само (KJ ставит сам, вручную) — "queued" здесь значит
+  // "KJ принял заказ", а не "песня реально в очереди VirtualDJ". Место
+  // освобождается только явной кнопкой "Готово" (см. complete_order() в
+  // backend/services/vdj_service.py), а не само по себе.
+  const isQueued = slot.status === "queued";
+  const categoryName = categories.find((c) => c.id === slot.service_id)?.name;
+  // ИСПРАВЛЕНО (2026-09-19, жалоба пользователя "не сделано изменение
+  // категории песни"): смена категории у уже принятого заказа была только
+  // в QueueTable (строки живой очереди VirtualDJ) — но после отвязки
+  // confirm_order() от VirtualDJ (см. коммит выше) заказ обычно сидит в
+  // статусе "queued" на этой самой карточке места ЗАДОЛГО до того, как KJ
+  // нажмёт "Готово" и он попадёт в живую очередь. До этой правки сменить
+  // категорию в этот промежуток было нельзя — на карточке было только
+  // название категории текстом, без выбора. Бэкенд (PUT
+  // /order/<id>/category, см. update_order_category в vdj_service.py)
+  // всегда это позволял для queued-заказов — не хватало только кнопки
+  // здесь. QueueTable и её выпадающий список остаются как есть — тот
+  // экран отвечает уже за позиции в самой очереди VirtualDJ (после
+  // "Готово" или чужие, добавленные мимо приложения).
+  const canEditCategory = isQueued && categories.length > 0;
+  // ДОБАВЛЕНО (2026-09-19, запрос пользователя "оплата происходит только у
+  // випа, если человек не вип то у него и не должна появляться кнопка
+  // готово"): "Готово" теперь и списывает деньги по тарифу (см.
+  // complete_order/charge_at_completion на бэкенде) — для обычных гостей
+  // списывать нечего, а значит и кнопке тут делать нечего. Их заказы со
+  // стола убираются не по одной песне, а разом кнопкой "Закрыть стол" из
+  // карточки гостя (см. GuestCard.handleCloseTable), когда компания ушла.
+  const isVip = slot.guest_type === "vip";
+  const canComplete = isQueued && isVip;
+  return (
+    <div className={`table-slot table-slot--${needsDecision ? "pending" : "queued"}`}>
+      <button type="button" className="table-slot__body" onClick={() => onOpenGuest(slot.guest_id)}>
+        <div className="table-slot__song">🎵 {slot.song_title}</div>
+        {slot.artist && <div className="table-slot__artist">🎤 {slot.artist}</div>}
+        {!canEditCategory && categoryName && <div className="table-slot__category">{categoryName}</div>}
+        {isQueued && <div className="table-slot__badge">✅ Принят</div>}
+        {slot.status === "error" && slot.error_message && (
+          <div className="table-slot__error">{slot.error_message}</div>
+        )}
+      </button>
+      {canEditCategory && (
+        <select
+          className="table-slot__category-select"
+          value={slot.service_id ?? categories[0]?.id ?? ""}
+          disabled={busy}
+          onClick={(event) => event.stopPropagation()}
+          onChange={(event) => onChangeCategory(slot.order_id, Number(event.target.value))}
+        >
+          {categories.map((category) => (
+            <option key={category.id} value={category.id}>
+              {category.name}
+            </option>
+          ))}
+        </select>
+      )}
+      {needsDecision && (
+        <div className="table-slot__actions">
+          <button type="button" className="btn btn--accept" disabled={busy} onClick={() => onAccept(slot.order_id)}>
+            ✅ Принять
+          </button>
+          <button type="button" className="btn btn--reject" disabled={busy} onClick={() => onReject(slot.order_id)}>
+            ❌ Отклонить
+          </button>
+        </div>
+      )}
+      {/* ДОБАВЛЕНО (2026-09-20, жалоба пользователя "нет возможности удалить"
+      — то же самое, что и в Guest App "Мои заказы"): раньше у уже принятого
+      (queued) заказа не было способа убрать его по отдельности — только
+      "Готово" для VIP (списывает деньги, не подходит для отмены) или разом
+      "Закрыть стол" со всей карточки гостя. Кнопка ниже вызывает тот же
+      PUT /order/<id>/reject, что и "❌ Отклонить" выше для pending —
+      backend (vdj_service.reject_order) теперь явно разрешает это и для
+      STATUS_QUEUED (см. её докстринг), деньги не списывает и не возвращает,
+      потому что списание происходит только в момент "Готово". */}
+      {isQueued && (
+        <div className="table-slot__actions">
+          {canComplete && (
+            <button type="button" className="btn btn--complete" disabled={busy} onClick={() => onComplete(slot.order_id)}>
+              🏁 Готово
+            </button>
+          )}
+          <button type="button" className="btn btn--reject" disabled={busy} onClick={() => onReject(slot.order_id)}>
+            🗑 Убрать
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function OrdersBoard({ token, clubId, socket, onOpenGuest }) {
+  const [board, setBoard] = useState(null);
+  const [categories, setCategories] = useState([]);
+  const [loadError, setLoadError] = useState(null);
+  const [actionError, setActionError] = useState(null);
+  const [busyOrderId, setBusyOrderId] = useState(null);
+
+  async function reload() {
+    try {
+      const data = await api.getOrdersBoard(token, clubId);
+      setBoard(data);
+      setLoadError(null);
+    } catch (err) {
+      setLoadError(err instanceof ApiError ? err.message : String(err));
+    }
+  }
+
+  useEffect(() => {
+    reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clubId]);
+
+  useEffect(() => {
+    api
+      .listCategories(token, clubId)
+      .then(setCategories)
+      .catch(() => {
+        // Не критично — просто не покажем название категории в этот раз
+        // (см. тот же приём в QueueTable выше).
+      });
+  }, [token, clubId]);
+
+  // Живые обновления — те же события, что уже используются на этом экране
+  // для списка заявок и живой очереди VirtualDJ (см. эффект в App() ниже);
+  // здесь просто целиком перезапрашиваем доску, тем же приёмом, что и
+  // handleConfirm/handleReject в App() при ошибке.
+  useEffect(() => {
+    if (!socket) return undefined;
+    socket.on("order_created", reload);
+    socket.on("order_updated", reload);
+    socket.on("order_confirmed", reload);
+    socket.on("order_rejected", reload);
+    socket.on("queue_updated", reload);
+    return () => {
+      socket.off("order_created", reload);
+      socket.off("order_updated", reload);
+      socket.off("order_confirmed", reload);
+      socket.off("order_rejected", reload);
+      socket.off("queue_updated", reload);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [socket]);
+
+  async function handleAccept(orderId) {
+    setBusyOrderId(orderId);
+    setActionError(null);
+    try {
+      await api.confirmOrder(token, orderId);
+      await reload();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+      await reload();
+    } finally {
+      setBusyOrderId(null);
+    }
+  }
+
+  async function handleReject(orderId) {
+    setBusyOrderId(orderId);
+    setActionError(null);
+    try {
+      await api.rejectOrder(token, orderId);
+      await reload();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+      await reload();
+    } finally {
+      setBusyOrderId(null);
+    }
+  }
+
+  // Запрос пользователя 2026-09-18: единственный способ освободить занятое
+  // место на карточке для принятого (не через VirtualDJ) заказа — та же
+  // схема busy/reload, что и у handleAccept/handleReject выше.
+  async function handleComplete(orderId) {
+    setBusyOrderId(orderId);
+    setActionError(null);
+    try {
+      await api.completeOrder(token, orderId);
+      await reload();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+      await reload();
+    } finally {
+      setBusyOrderId(null);
+    }
+  }
+
+  // ДОБАВЛЕНО (2026-09-19, жалоба пользователя "не сделано изменение
+  // категории песни"): смена категории прямо на карточке места, пока заказ
+  // ещё "queued" (см. onChangeCategory в OrdersBoardSlot выше) — та же
+  // схема busy/reload, что и у остальных действий на доске.
+  async function handleChangeCategory(orderId, serviceId) {
+    setBusyOrderId(orderId);
+    setActionError(null);
+    try {
+      await api.updateOrderCategory(token, orderId, serviceId);
+      await reload();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+      await reload();
+    } finally {
+      setBusyOrderId(null);
+    }
+  }
+
+  if (loadError) {
+    return <div className="banner banner--error">{loadError}</div>;
+  }
+  if (board == null) {
+    return <p className="empty-hint">Загрузка…</p>;
+  }
+  if (board.length === 0) {
+    return <p className="empty-hint">Сначала задайте число столов клуба на вкладке "Столы".</p>;
+  }
+
+  return (
+    <div className="orders-board">
+      {actionError && <div className="banner banner--error">{actionError}</div>}
+      <div className="orders-board__grid">
+        {board.map((table) => (
+          <div className="table-card" key={table.table_no}>
+            <div className="table-card__title">Стол {table.table_no}</div>
+            <div className="table-card__slots">
+              {table.slots.map((slot, index) => (
+                <OrdersBoardSlot
+                  // order_id не подходит на ключ — свободное место (null)
+                  // повторяется у каждого стола, номер места стабилен
+                  key={index}
+                  slot={slot}
+                  categories={categories}
+                  busy={slot != null && busyOrderId === slot.order_id}
+                  onAccept={handleAccept}
+                  onReject={handleReject}
+                  onComplete={handleComplete}
+                  onChangeCategory={handleChangeCategory}
+                  onOpenGuest={onOpenGuest}
+                />
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// 2026-09: "доступ KJ Pro определяется Google-аккаунтом клуба" — основной
+// способ входа (см. docstring KJOperator в models.py и auth.py::
+// issue_kj_google_token), показывается только когда resolveToken() не
+// нашёл токен ни в ссылке, ни в localStorage. Ссылка от бота (/kjpanel)
+// по-прежнему сама кладёт токен в localStorage при первом же открытии
+// (см. resolveToken) и минует этот экран целиком — она остаётся резервным
+// способом, полностью равноценным по правам после входа.
+function KjLoginScreen({ onLoggedIn }) {
+  const [error, setError] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const buttonRef = useRef(null);
+
+  async function handleGoogleCredential(response) {
+    setBusy(true);
+    setError(null);
+    try {
+      const { token } = await api.loginWithGoogle({ id_token: response.credential });
+      storeToken(token);
+      onLoggedIn(token);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : String(err));
+      setBusy(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!window.google?.accounts?.id || !buttonRef.current) {
+      setError("Не удалось загрузить вход через Google — проверьте подключение к интернету и обновите страницу");
+      return;
+    }
+    window.google.accounts.id.initialize({
+      client_id: GOOGLE_CLIENT_ID,
+      callback: handleGoogleCredential,
+    });
+    window.google.accounts.id.renderButton(buttonRef.current, {
+      theme: "outline", size: "large", text: "signin_with", locale: "ru", width: 280,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <div className="app-shell centered">
+      <h1>KJ Panel</h1>
+      <p>Войдите через Google-аккаунт клуба — основной способ входа.</p>
+      {error && <p className="error-text">{error}</p>}
+      <div ref={buttonRef} />
+      {busy && <p>Входим…</p>}
+      <p className="app-header__subtitle">
+        Резервный способ: ссылка из команды /kjpanel в Telegram-боте.
+      </p>
+    </div>
+  );
+}
+
+// Панель обзора связи (запрос пользователя 2026-09-17: "небольшая панель
+// обзора для kj, везде ли есть подключение"). Три звена одной цепочки
+// "гость заказал -> KJ увидел -> песня попала в VirtualDJ" — раньше KJ
+// узнавал о разрыве где-то в середине только когда песня просто не
+// появлялась в очереди, без единой подсказки, где именно оборвалось.
+// Каждый кружок кликабелен — по клику разворачивается пояснение обычными
+// словами, без терминов вроде "WebSocket"/"namespace" (KJ не техник).
+const OVERVIEW_ITEMS = [
+  {
+    key: "guest_kj",
+    label: "Гость → KJ",
+    explain: (ok, unknown) =>
+      unknown
+        ? "Проверяем связь панели с сервером…"
+        : ok
+        ? "Ваша панель на связи с сервером — новые заказы гостей и обновления очереди приходят сразу, без задержки."
+        : "Панель потеряла связь с сервером — заказы гостей могут не появляться сами собой. Обновите страницу (F5).",
+  },
+  {
+    key: "kj_bridge",
+    label: "Сервер → Мост",
+    explain: (ok, unknown) =>
+      unknown
+        ? "Проверяем, подключена ли программа-мост к серверу…"
+        : ok
+        ? "Программа-мост (на компьютере, где стоит VirtualDJ) на связи с сервером — подтверждённые заказы могут доходить до VirtualDJ."
+        : "Программа-мост не подключена к серверу. Откройте программу-мост на компьютере с VirtualDJ и нажмите «Подключиться» — иначе подтверждённые заказы не попадут в очередь VirtualDJ.",
+  },
+  {
+    key: "bridge_vdj",
+    label: "Мост → VirtualDJ",
+    explain: (ok, unknown) =>
+      unknown
+        ? "Мост ещё не проверил связь с VirtualDJ — подождите несколько секунд после подключения."
+        : ok
+        ? "Мост видит VirtualDJ на своём компьютере — песни должны добавляться в очередь нормально."
+        : "Мост не видит VirtualDJ. Проверьте на компьютере с VirtualDJ: сама VirtualDJ запущена и в ней включён Network Control Plugin (в настройках VirtualDJ).",
+  },
+];
+
+function OverviewDot({ state }) {
+  // state: true (зелёный) | false (красный) | "unknown" (серый — ещё не знаем)
+  const cls =
+    state === "unknown" ? "overview-dot--unknown" : state ? "overview-dot--ok" : "overview-dot--off";
+  return <span className={`overview-dot ${cls}`} aria-hidden="true" />;
+}
+
+function ConnectionOverviewPanel({ connected, bridgeStatus }) {
+  const [openKey, setOpenKey] = useState(null);
+
+  // bridgeStatus === null — ещё не пришёл ни разу (первые мгновения после
+  // входа, пока не отработал ни начальный GET, ни первое событие сокета).
+  const bridgeConnectedState = bridgeStatus == null ? "unknown" : bridgeStatus.connected;
+  const vdjReachableState =
+    bridgeStatus == null || !bridgeStatus.connected || bridgeStatus.vdj_reachable == null
+      ? "unknown"
+      : bridgeStatus.vdj_reachable;
+
+  const states = {
+    guest_kj: connected,
+    kj_bridge: bridgeConnectedState,
+    bridge_vdj: vdjReachableState,
+  };
+
+  return (
+    <div className="overview-panel">
+      <div className="overview-panel__row">
+        {OVERVIEW_ITEMS.map((item) => (
+          <button
+            key={item.key}
+            type="button"
+            className={`overview-item${openKey === item.key ? " overview-item--open" : ""}`}
+            onClick={() => setOpenKey((prev) => (prev === item.key ? null : item.key))}
+          >
+            <OverviewDot state={states[item.key]} />
+            <span className="overview-item__label">{item.label}</span>
+            <span className="overview-item__info" aria-hidden="true">ⓘ</span>
+          </button>
+        ))}
+      </div>
+      {openKey && (
+        <div className="overview-panel__explain">
+          {(() => {
+            const item = OVERVIEW_ITEMS.find((i) => i.key === openKey);
+            const state = states[openKey];
+            return item.explain(state === true, state === "unknown");
+          })()}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function App() {
+  const [token, setToken] = useState(() => resolveToken());
+  const [me, setMe] = useState(null);
+  const [queue, setQueue] = useState([]);
+  const [loadError, setLoadError] = useState(null);
+  const [connected, setConnected] = useState(false);
+  // Панель обзора связи (запрос пользователя 2026-09-17) — null, пока не
+  // пришёл ни начальный GET /api/kj/bridge/status, ни первое сокет-событие
+  // "bridge_status"; дальше обновляется живым сокетом без поллинга (тот же
+  // принцип, что и остальные live-обновления панели).
+  const [bridgeStatus, setBridgeStatus] = useState(null);
+  const [manualAddBusy, setManualAddBusy] = useState(false);
+  const [manualAddError, setManualAddError] = useState(null);
+  // 'orders' | 'vip' | 'categories' | 'tables' | 'guests' | 'manual' —
+  // переключение верхнеуровневых экранов (Block D KJ Pro; 'categories'/
+  // 'tables' добавлены доп. ТЗ "KJ Pro", KJ-01/03/07 и KJ-04 соответственно;
+  // 'guests' — запрос пользователя 2026-09, список гостей VIP/Простой/Без
+  // стола с карточкой; 'manual' — запрос пользователя 2026-09-18: форма
+  // "Добавить песню" перенесена с экрана "Заказы" в свой собственный экран,
+  // чтобы разгрузить панель столов).
+  const [view, setView] = useState("orders");
+  // Доп. ТЗ "KJ Pro", запрос пользователя 2026-09-18: клик по месту на
+  // карточке стола проваливается в подробности о гости, тем же компонентом
+  // GuestCard, что и вкладка "Гости" (см. GuestsPanel::selectedGuestId
+  // выше) — здесь свой собственный стейт, потому что это разные экраны.
+  const [boardGuestId, setBoardGuestId] = useState(null);
+  // Реф нужен эффекту ниже (disconnect в cleanup без пересоздания подписок),
+  // а socketInstance в state — чтобы VipPanel мог реагировать на появление
+  // сокета как на обычный проп (читать socketRef.current прямо в JSX во
+  // время рендера запрещено правилами React — оно не гарантирует ре-рендер).
+  const socketRef = useRef(null);
+  const [socketInstance, setSocketInstance] = useState(null);
+
+  useEffect(() => {
+    if (!token) return;
+
+    let cancelled = false;
+
+    async function bootstrap() {
+      let meData;
+      try {
+        meData = await api.me(token);
+        if (cancelled) return;
+        setMe(meData);
+
+        const queueData = await api.getQueue(token, meData.club_id);
+        if (cancelled) return;
+        setQueue(queueData);
+      } catch (err) {
+        if (!cancelled) setLoadError(err instanceof ApiError ? err.message : String(err));
+        return;
+      }
+
+      // Отдельно от основной загрузки (см. докстринг GET /api/kj/bridge/
+      // status в routes/kj.py) — только чтобы показать правильное
+      // состояние ДО первого сокет-события, а не после него. Не критично,
+      // если не удастся: панель обзора просто покажет "проверяем…", пока
+      // не придёт первое событие "bridge_status".
+      try {
+        const status = await api.getBridgeStatus(token, meData.club_id);
+        if (!cancelled) setBridgeStatus(status);
+      } catch {
+        // см. комментарий выше — не критично.
+      }
+    }
+
+    bootstrap();
+
+    const socket = connectSocket(token);
+    socketRef.current = socket;
+
+    socket.on("connect", () => {
+      setConnected(true);
+      // Публикуем инстанс в state здесь, а не синхронно в теле эффекта —
+      // избегаем каскадного ре-рендера прямо во время монтирования
+      // (oxlint react(set-state-in-effect)); VipPanel в любом случае не
+      // рендерится раньше первого успешного connect.
+      setSocketInstance(socket);
+    });
+    socket.on("disconnect", () => setConnected(false));
+
+    // Панель обзора связи: сервер сам рассылает это событие в комнату
+    // клуба при каждом изменении состояния моста (подключился/отключился/
+    // отчитался о VirtualDJ) — см. sockets.py::handle_bridge_connect/
+    // handle_bridge_disconnect/handle_bridge_vdj_status. Никакого поллинга
+    // не нужно, ровно как и для остальных live-обновлений этой панели.
+    socket.on("bridge_status", (payload) => setBridgeStatus(payload));
+
+    // order_created/order_updated/order_confirmed/order_rejected раньше
+    // поддерживали здесь список заявок на подтверждение — он убран с этого
+    // экрана целиком (доп. ТЗ "KJ Pro", запрос пользователя 2026-09-18:
+    // "только на карточке"), теперь эти же события слушает сама OrdersBoard
+    // ниже, у себя.
+
+    socket.on("queue_updated", (payload) => {
+      setQueue(payload.queue || []);
+    });
+
+    return () => {
+      cancelled = true;
+      socket.disconnect();
+      setSocketInstance(null);
+    };
+  }, [token]);
+
+  const refreshQueue = useCallback(async () => {
+    if (!me) return;
+    try {
+      const queueData = await api.getQueue(token, me.club_id);
+      setQueue(queueData);
+    } catch {
+      // Живая очередь — не критично, если один опрос не удался, следующий
+      // тик через POLL_QUEUE_MS подтянет актуальное состояние (тот же
+      // подход, что и в Guest App).
+    }
+  }, [token, me]);
+
+  useEffect(() => {
+    if (!me) return undefined;
+    const id = setInterval(refreshQueue, POLL_QUEUE_MS);
+    return () => clearInterval(id);
+  }, [me, refreshQueue]);
+
+  async function handleAddManualSong({ songTitle, artist, tableNo }) {
+    setManualAddBusy(true);
+    setManualAddError(null);
+    try {
+      // Сокет "queue_updated" (см. emit_queue_updated в add_manual_song(),
+      // backend/services/vdj_service.py) обновит очередь сам, почти сразу
+      // после ответа сервера — отдельно перерисовывать её здесь не нужно.
+      await api.addManualOrder(token, { songTitle, artist, tableNo });
+      return true;
+    } catch (err) {
+      setManualAddError(err instanceof ApiError ? err.message : String(err));
+      return false;
+    } finally {
+      setManualAddBusy(false);
+    }
+  }
+
+  if (!token) {
+    return <KjLoginScreen onLoggedIn={setToken} />;
+  }
+
+  if (loadError) {
+    return (
+      <div className="app-shell centered">
+        <h1>KJ Panel</h1>
+        <p className="error-text">{loadError}</p>
+      </div>
+    );
+  }
+
+  if (!me) {
+    return (
+      <div className="app-shell centered">
+        <p>Загрузка…</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="app-shell">
+      <header className="app-header">
+        <div>
+          <h1>{me.club_name || `Клуб #${me.club_id}`}</h1>
+          <span className="app-header__subtitle">{me.display_name || "KJ"}</span>
+        </div>
+        <span className={`conn-badge ${connected ? "conn-badge--ok" : "conn-badge--off"}`}>
+          {connected ? "● online" : "○ переподключение…"}
+        </span>
+        <div className="app-header__nav">
+          {view !== "orders" && (
+            <button type="button" className="btn-link" onClick={() => setView("orders")}>
+              ← Заказы
+            </button>
+          )}
+          {view !== "manual" && (
+            <button type="button" className="btn-link" onClick={() => setView("manual")}>
+              ➕ Добавить
+            </button>
+          )}
+          {view !== "vip" && (
+            <button type="button" className="btn-link" onClick={() => setView("vip")}>
+              ⭐ VIP
+            </button>
+          )}
+          {view !== "categories" && (
+            <button type="button" className="btn-link" onClick={() => setView("categories")}>
+              🎚 Категории
+            </button>
+          )}
+          {view !== "tables" && (
+            <button type="button" className="btn-link" onClick={() => setView("tables")}>
+              🪑 Столы
+            </button>
+          )}
+          {view !== "guests" && (
+            <button type="button" className="btn-link" onClick={() => setView("guests")}>
+              👥 Гости
+            </button>
+          )}
+        </div>
+      </header>
+
+      <ConnectionOverviewPanel connected={connected} bridgeStatus={bridgeStatus} />
+
+      {view === "vip" ? (
+        <VipPanel token={token} clubId={me.club_id} socket={socketInstance} />
+      ) : view === "categories" ? (
+        <CategoriesPanel token={token} clubId={me.club_id} />
+      ) : view === "tables" ? (
+        <TableSettingsPanel token={token} clubId={me.club_id} />
+      ) : view === "guests" ? (
+        <GuestsPanel token={token} clubId={me.club_id} />
+      ) : view === "manual" ? (
+        <main className="app-main">
+          <section>
+            <h2>Добавить песню</h2>
+            <AddManualSongForm
+              onSubmit={handleAddManualSong}
+              busy={manualAddBusy}
+              error={manualAddError}
+            />
+          </section>
+        </main>
+      ) : boardGuestId != null ? (
+        <div className="app-main">
+          <GuestCard
+            token={token}
+            clubId={me.club_id}
+            guestId={boardGuestId}
+            onBack={() => setBoardGuestId(null)}
+          />
+        </div>
+      ) : (
+        <main className="app-main">
+          <section>
+            <h2>Заказы по столам</h2>
+            <OrdersBoard
+              token={token}
+              clubId={me.club_id}
+              socket={socketInstance}
+              onOpenGuest={setBoardGuestId}
+            />
+          </section>
+
+          <section>
+            <h2>Живая очередь VirtualDJ</h2>
+            <QueueTable queue={queue} token={token} clubId={me.club_id} />
+          </section>
+        </main>
+      )}
+    </div>
+  );
+}
