@@ -2,8 +2,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, GOOGLE_CLIENT_ID, api, loadStoredSession, storeSession } from "./api";
 import "./App.css";
 
+// ДОБАВЛЕНО (2026-09-19, запрос пользователя): раньше "pending" звучал как
+// "Ожидает подтверждения KJ" — гостю казалось, что нужно чьё-то отдельное
+// разрешение. По факту это просто место в общей очереди клуба (см.
+// order.queue_position, backend/services/table_board_service.py::
+// get_club_queue_positions), поэтому статус-функция ниже подставляет номер
+// вместо этого текста, когда он есть — это словарь остаётся только как
+// запасной вариант (queue_position ещё не пришёл, либо статус вне очереди).
 const STATUS_LABELS = {
-  pending: "⏳ Ожидает подтверждения KJ",
+  pending: "🎶 В очереди",
   processing: "⚙️ Обрабатывается",
   queued: "🎶 В очереди",
   playing: "▶️ Играет",
@@ -11,6 +18,20 @@ const STATUS_LABELS = {
   rejected: "❌ Отклонено",
   error: "⚠️ Ошибка, обратитесь к KJ",
 };
+
+// Статусы, для которых заказ ещё не сыгран и место в общей очереди клуба
+// (queue_position) имеет смысл показывать — 1:1 ACTIVE_TABLE_STATUSES на
+// бэкенде (table_board_service.py), кроме "playing" — это старое значение
+// статуса из другого, более раннего пути заказов, у которого своего
+// queue_position не считается.
+const QUEUE_POSITION_STATUSES = ["pending", "processing", "queued", "error"];
+
+function orderStatusLabel(order) {
+  if (QUEUE_POSITION_STATUSES.includes(order.status) && order.queue_position != null) {
+    return `🎶 В очереди — место ${order.queue_position}`;
+  }
+  return STATUS_LABELS[order.status] || order.status;
+}
 
 // Опрос вместо WebSocket — сознательное ограничение первого шага: у
 // Backend пока нет WebSocket-подключения для Guest App (см.
@@ -68,7 +89,7 @@ function OrderRow({
   order, onFavorite, favoriteBusy,
   token, services, isReplacing, onToggleReplace, onReplace, replaceBusy,
 }) {
-  const label = STATUS_LABELS[order.status] || order.status;
+  const label = orderStatusLabel(order);
   return (
     <li className={`order-row status-${order.status}`}>
       <div className="order-row__song">🎵 {order.song_title}</div>
@@ -1162,7 +1183,11 @@ export default function App() {
   const [serviceId, setServiceId] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
-  const [submitOk, setSubmitOk] = useState(false);
+  // ДОБАВЛЕНО (2026-09-19, запрос пользователя): держим не просто "успех
+  // да/нет", а сам номер места в очереди из ответа сервера (order.
+  // queue_position, см. routes/guest.py::create_order) — баннер ниже
+  // показывает именно его, а не текст про ожидание чьего-то подтверждения.
+  const [submitOk, setSubmitOk] = useState(null);
 
   const [orders, setOrders] = useState([]);
   // null = "Все", иначе количество дней (см. ORDER_HISTORY_PERIODS ниже) —
@@ -1335,16 +1360,20 @@ export default function App() {
   async function submitOrderWithToken(token) {
     setSubmitting(true);
     setSubmitError(null);
-    setSubmitOk(false);
+    setSubmitOk(null);
     try {
-      await api.createOrder(
+      const created = await api.createOrder(
         token, songTitle.trim(), artist.trim() || null,
         serviceId ? Number(serviceId) : null,
       );
       setSongTitle("");
       setArtist("");
       setServiceId("");
-      setSubmitOk(true);
+      // queue_position — номер места в общей очереди клуба (см. docstring
+      // table_board_service.get_club_queue_positions на бэкенде); "0" — на
+      // случай (не должен происходить в штатной работе), если сервер по
+      // какой-то причине его не прислал, тогда просто "Заказ отправлен!".
+      setSubmitOk(created.queue_position ?? 0);
       await refreshOrders();
     } catch (err) {
       setSubmitError(err instanceof ApiError ? err.message : String(err));
@@ -1556,7 +1585,13 @@ export default function App() {
               </button>
             </form>
             {submitError && <div className="banner banner--error">{submitError}</div>}
-            {submitOk && <div className="banner banner--ok">Заказ отправлен! Ждите подтверждения KJ.</div>}
+            {submitOk != null && (
+              <div className="banner banner--ok">
+                {submitOk > 0
+                  ? `Заказ отправлен! Ваш номер в очереди: ${submitOk}.`
+                  : "Заказ отправлен!"}
+              </div>
+            )}
             {/* ТЗ п.45: единственный способ стать Role 4 — эта попытка
             заказать (будучи ещё Role 5) и открывает данный экран, см.
             handleSubmitOrder/handleActivated выше. */}
