@@ -190,6 +190,61 @@ def test_guest_sees_own_orders_only(client, club, other_club):
     assert titles == ["Song A"]
 
 
+# ДОБАВЛЕНО (2026-09-19, запрос пользователя): второй гость за столом,
+# отправив заказ, получал автосообщение "Ждите подтверждения KJ" — по
+# факту ему нужен номер в общей очереди клуба (по всем столам вместе), а
+# не формулировка про чьё-то отдельное подтверждение. См. docstring
+# table_board_service.get_club_queue_positions.
+def test_guest_order_response_includes_club_queue_position(client, club):
+    session = _create_session(client, club.club_id)
+    linked = _link_google(client, session["token"], table_no=1).get_json()["data"]
+    resp = client.post(
+        "/api/guest/order",
+        json={"song_title": "First In Line"},
+        headers=_headers(linked["token"]),
+    )
+    assert resp.status_code == 201
+    assert resp.get_json()["data"]["queue_position"] == 1
+
+
+def test_guest_order_queue_position_counts_across_all_tables(client, club):
+    """Номер общий на весь клуб — второй гость за ДРУГИМ столом получает
+    следующий номер очереди, а не отдельный счётчик по своему столу."""
+    session_a = _create_session(client, club.club_id)
+    session_b = _create_session(client, club.club_id)
+    token_a = _link_google(client, session_a["token"], table_no=1).get_json()["data"]["token"]
+    token_b = _link_google(client, session_b["token"], table_no=2).get_json()["data"]["token"]
+
+    resp_a = client.post("/api/guest/order", json={"song_title": "Song A"}, headers=_headers(token_a))
+    resp_b = client.post("/api/guest/order", json={"song_title": "Song B"}, headers=_headers(token_b))
+    assert resp_a.get_json()["data"]["queue_position"] == 1
+    assert resp_b.get_json()["data"]["queue_position"] == 2
+
+    orders_a = client.get("/api/guest/orders", headers=_headers(token_a)).get_json()["data"]
+    assert orders_a[0]["queue_position"] == 1
+
+
+def test_guest_order_queue_position_shrinks_when_earlier_order_leaves_queue(client, db, club):
+    """Номер пересчитывается заново на каждый запрос — когда более ранний
+    заказ отклонён (или сыгран), следующий сдвигается вперёд."""
+    session_a = _create_session(client, club.club_id)
+    session_b = _create_session(client, club.club_id)
+    token_a = _link_google(client, session_a["token"], table_no=1).get_json()["data"]["token"]
+    token_b = _link_google(client, session_b["token"], table_no=2).get_json()["data"]["token"]
+
+    order_a_id = client.post(
+        "/api/guest/order", json={"song_title": "Song A"}, headers=_headers(token_a)
+    ).get_json()["data"]["id"]
+    client.post("/api/guest/order", json={"song_title": "Song B"}, headers=_headers(token_b))
+
+    order_a = db.session.get(Order, order_a_id)
+    order_a.status = "rejected"
+    db.session.commit()
+
+    orders_b = client.get("/api/guest/orders", headers=_headers(token_b)).get_json()["data"]
+    assert orders_b[0]["queue_position"] == 1
+
+
 def test_guest_queue_endpoint_reachable(client, club):
     session = _create_session(client, club.club_id)
     resp = client.get("/api/guest/queue", headers=_headers(session["token"]))
