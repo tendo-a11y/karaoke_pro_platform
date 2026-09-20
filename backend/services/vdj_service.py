@@ -106,7 +106,7 @@ def confirm_order(order_id: int, kj):
 def reject_order(order_id: int, kj):
     """
     ТЗ п.19: отклонение заказа, ещё не переданного в VirtualDJ. Тоже атомарно —
-    отклонить можно только заказ, всё ещё находящийся в pending.
+    отклонить можно только заказ, ещё не сыгранный.
 
     2026-09-17, следом за исправлением App.jsx (карточка с ошибкой VDJ больше
     не пропадает сама, а ждёт решения KJ, и кнопка "ОТКЛОНИТЬ" на ней теперь
@@ -115,6 +115,15 @@ def reject_order(order_id: int, kj):
     заказы с ошибкой оказывались вообще неудаляемыми. Поэтому отклонить
     теперь можно и STATUS_PENDING (обычный случай — новый заказ), и
     STATUS_ERROR (KJ разобрался с ошибкой и убирает карточку).
+
+    ДОБАВЛЕНО (2026-09-20, жалоба пользователя "нет возможности удалить" —
+    и у гостя, и у KJ не было способа убрать ОДИН уже принятый заказ по
+    отдельности, только отклонить его, пока он ещё pending, или закрыть
+    сразу весь стол): теперь можно отклонить и STATUS_QUEUED — тот же смысл,
+    что и кнопка "🗑 Убрать" на карточке места KJ Panel ниже. Деньги здесь
+    не списываются и не возвращаются: charge_at_completion срабатывает
+    только в complete_order() при нажатии "Готово" — отклонённый (в том
+    числе уже принятый, но так и не сыгранный) заказ до неё не доходит.
     """
     order = db.session.get(Order, order_id)
     if order is None:
@@ -125,7 +134,7 @@ def reject_order(order_id: int, kj):
 
     updated_rows = (
         db.session.query(Order)
-        .filter(Order.id == order_id, Order.status.in_([STATUS_PENDING, STATUS_ERROR]))
+        .filter(Order.id == order_id, Order.status.in_([STATUS_PENDING, STATUS_QUEUED, STATUS_ERROR]))
         .update({"status": STATUS_REJECTED, "rejected_at": _utcnow()}, synchronize_session=False)
     )
     db.session.commit()
@@ -143,6 +152,56 @@ def reject_order(order_id: int, kj):
         notify_guest(order.telegram_user_id, f"❌ Ваш заказ отклонён KJ.\n\n🎵 {song_line}")
 
     return order, "rejected"
+
+
+# ДОБАВЛЕНО (2026-09-20, жалоба пользователя "нет возможности удалить" в
+# "Мои заказы" Guest App): раньше гость мог только заменить песню в своём
+# заказе (replace_order выше) или дождаться решения KJ — самостоятельно
+# отменить СВОЙ ещё не сыгранный заказ было нельзя вообще. Разрешённые
+# статусы намеренно совпадают с can_replace_order (PENDING/QUEUED) —
+# то же самое "заказ ещё не завершил жизненный цикл", что и у замены песни;
+# STATUS_PROCESSING сознательно исключён (короткое переходное состояние
+# confirm_order, см. её докстринг — отменять заказ ровно в момент его
+# обработки KJ так же небезопасно, как и заменять в нём песню).
+CANCELABLE_BY_GUEST_STATUSES = (STATUS_PENDING, STATUS_QUEUED)
+
+
+def cancel_order_by_guest(order_id: int, guest_id: int, club_id: int):
+    """
+    Самостоятельная отмена гостем СВОЕГО заказа — GuestApp, "Мои заказы".
+    Владелец проверяется так же строго, как в replace_order (та же ранее
+    исправленная уязвимость — раньше владелец заказа при подобных действиях
+    вообще не проверялся, здесь сознательно не повторяем эту ошибку).
+
+    Деньги не затрагиваются: charge_at_completion выполняется только в
+    complete_order() при "Готово" — отменённый до этого момента заказ до
+    списания никогда не доходит, возвращать тут нечего.
+
+    Возвращает (order, outcome), где outcome — один из:
+        "not_found", "forbidden", "not_allowed", "cancelled"
+    """
+    order = db.session.get(Order, order_id)
+    if order is None:
+        return None, "not_found"
+
+    if order.club_id != club_id or order.telegram_user_id != guest_id:
+        return None, "forbidden"
+
+    updated_rows = (
+        db.session.query(Order)
+        .filter(Order.id == order_id, Order.status.in_(CANCELABLE_BY_GUEST_STATUSES))
+        .update({"status": STATUS_REJECTED, "rejected_at": _utcnow()}, synchronize_session=False)
+    )
+    db.session.commit()
+
+    if updated_rows == 0:
+        db.session.refresh(order)
+        return order, "not_allowed"
+
+    db.session.refresh(order)
+    emit_order_rejected(order)
+
+    return order, "cancelled"
 
 
 def complete_order(order_id: int, kj):
@@ -299,31 +358,41 @@ def _queue_rank(vdj, vdj_item_id: str):
 
 def can_replace_order(order, vdj) -> bool:
     """
-    Утверждённая пользователем матрица правил замены песни (см. согласованную
-    спецификацию замены песни):
+    Матрица правил замены песни — ПЕРЕСМОТРЕНА 2026-09-20 (жалоба
+    пользователя: "нет возможности удалить / заменить / сменить категорию" —
+    у гостя на карточке заказа в статусе "🎶 В очереди" кнопки "Заменить"
+    не было вообще).
+
+    Старая (согласованная ранее) матрица опиралась на позицию заказа в
+    ЖИВОЙ очереди VirtualDJ:
 
         STATUS_PENDING                          -> можно
-        STATUS_PROCESSING                        -> нельзя (переходное
-            состояние между подтверждением KJ и добавлением в VDJ — нельзя
-            одновременно подтверждать/добавлять в очередь и менять содержимое
-            того же заказа)
-        STATUS_QUEUED, rank 1 или 2               -> нельзя (слишком близко к
-            воспроизведению)
+        STATUS_PROCESSING                        -> нельзя
+        STATUS_QUEUED, rank 1 или 2 в vdj.get_queue() -> нельзя
         STATUS_QUEUED, rank >= 3                  -> можно
-        STATUS_QUEUED, vdj_item_id не найден в
-            текущей vdj.get_queue()                -> нельзя (система не может
-            достоверно определить его позицию — безопаснее запретить замену,
-            чем случайно позволить изменить песню, которая уже находится на
-            границе воспроизведения или была вручную изменена KJ)
-        STATUS_PLAYING/COMPLETED/REJECTED/ERROR   -> нельзя (заказ уже
-            завершил свой жизненный цикл в очереди/на сцене)
+        STATUS_QUEUED, vdj_item_id не в очереди   -> нельзя
+        STATUS_PLAYING/COMPLETED/REJECTED/ERROR   -> нельзя
+
+    Но с 2026-09-18 confirm_order() перестала сама передавать принятый заказ
+    в VirtualDJ (см. её докстринг) — STATUS_QUEUED теперь означает только
+    "KJ принял заказ", а vdj_item_id у такого заказа НИКОГДА не
+    проставляется. Из-за этого старая проверка ранга превратилась в
+    "нельзя всегда" — ни один реально принятый заказ больше не мог пройти
+    её, что и вызвало жалобу. Новая, подтверждённая пользователем матрица:
+
+        STATUS_PENDING   -> можно
+        STATUS_PROCESSING -> нельзя (короткое переходное состояние)
+        STATUS_QUEUED     -> можно (гость может менять песню/исполнителя/
+            категорию весь срок, пока заказ ждёт исполнения — вплоть до
+            момента, когда KJ нажмёт "Готово")
+        STATUS_PLAYING/COMPLETED/REJECTED/ERROR -> нельзя (заказ уже
+            завершил свой жизненный цикл)
+
+    Параметр vdj сохранён ради обратной совместимости вызовов (routes/guest.py,
+    replace_order ниже) — сверка с живой очередью VirtualDJ здесь больше не
+    нужна и не выполняется.
     """
-    if order.status == STATUS_PENDING:
-        return True
-    if order.status == STATUS_QUEUED:
-        rank = _queue_rank(vdj, order.vdj_item_id)
-        return rank is not None and rank >= 3
-    return False
+    return order.status in (STATUS_PENDING, STATUS_QUEUED)
 
 
 def replace_order(order_id: int, guest_id: int, club_id: int, song_title: str, artist, service_id):
