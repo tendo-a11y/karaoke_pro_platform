@@ -13,11 +13,14 @@ from services.google_auth_service import GoogleAuthError, verify_google_credenti
 from services.table_board_service import get_orders_board
 from services.vdj_service import (
     add_manual_song,
+    approve_order_change_request,
     claim_vdj_queue_item,
     complete_order,
     confirm_order,
     get_kj_queue_view,
+    list_pending_change_requests,
     reject_order,
+    reject_order_change_request,
     update_order_category,
     update_order_table,
 )
@@ -408,6 +411,89 @@ def reject_vip_request(request_id):
     if result.outcome == "already_decided":
         return api_error(409, "ALREADY_DECIDED", "Заявка уже обработана")
     return api_ok(result.request.to_dict())
+
+
+@bp.get("/order-change-requests/<int:club_id>")
+@require_kj
+def list_order_change_requests(club_id):
+    """
+    ДОБАВЛЕНО 2026-09-20 — решение пользователя "Нужно одобрение KJ (запрос
+    → Одобрить/Отклонить)": неразобранные заявки гостей на отмену/замену
+    уже принятых заказов (см. services/vdj_service.py::request_order_cancel/
+    request_order_replace). Аналог list_vip_requests выше, но всегда только
+    pending — уже решённые заявки (approved/rejected) отдельного экрана
+    "истории заявок" в этом шаге не получают (то же решение, что и у
+    отклонённых/сыгранных заказов в routes/guest.py::list_my_orders — не
+    захламлять текущий список).
+
+    order_song_title/order_artist/table_no — не хранятся в самой заявке
+    (см. models.OrderChangeRequest), а подтягиваются здесь же из
+    связанного Order одним заходом, чтобы KJ Panel могла показать заявку
+    сразу с понятным текстом ("стол 5: Билет на самолёт"), без отдельного
+    запроса самого заказа по order_id.
+    """
+    denied = _ensure_own_club(club_id)
+    if denied:
+        return denied
+    requests_ = list_pending_change_requests(club_id)
+
+    order_ids = [r.order_id for r in requests_]
+    orders_by_id = {}
+    if order_ids:
+        orders_by_id = {
+            o.id: o for o in Order.query.filter(Order.id.in_(order_ids)).all()
+        }
+
+    result = []
+    for r in requests_:
+        data = r.to_dict()
+        order = orders_by_id.get(r.order_id)
+        data["table_no"] = order.table_no if order else None
+        data["order_song_title"] = order.song_title if order else None
+        data["order_artist"] = order.artist if order else None
+        result.append(data)
+    return api_ok(result)
+
+
+@bp.put("/order-change-requests/<int:request_id>/approve")
+@require_kj
+def approve_order_change_request_route(request_id):
+    """
+    KJ одобряет заявку — см. vdj_service.approve_order_change_request про
+    то, что именно происходит с самим заказом (отмена/замена) и почему
+    заявка может автоматически стать "устаревшей" (outcome "stale"), если
+    заказ успел измениться, пока заявка ждала решения.
+    """
+    change_request, order, outcome = approve_order_change_request(request_id, g.kj)
+    if outcome == "not_found":
+        return api_error(404, "REQUEST_NOT_FOUND", "Заявка не найдена")
+    if outcome == "forbidden":
+        return api_error(403, "FORBIDDEN", "Нет доступа к этой заявке")
+    if outcome == "already_decided":
+        return api_error(409, "ALREADY_DECIDED", "Заявка уже обработана")
+    if outcome == "stale":
+        return api_error(
+            409, "ORDER_CHANGED",
+            "Заказ уже изменился, пока заявка ждала решения — заявка автоматически отклонена",
+        )
+    return api_ok({
+        "request": change_request.to_dict(),
+        "order": order.to_dict() if order else None,
+    })
+
+
+@bp.put("/order-change-requests/<int:request_id>/reject")
+@require_kj
+def reject_order_change_request_route(request_id):
+    """KJ отклоняет заявку — сам заказ остаётся без изменений."""
+    change_request, outcome = reject_order_change_request(request_id, g.kj)
+    if outcome == "not_found":
+        return api_error(404, "REQUEST_NOT_FOUND", "Заявка не найдена")
+    if outcome == "forbidden":
+        return api_error(403, "FORBIDDEN", "Нет доступа к этой заявке")
+    if outcome == "already_decided":
+        return api_error(409, "ALREADY_DECIDED", "Заявка уже обработана")
+    return api_ok(change_request.to_dict())
 
 
 @bp.get("/vip-clients/<int:club_id>")
