@@ -177,6 +177,11 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 }
 .link-btn:disabled { opacity: 0.5; }
 
+/* ДОБАВЛЕНО (2026-09-20, кнопка "❌ Отменить заказ" в "Мои заказы") —
+цветовой вариант link-btn для деструктивного действия, чтобы не сливалась
+с обычными акцентными ссылками вроде "Заменить песню"/"В избранное". */
+.link-btn--danger { color: var(--danger, #e5484d); }
+
 select {
   background: var(--panel-alt);
   border: 1px solid var(--border);
