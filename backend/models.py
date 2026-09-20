@@ -843,6 +843,97 @@ class TableJoinRequest(db.Model):
         }
 
 
+STATUS_ORDER_CHANGE_PENDING = "pending"
+STATUS_ORDER_CHANGE_APPROVED = "approved"
+STATUS_ORDER_CHANGE_REJECTED = "rejected"
+
+ORDER_CHANGE_KIND_CANCEL = "cancel"
+ORDER_CHANGE_KIND_REPLACE = "replace"
+
+
+class OrderChangeRequest(db.Model):
+    """
+    ДОБАВЛЕНО 2026-09-20 — решение пользователя по итогам жалобы "нет
+    возможности удалить / заменить / сменить категорию" в "Мои заказы":
+    самостоятельная отмена гостем заказа (services/vdj_service.py::
+    cancel_order_by_guest) и замена песни (::replace_order), которые до
+    этого шага применялись НЕМЕДЛЕННО и безусловно, потребовали одобрения
+    KJ — точная формулировка решения: "Гость Удалить или заменить может
+    только с согласия роли 2 — об этом роли 2 должно прийти уведомление о
+    замене или удалении... песни" (Нужно одобрение KJ: запрос →
+    Одобрить/Отклонить).
+
+    С этого шага действие гостя (кнопки "❌ Отменить заказ"/"🔁 Заменить
+    песню" в Guest App) создаёт только строку в этой таблице — реальное
+    изменение самого Order происходит только когда KJ нажимает "Одобрить"
+    (services/vdj_service.py::approve_order_change_request). При
+    "Отклонить" (или если KJ проигнорировал заявку) заказ остаётся как был.
+
+    Тот же паттерн pending/approved/rejected + decided_by, что и у
+    VipRequest/TableJoinRequest выше в этом файле — разница только в том,
+    что заявка здесь привязана к конкретному Order, а не к гостю вообще.
+
+    kind:
+        "cancel"  — new_song_title/new_artist/new_service_id не используются
+                    (остаются NULL), одобрение просто переводит заказ в
+                    STATUS_REJECTED (как раньше делала immediate-версия).
+        "replace" — new_song_title обязателен, new_artist/new_service_id
+                    опциональны (та же форма данных, что раньше принимал
+                    сразу сам replace_order) — одобрение переносит их на сам
+                    Order без изменения его статуса.
+
+    Намеренно НЕ ограничиваем одной активной заявкой на заказ через UNIQUE-
+    индекс на уровне БД (в отличие от, например, vip_clients выше) — эта же
+    проверка ("уже есть необработанная заявка по этому заказу") сделана в
+    сервисном слое (get_pending_change_request), потому что там же нужно
+    вернуть гостю понятный код ответа ("already_pending"), а не голую
+    ошибку целостности БД.
+    """
+
+    __tablename__ = "order_change_requests"
+
+    id = db.Column(db.Integer, primary_key=True)
+    club_id = db.Column(db.Integer, db.ForeignKey("clubs.club_id"), nullable=False, index=True)
+    order_id = db.Column(db.Integer, db.ForeignKey("orders.id"), nullable=False, index=True)
+    guest_id = db.Column(db.BigInteger, nullable=False, index=True)
+
+    kind = db.Column(db.String(20), nullable=False)  # cancel | replace
+
+    # Только для kind == "replace" — предложенные новые значения,
+    # применяются к заказу только при одобрении (см. докстринг выше).
+    new_song_title = db.Column(db.String(500), nullable=True)
+    new_artist = db.Column(db.String(500), nullable=True)
+    new_service_id = db.Column(db.Integer, db.ForeignKey("services.id"), nullable=True)
+
+    status = db.Column(db.String(20), nullable=False, default=STATUS_ORDER_CHANGE_PENDING, index=True)
+    created_at = db.Column(db.DateTime(timezone=True), default=utcnow, nullable=False)
+    decided_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    decided_by = db.Column(db.Integer, db.ForeignKey("kj_operators.id"), nullable=True)
+
+    club = db.relationship("Club")
+    order = db.relationship("Order")
+
+    __table_args__ = (
+        db.Index("ix_order_change_requests_lookup", "club_id", "status"),
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "club_id": self.club_id,
+            "order_id": self.order_id,
+            # Строкой — см. комментарий у TableGroup.to_dict() выше.
+            "guest_id": str(self.guest_id),
+            "kind": self.kind,
+            "new_song_title": self.new_song_title,
+            "new_artist": self.new_artist,
+            "new_service_id": self.new_service_id,
+            "status": self.status,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "decided_at": self.decided_at.isoformat() if self.decided_at else None,
+        }
+
+
 class GuestStatus(db.Model):
     """
     Живой статус гостя, который KJ управляет из карточки гостя в KJ Panel
