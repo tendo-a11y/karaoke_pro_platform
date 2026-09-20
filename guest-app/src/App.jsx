@@ -88,6 +88,7 @@ function parseLinkParams() {
 function OrderRow({
   order, onFavorite, favoriteBusy,
   token, services, isReplacing, onToggleReplace, onReplace, replaceBusy,
+  onCancel, cancelBusy,
 }) {
   const label = orderStatusLabel(order);
   return (
@@ -113,6 +114,23 @@ function OrderRow({
         {order.can_replace && (
           <button type="button" className="link-btn" onClick={() => onToggleReplace(order.id)}>
             {isReplacing ? "Свернуть" : "🔁 Заменить песню"}
+          </button>
+        )}
+        {/* ДОБАВЛЕНО (2026-09-20, жалоба "нет возможности удалить"): кнопка
+        отмены заказа гостем — показываем по тому же флагу can_replace, что
+        и "Заменить песню", потому что backend разрешает и то, и другое
+        ровно для одного и того же набора статусов (PENDING/QUEUED, см.
+        vdj_service.CANCELABLE_BY_GUEST_STATUSES == та же матрица, что и у
+        can_replace_order) — заводить отдельный флаг can_cancel было бы
+        дублированием одной и той же проверки на бэкенде. */}
+        {order.can_replace && onCancel && (
+          <button
+            type="button"
+            className="link-btn link-btn--danger"
+            disabled={cancelBusy}
+            onClick={() => onCancel(order.id)}
+          >
+            {cancelBusy ? "Отменяем…" : "❌ Отменить заказ"}
           </button>
         )}
       </div>
@@ -1200,6 +1218,9 @@ export default function App() {
   const [favoriteMessage, setFavoriteMessage] = useState(null);
   const [replacingOrderId, setReplacingOrderId] = useState(null);
   const [replaceBusyOrderId, setReplaceBusyOrderId] = useState(null);
+  // ДОБАВЛЕНО (2026-09-20, жалоба "нет возможности удалить" в "Мои заказы").
+  const [cancelBusyOrderId, setCancelBusyOrderId] = useState(null);
+  const [cancelError, setCancelError] = useState(null);
   // ТЗ п.45 (финальная единая модель входа) — показывает ли экран "стол +
   // Google" прямо сейчас; открывается попыткой заказать, будучи Role 5
   // (см. handleSubmitOrder), закрывается после успешной активации (см.
@@ -1431,6 +1452,24 @@ export default function App() {
     }
   }
 
+  // ДОБАВЛЕНО (2026-09-20, жалоба "нет возможности удалить" в "Мои заказы"):
+  // гость сам отменяет ещё не сыгранный заказ — см. api.cancelOrder /
+  // vdj_service.cancel_order_by_guest. Отменённый заказ становится
+  // rejected и сам уходит из списка при следующем refreshOrders() (тот же
+  // фильтр notin_([REJECTED, ERROR]), что и у отклонённых KJ заказов).
+  async function handleCancelOrder(orderId) {
+    setCancelBusyOrderId(orderId);
+    setCancelError(null);
+    try {
+      await api.cancelOrder(session.token, orderId);
+      await refreshOrders();
+    } catch (err) {
+      setCancelError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setCancelBusyOrderId(null);
+    }
+  }
+
   // ТЗ п.45 (финальная единая модель входа): вызывается один раз, сразу
   // после успешного "стол + Google" в ActivationPanel — единственного
   // способа стать Role 4. Не переиспользуем refreshOrders/refreshMe-
@@ -1621,6 +1660,7 @@ export default function App() {
           ))}
         </div>
         {favoriteMessage && <div className="banner banner--ok">{favoriteMessage}</div>}
+        {cancelError && <div className="banner banner--error">{cancelError}</div>}
         {orders.length === 0 ? (
           <p className="empty-hint">
             {orderHistoryDays === null ? "Заказов пока нет." : "Заказов за этот период нет."}
@@ -1639,6 +1679,8 @@ export default function App() {
                 onToggleReplace={handleToggleReplace}
                 onReplace={handleReplaceOrder}
                 replaceBusy={replaceBusyOrderId === o.id}
+                onCancel={handleCancelOrder}
+                cancelBusy={cancelBusyOrderId === o.id}
               />
             ))}
           </ul>
