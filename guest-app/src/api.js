@@ -99,6 +99,11 @@ export const api = {
     request(`/api/guest/order/${orderId}/replace`, {
       method: "POST", token, body: { song_title: songTitle, artist, service_id: serviceId },
     }),
+  // ДОБАВЛЕНО (2026-09-20, жалоба пользователя "нет возможности удалить" в
+  // "Мои заказы") — гость сам отменяет ещё не сыгранный заказ, см.
+  // backend/services/vdj_service.py::cancel_order_by_guest.
+  cancelOrder: (token, orderId) =>
+    request(`/api/guest/order/${orderId}/cancel`, { method: "POST", token }),
   getQueue: (token) => request("/api/guest/queue", { token }),
   sendChatMessage: (token, messageText) =>
     request("/api/guest/chat", { method: "POST", token, body: { message_text: messageText } }),
