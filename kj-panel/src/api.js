@@ -1,166 +1,354 @@
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:5000";
-
-const TOKEN_STORAGE_KEY = "kj_panel_token";
-
-// 2026-09: "доступ KJ Pro определяется Google-аккаунтом клуба" — Client ID
-// не секрет (виден в открытом виде на любой странице с кнопкой входа
-// Google), поэтому хранится прямо в коде фронтенда, как и в guest-app.
-export const GOOGLE_CLIENT_ID = "798456512733-iiel465aq3g5nprap64mq8ovrvcjqsfd.apps.googleusercontent.com";
-
-export function resolveToken() {
-  const url = new URL(window.location.href);
-  const fromUrl = url.searchParams.get("token");
-  if (fromUrl) {
-    localStorage.setItem(TOKEN_STORAGE_KEY, fromUrl);
-    // Убираем токен из адресной строки, чтобы он не остался в истории браузера.
-    url.searchParams.delete("token");
-    window.history.replaceState({}, "", url.toString());
-    return fromUrl;
-  }
-  return localStorage.getItem(TOKEN_STORAGE_KEY);
+:root {
+  --bg: #14161c;
+  --panel: #1d2029;
+  --panel-alt: #242835;
+  --text: #eef0f5;
+  --muted: #8b91a5;
+  --accent: #ffb020;
+  --ok: #2fbf71;
+  --danger: #e5484d;
+  --border: #2c3040;
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
 }
 
-// Токен, полученный входом через Google (см. loginWithGoogle ниже),
-// сохраняется тем же способом, что и токен из ссылки бота — дальше оба
-// неотличимы друг от друга для остального кода панели.
-export function storeToken(token) {
-  localStorage.setItem(TOKEN_STORAGE_KEY, token);
+* { box-sizing: border-box; }
+
+body { margin: 0; background: var(--bg); color: var(--text); }
+
+.app-shell {
+  min-height: 100vh;
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 16px 16px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
-export function clearToken() {
-  localStorage.removeItem(TOKEN_STORAGE_KEY);
+.app-shell.centered {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 8px;
+  padding: 24px;
 }
 
-class ApiError extends Error {
-  constructor(status, code, message) {
-    super(message);
-    this.status = status;
-    this.code = code;
-  }
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
 }
 
-async function request(path, { method = "GET", token, body } = {}) {
-  const resp = await fetch(`${BACKEND_URL}${path}`, {
-    method,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-
-  let json = null;
-  try {
-    json = await resp.json();
-  } catch {
-    // тело может отсутствовать
-  }
-
-  if (!resp.ok) {
-    const code = json?.error || "UNKNOWN_ERROR";
-    const message = json?.message || `Ошибка запроса (${resp.status})`;
-    throw new ApiError(resp.status, code, message);
-  }
-
-  return json?.data;
+.app-header h1 { margin: 0; font-size: 20px; }
+.app-header__table {
+  font-size: 13px;
+  color: var(--accent);
+  font-weight: 600;
+  white-space: nowrap;
 }
 
-export const api = {
-  // Без токена — это как раз тот эндпоинт, который его выдаёт (см.
-  // routes/kj.py::kj_google_login). credential — {id_token} от настоящей
-  // кнопки Google Identity Services (см. KjLoginScreen в App.jsx).
-  loginWithGoogle: (credential) =>
-    request("/api/kj/auth/google", { method: "POST", body: { credential } }),
-  me: (token) => request("/api/kj/me", { token }),
-  listOrders: (token, clubId, status = "pending") =>
-    request(`/api/kj/orders/${clubId}?status=${status}`, { token }),
-  // Доп. ТЗ "KJ Pro", запрос пользователя 2026-09-18: сетка карточек
-  // столов — по одной на стол, с местами по числу Club.songs_per_table
-  // (см. routes/kj.py::orders_board, services/table_board_service.py).
-  getOrdersBoard: (token, clubId) => request(`/api/kj/orders-board/${clubId}`, { token }),
-  confirmOrder: (token, orderId) =>
-    request(`/api/kj/order/${orderId}/confirm`, { method: "PUT", token }),
-  rejectOrder: (token, orderId) =>
-    request(`/api/kj/order/${orderId}/reject`, { method: "PUT", token }),
-  // Запрос пользователя 2026-09-18: подтверждение заказа больше не ставит
-  // песню в VirtualDJ само (KJ делает это вручную) — кнопка "Готово" на
-  // занятой карточке стола освобождает место явным образом, см.
-  // routes/kj.py::complete / services/vdj_service.py::complete_order.
-  completeOrder: (token, orderId) =>
-    request(`/api/kj/order/${orderId}/complete`, { method: "PUT", token }),
-  getQueue: (token, clubId) => request(`/api/kj/queue/${clubId}`, { token }),
-  addManualOrder: (token, { songTitle, artist, tableNo }) =>
-    request(`/api/kj/order/manual`, {
-      method: "POST",
-      token,
-      body: { song_title: songTitle, artist: artist || null, table_no: tableNo },
-    }),
-  listVipRequests: (token, clubId, status = "pending") =>
-    request(`/api/kj/vip-requests/${clubId}?status=${status}`, { token }),
-  approveVipRequest: (token, requestId) =>
-    request(`/api/kj/vip-requests/${requestId}/approve`, { method: "PUT", token }),
-  rejectVipRequest: (token, requestId) =>
-    request(`/api/kj/vip-requests/${requestId}/reject`, { method: "PUT", token }),
-  listVipClients: (token, clubId) => request(`/api/kj/vip-clients/${clubId}`, { token }),
-  updateVipCashback: (token, vipClientId, cashbackPercent) =>
-    request(`/api/kj/vip-clients/${vipClientId}/cashback`, {
-      method: "PUT", token, body: { cashback_percent: cashbackPercent },
-    }),
-  topupVipBalance: (token, vipClientId, amount) =>
-    request(`/api/kj/vip-clients/${vipClientId}/topup`, { method: "POST", token, body: { amount } }),
-  debitVipBalance: (token, vipClientId, amount) =>
-    request(`/api/kj/vip-clients/${vipClientId}/debit`, { method: "POST", token, body: { amount } }),
-  setVipBalance: (token, vipClientId, balance) =>
-    request(`/api/kj/vip-clients/${vipClientId}/balance`, { method: "PUT", token, body: { balance } }),
-  listCategories: (token, clubId) => request(`/api/kj/categories/${clubId}`, { token }),
-  createCategory: (token, clubId, { name, description, price, isFree }) =>
-    request(`/api/kj/categories/${clubId}`, {
-      method: "POST", token, body: { name, description: description || null, price, is_free: isFree },
-    }),
-  updateCategory: (token, clubId, categoryId, fields) =>
-    request(`/api/kj/categories/${clubId}/${categoryId}`, { method: "PUT", token, body: fields }),
-  deleteCategory: (token, clubId, categoryId) =>
-    request(`/api/kj/categories/${clubId}/${categoryId}`, { method: "DELETE", token }),
-  getTableSettings: (token, clubId) => request(`/api/kj/table-settings/${clubId}`, { token }),
-  // fields — объект с любым подмножеством {table_count, songs_per_table};
-  // бэкенд меняет только те ключи, что реально присутствуют в теле запроса
-  // (см. routes/kj.py::update_table_settings), остальные не трогает.
-  updateTableSettings: (token, clubId, fields) =>
-    request(`/api/kj/table-settings/${clubId}`, { method: "PUT", token, body: fields }),
-  updateOrderTable: (token, orderId, tableNo) =>
-    request(`/api/kj/order/${orderId}/table`, { method: "PUT", token, body: { table_no: tableNo } }),
-  updateOrderCategory: (token, orderId, serviceId) =>
-    request(`/api/kj/order/${orderId}/category`, { method: "PUT", token, body: { service_id: serviceId } }),
-  removeFromVdjQueue: (token, vdjItemId) =>
-    request(`/api/vdj/queue/${encodeURIComponent(vdjItemId)}`, { method: "DELETE", token }),
-  claimQueueItem: (token, { vdjItemId, songTitle, artist, tableNo, serviceId }) =>
-    request(`/api/kj/queue/claim`, {
-      method: "POST",
-      token,
-      body: {
-        vdj_item_id: vdjItemId,
-        song_title: songTitle,
-        artist: artist || null,
-        table_no: tableNo,
-        service_id: serviceId,
-      },
-    }),
-  listGuests: (token, clubId, guestType) =>
-    request(`/api/kj/guests/${clubId}${guestType ? `?type=${encodeURIComponent(guestType)}` : ""}`, { token }),
-  getGuest: (token, clubId, guestId) =>
-    request(`/api/kj/guests/${clubId}/${encodeURIComponent(guestId)}`, { token }),
-  blockGuest: (token, guestId) =>
-    request(`/api/kj/guests/${encodeURIComponent(guestId)}/block`, { method: "POST", token }),
-  unblockGuest: (token, guestId) =>
-    request(`/api/kj/guests/${encodeURIComponent(guestId)}/unblock`, { method: "POST", token }),
-  removeGuestFromTable: (token, guestId) =>
-    request(`/api/kj/guests/${encodeURIComponent(guestId)}/remove-table`, { method: "POST", token }),
-  // Запрос пользователя 2026-09-19 "Закрыть стол": снять со стола +
-  // заблокировать + отклонить оставшиеся заказы стола одним действием —
-  // см. guest_status_service.close_table на бэкенде.
-  closeGuestTable: (token, guestId) =>
-    request(`/api/kj/guests/${encodeURIComponent(guestId)}/close-table`, { method: "POST", token }),
-  getBridgeStatus: (token, clubId) => request(`/api/kj/bridge/status/${clubId}`, { token }),
-};
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px;
+}
 
-export { ApiError, BACKEND_URL };
+.panel h2 {
+  margin: 0 0 12px;
+  font-size: 15px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.order-form, .chat-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.chat-form { flex-direction: row; margin-top: 10px; }
+.chat-form input { flex: 1; }
+
+input {
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 16px; /* 16px+ не даёт iOS-Safari зумить страницу при фокусе */
+}
+
+input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+button {
+  background: var(--accent);
+  color: #1a1400;
+  border: none;
+  border-radius: 10px;
+  padding: 12px 16px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.banner {
+  margin-top: 10px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 14px;
+}
+.banner--error { background: rgba(229, 72, 77, 0.12); color: var(--danger); }
+.banner--ok { background: rgba(47, 191, 113, 0.12); color: var(--ok); }
+
+.error-text { color: var(--danger); }
+
+.empty-hint { color: var(--muted); margin: 0; font-size: 14px; }
+
+.order-list, .queue-list, .chat-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.queue-list { list-style: decimal; padding-left: 20px; }
+.queue-list li { padding-left: 4px; font-size: 14px; }
+
+.order-row {
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.order-row.status-error { border-color: var(--danger); }
+.order-row.status-queued, .order-row.status-completed { border-color: var(--ok); }
+
+.order-row__song { font-size: 15px; font-weight: 600; }
+.order-row__artist { color: var(--muted); font-size: 13px; }
+.order-row__status { font-size: 13px; color: var(--muted); margin-top: 4px; }
+.order-row__error { font-size: 12px; color: var(--danger); margin-top: 4px; }
+
+.chat-list {
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.chat-message {
+  max-width: 85%;
+  padding: 8px 12px;
+  border-radius: 12px;
+  font-size: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.chat-message--mine {
+  align-self: flex-end;
+  background: rgba(255, 176, 32, 0.15);
+}
+.chat-message--kj {
+  align-self: flex-start;
+  background: var(--panel-alt);
+}
+.chat-message__author {
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.link-btn {
+  background: none;
+  color: var(--accent);
+  padding: 6px 0;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+}
+.link-btn:disabled { opacity: 0.5; }
+
+/* ДОБАВЛЕНО (2026-09-20, кнопка "❌ Отменить заказ" в "Мои заказы") —
+цветовой вариант link-btn для деструктивного действия, чтобы не сливалась
+с обычными акцентными ссылками вроде "Заменить песню"/"В избранное". */
+.link-btn--danger { color: var(--danger, #e5484d); }
+
+/* ДОБАВЛЕНО (2026-09-20, решение пользователя "Нужно одобрение KJ"):
+статус "заявка отправлена, ждите решения ведущего" под карточкой заказа —
+тот же цвет акцента, что и на кнопке "Заменить", чтобы явно читаться как
+временное/ожидающее состояние, а не как ошибка (для этого — не danger). */
+.order-row__pending-request { color: var(--accent); margin: 6px 0 0; }
+
+select {
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 16px;
+}
+
+.vip-panel--active {
+  border-color: var(--accent);
+  background: linear-gradient(135deg, rgba(255, 176, 32, 0.1), var(--panel));
+}
+
+.vip-stat-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 15px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+.vip-stat-row:last-child { border-bottom: none; }
+
+.vip-panel .order-form { margin-top: 10px; }
+
+.song-search, .ai-search { margin-bottom: 12px; }
+
+.finder-modes {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+.finder-modes .link-btn {
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  font-size: 12px;
+}
+.finder-modes .finder-modes__active {
+  background: var(--accent);
+  color: #1a1400;
+  border-color: var(--accent);
+}
+
+.screenshot-search__input {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+  padding: 8px;
+  font-size: 13px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-alt);
+}
+
+/* Экран "Выберите стол и войдите через Google" (ActivationPanel) появляется
+   после нажатия "Заказать" — гость обязательно должен его заметить, иначе
+   решает, что кнопка не сработала (см. комментарий в App.jsx). Рамка
+   несколько раз подсвечивается при появлении, потом остаётся спокойного
+   акцентного цвета. */
+.activation-panel {
+  border-color: var(--accent);
+  animation: activation-pulse 0.9s ease-in-out 3;
+}
+
+@keyframes activation-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 176, 32, 0.55); }
+  50% { box-shadow: 0 0 0 12px rgba(255, 176, 32, 0); }
+}
+
+.song-search__results {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.song-search__results li { border-bottom: 1px solid var(--border); }
+.song-search__results li:last-child { border-bottom: none; }
+.song-search__results .link-btn {
+  width: 100%;
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.favorite-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 6px;
+}
+.favorite-actions button:first-child {
+  flex: none;
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
+.order-row__actions {
+  display: flex;
+  gap: 14px;
+  margin-top: 6px;
+}
+
+.replace-form {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border);
+}
+.replace-form__buttons {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.replace-form__buttons button[type="submit"] { flex: 1; }
+
+.table-group-member {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.table-group-requests h3 {
+  margin: 14px 0 8px;
+  font-size: 12px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.table-group-panel > button { margin-top: 8px; }
+.table-group-panel > .link-btn { margin-top: 12px; }
+
+.vip-tx-row__main {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 14px;
+}
+
+.vip-tx-amount--credit { color: var(--ok); }
+.vip-tx-amount--debit { color: var(--danger); }
+
+.order-history-periods {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+.order-history-periods .link-btn {
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  font-size: 12px;
+}
+.order-history-periods .order-history-periods__active {
+  background: var(--accent);
+  color: #1a1400;
+  border-color: var(--accent);
+}
