@@ -1,941 +1,838 @@
-import secrets
+from datetime import datetime, timezone
 
-from flask import Blueprint, current_app, g, request
-
-from auth import issue_guest_token, require_guest
-from errors import api_error, api_ok
 from extensions import db
-from models import STATUS_ERROR, STATUS_REJECTED, ChatMessage, Club, Order, Service
-from services import ai_search_service, guest_account_service, guest_status_service, song_service, table_board_service, table_group_service, vdj_service, vip_service
-from services.google_auth_service import GoogleAuthError, verify_google_credential
-from sockets import emit_chat_message, emit_order_created, emit_vip_request_created
+from models import (
+    STATUS_COMPLETED,
+    STATUS_ERROR,
+    STATUS_PENDING,
+    STATUS_PROCESSING,
+    STATUS_QUEUED,
+    STATUS_REJECTED,
+    Order,
+    Service,
+)
+from services.billing_service import charge_at_completion
+from services.notify import notify_guest
+from sockets import emit_order_confirmed, emit_order_rejected, emit_order_updated, emit_queue_updated
 from vdj import get_vdj_client
+from vdj.base import VirtualDJError
 
-bp = Blueprint("guest", __name__, url_prefix="/api/guest")
+
+def _utcnow():
+    return datetime.now(timezone.utc)
 
 
-def _new_guest_id() -> int:
+def confirm_order(order_id: int, kj):
     """
-    Случайный идентификатор анонимного гостя. Помещается в то же поле
-    Order.telegram_user_id (BigInteger), что и настоящие Telegram ID из
-    старого бота-пути (/api/client/order) — оба пути пишут в одну и ту же
-    колонку, оба вида значений одинаково уникальны и используются в коде
-    только как непрозрачный идентификатор "чей это заказ", так что
-    смешивать их в одной колонке безопасно на этом шаге. Сам вопрос
-    переименования/типизации этого поля под Guest App (ТЗ §54) остаётся
-    открытым — см. комментарий у Order.telegram_user_id в models.py.
-    62 бита — гарантированно помещается в BigInteger и практически
-    исключает коллизии в пределах одного клуба за вечер.
+    Реализует ТЗ п.14-18: проверка прав/принадлежности клубу, атомарный переход
+    pending -> processing (защита от двойного нажатия, п.15), уведомление
+    гостя, WebSocket.
+
+    2026-09-18, запрос пользователя: подтверждение заказа больше НЕ передаёт
+    песню в VirtualDJ само (раньше — vdj.add_to_queue() прямо здесь, с
+    финальным статусом queued при успехе или error при сбое моста/VDJ). На
+    практике мост VirtualDJ регулярно недоступен или нестабилен, и тогда
+    кнопка "Принять" на карточке стола отвечала 502 VDJ_UNAVAILABLE, хотя KJ
+    ничего не просил у VirtualDJ — он просто хочет сказать гостю "заказ
+    принят", а саму песню в плеер поставит сам, вручную, когда дойдёт
+    очередь (тем же способом, что и для любой другой песни — экран "➕
+    Добавить" / AddManualSongForm). Поэтому теперь подтверждение сразу и
+    безусловно переводит заказ в STATUS_QUEUED, минуя VirtualDJ вообще —
+    vdj_item_id у такого заказа остаётся пустым.
+
+    Место на карточке стола (services/table_board_service.py) для такого
+    заказа освобождается уже не автоматически через реконсиляцию с живой
+    очередью VirtualDJ (get_kj_queue_view() теперь сознательно игнорирует
+    STATUS_QUEUED-заказы без vdj_item_id — см. её докстринг ниже), а явным
+    действием KJ — кнопкой "Готово" (см. complete_order() ниже), когда
+    песня реально отыграна.
+
+    Возвращает (order, outcome), где outcome — один из:
+        "not_found", "forbidden", "conflict", "queued"
     """
-    return secrets.randbits(62)
+    order = db.session.get(Order, order_id)
+    if order is None:
+        return None, "not_found"
 
+    if order.club_id != kj.club_id:
+        return None, "forbidden"
 
-@bp.post("/session")
-def create_session():
-    """
-    Первый вызов Guest App при открытии ссылки/QR-кода — аналог старого
-    deep-link venue{id}_table{n} в Telegram-боте (bot.py), но по
-    финальной единой модели входа (ТЗ п.45) QR-код НИКОГДА не содержит
-    номер стола: сессия всегда создаётся без стола (table_no всегда
-    null), независимо от того, какой QR отсканирован. Без авторизации —
-    сама возможность создать сессию для club_id и есть право находиться
-    в этом клубе (см. issue_guest_token в auth.py — подробное обоснование
-    модели доверия).
-
-    Стол выбирается позже, вместе с обязательным входом через Google, в
-    одном действии — см. POST /api/guest/profile/link-google. До этого
-    момента доступны только просмотр очереди и выбор песни в форму
-    (Role 5); сам заказ недоступен.
-    """
-    payload = request.get_json(silent=True) or {}
-    club_id = payload.get("club_id")
-
-    if not isinstance(club_id, int):
-        return api_error(400, "VALIDATION_ERROR", "club_id обязателен и должен быть числом")
-
-    club = db.session.get(Club, club_id)
-    if club is None or not club.is_active:
-        return api_error(404, "CLUB_NOT_FOUND", "Клуб не найден или отключён")
-
-    guest_id = _new_guest_id()
-    token = issue_guest_token(
-        guest_id, club_id, None,
-        current_app.config["GUEST_JWT_SECRET"], current_app.config["GUEST_JWT_TTL_SECONDS"],
+    # Атомарный CAS: строка обновится только если статус всё ещё pending —
+    # это и есть защита от повторного подтверждения (ТЗ п.15). Второй
+    # одновременный запрос получит updated_rows == 0 и вернёт 409.
+    updated_rows = (
+        db.session.query(Order)
+        .filter(Order.id == order_id, Order.status == STATUS_PENDING)
+        .update(
+            {
+                "status": STATUS_PROCESSING,
+                "confirmed_at": _utcnow(),
+                "confirmed_by": kj.id,
+            },
+            synchronize_session=False,
+        )
     )
+    db.session.commit()
 
-    # guest_id — строкой в JSON: см. комментарий у TableGroup.to_dict()
-    # (models.py) — 62-битные значения теряют точность в JS Number, и
-    # своя идентичность (сравнение "это я?" в TableGroupPanel) должна
-    # совпадать посимвольно с guest_id из /table-group, который отдаётся
-    # строкой по той же причине.
-    return api_ok({"guest_id": str(guest_id), "club_id": club_id, "table_no": None, "token": token})
+    if updated_rows == 0:
+        db.session.refresh(order)
+        return order, "conflict"
 
+    db.session.refresh(order)
+    emit_order_confirmed(order)
 
-def _guest_type_and_vip(club_id: int, guest_id: int):
-    """
-    Единое место, где решается роль гостя (Role 3 vs Role 4/5) — по факту
-    наличия VipClient с этим (club_id, guest_id), см. services/vip_service.py.
-    VIP определяется так же, как определялся бы Telegram-VIP в старом боте
-    (наличие строки vip_clients) — постоянство личности при этом
-    обеспечивает GuestAccount (ТЗ п.45), а не сам факт быть VIP.
-    """
-    vip = vip_service.get_vip_client(club_id, guest_id)
-    if vip is not None:
-        return "vip", vip
-    return None, None
+    order.status = STATUS_QUEUED
+    order.queued_at = _utcnow()
+    db.session.commit()
+    emit_order_updated(order)
 
-
-@bp.get("/me")
-@require_guest
-def me():
-    """
-    Нужна фронтенду сразу после создания сессии, чтобы знать, за каким
-    столом/в каком клубе он находится — по образцу /api/kj/me,
-    /api/admin/me. С этого шага также определяет VIP-статус (Role 3) —
-    см. _guest_type_and_vip выше.
-    """
-    club = db.session.get(Club, g.club_id)
-    guest_type, vip = _guest_type_and_vip(g.club_id, g.guest_id)
-
-    pending_request = vip_service.get_pending_vip_request(g.club_id, g.guest_id)
-    account = guest_account_service.get_by_guest_id(g.club_id, g.guest_id)
-    has_permanent_profile = account is not None
-
-    # Групповой стол — статус пересчитывается заново на каждый опрос (а не
-    # берётся из токена), потому что JWT не переиздаётся при одобрении
-    # (см. docstring table_group_service) — фронтенд узнаёт об одобрении
-    # именно через периодический опрос этого поля.
-    table_group_status = None
-    if g.table_no is not None:
-        group = table_group_service.get_group(g.club_id, g.table_no)
-        if group is not None and group.admin_guest_id == g.guest_id:
-            table_group_status = "admin"
-        elif table_group_service.is_member(g.club_id, g.table_no, g.guest_id):
-            table_group_status = "member"
-        elif table_group_service.has_pending_request(g.club_id, g.table_no, g.guest_id):
-            table_group_status = "pending"
-        else:
-            # Гостя кикнули, он сам вышел, или его заявку отклонили — не
-            # трактуем это как "pending" (заявки сейчас нет вообще), фронтенд
-            # должен предложить запросить присоединение заново
-            # (POST /table-group/request-join), а не показывать "ждите".
-            table_group_status = "not_joined"
-
-    return api_ok({
-        # Строкой — см. комментарий в create_session выше.
-        "guest_id": str(g.guest_id),
-        "club_id": g.club_id,
-        "table_no": g.table_no,
-        "table_group_status": table_group_status,
-        "club_name": club.name if club else None,
-        # Guest App использует это, чтобы решить, показывать ли вообще UI
-        # чата — а не только полагаться на 403 CHAT_DISABLED после попытки
-        # отправить сообщение (POST /chat уже проверяет это на сервере
-        # независимо, см. send_chat_message ниже — здесь только для UX).
-        "chat_enabled": bool(club.chat_enabled) if club else False,
-        "is_vip": guest_type == "vip",
-        # ТЗ п.45 — есть ли у гостя постоянный профиль (Google уже
-        # привязан). Фронтенд использует это вместе с table_no==null, чтобы решить,
-        # показывать ли единственный экран "выберите стол и войдите через
-        # Google" (см. POST /profile/link-google) — до входа стола нет и
-        # заказ недоступен, независимо от того, каким QR открыто приложение.
-        "has_permanent_profile": has_permanent_profile,
-        # Имя, которое гость сам себе задал (запрос пользователя 2026-09,
-        # "самопереименование гостя") — null, пока не задано или пока нет
-        # постоянного профиля вообще, см. PUT /profile/name ниже.
-        "display_name": account.display_name if account else None,
-        # Старое: handlers/vip.py::vip_profile (баланс/кэшбэк), п.9-10-11
-        # отчёта по Role 3/4/5. join date (added_at) старый бот тоже нигде
-        # не показывал — не добавляем и здесь, чтобы не изобретать поле,
-        # которого не было в UI старой системы.
-        "vip": {"balance": float(vip.balance), "cashback_percent": float(vip.cashback_percent)}
-        if vip else None,
-        "vip_request_pending": pending_request is not None,
-    })
-
-
-@bp.post("/order")
-@require_guest
-def create_order():
-    """
-    Гостевое создание заказа через Guest App — параллельный путь к
-    /api/client/order (тот остаётся для старого Telegram-бота, ТЗ п.7,
-    старая система не должна сломаться до полной миграции). club_id/
-    table_no/telegram_user_id(=guest_id) берутся ТОЛЬКО из проверенного
-    токена (g.*), а не из тела запроса — тело даёт только сами данные
-    песни.
-
-    guest_type: определяется по факту VIP-идентификации (см.
-    _guest_type_and_vip выше) — "vip", иначе "no_table" при отсутствии
-    стола, иначе "client" (1:1 старое деление ролей 3/4/5).
-
-    ТЗ п.45 (финальная единая модель входа): стол и постоянный профиль
-    появляются только вместе, одним действием, через POST
-    /api/guest/profile/link-google — до этого гость (Role 5) может
-    смотреть очередь и выбрать песню в форму, но не может нажать
-    "Заказать": сначала он получит TABLE_REQUIRED (стола ещё нет вообще),
-    а если стол уже выбран, но профиль почему-то не подтверждён —
-    GOOGLE_LINK_REQUIRED (см. проверки ниже).
-
-    service_id (тариф) — необязателен (заказ без выбранной услуги
-    по-прежнему допустим, как и раньше в этом шаге), но если передан,
-    должен существовать и принадлежать этому же клубу — иначе на
-    completion (services/billing_service.py) он просто тихо не будет
-    найден, лучше отклонить сразу с понятной ошибкой.
-
-    Лимит активных песен (старое: MAX_ACTIVE_SONGS_PER_USER=2, аудит Role
-    3/4/5 п.6) — проверяется здесь так же, как в старом коде, ДО создания
-    заказа.
-
-    Групповой стол (утверждённая спецификация, вариант А — полноценный
-    шлюз): если у гостя есть стол, заказывать можно только будучи
-    одобренным участником (или админом) группы этого стола — единственная
-    проверка шлюза во всём этом эндпоинте, без переиздания токена (см.
-    docstring table_group_service.ensure_session_group_state).
-    """
-    payload = request.get_json(silent=True) or {}
-    song_title = payload.get("song_title")
-    artist = payload.get("artist")
-    service_id = payload.get("service_id")
-
-    if not song_title or not isinstance(song_title, str):
-        return api_error(400, "VALIDATION_ERROR", "song_title обязателен")
-
-    # ТЗ п.45: смотреть очередь и выбирать песню в форму можно сразу после
-    # открытия приложения, а заказывать — только выбрав стол (единственный
-    # способ это сделать — POST /api/guest/profile/link-google ниже, где
-    # стол выбирается вместе со входом через Google, одним действием).
-    if g.table_no is None:
-        return api_error(
-            409, "TABLE_REQUIRED",
-            "Чтобы заказать песню, сначала выберите стол",
+    # Уведомляем через Telegram Bot API только тех гостей, что реально
+    # пришли через настоящего Telegram-бота (channel="telegram") — у гостей
+    # Guest App (channel="webapp") telegram_user_id хранит не chat_id, а
+    # случайный guest_id анонимной сессии, и попытка отправки туда ничего
+    # не доставляет, только тихо проваливается и засоряет журнал. Гость
+    # Guest App и так видит смену статуса в разделе "Мои заказы" (опрос
+    # каждые несколько секунд, см. guest-app/src/App.jsx::refreshOrders).
+    if order.channel == "telegram":
+        song_line = f"{order.artist} — {order.song_title}" if order.artist else order.song_title
+        notify_guest(
+            order.telegram_user_id,
+            f"✅ Ваш заказ принят!\n\n🎵 {song_line}",
         )
 
-    if guest_account_service.get_by_guest_id(g.club_id, g.guest_id) is None:
-        return api_error(
-            409, "GOOGLE_LINK_REQUIRED",
-            "Чтобы заказать песню, сначала войдите через Google",
-        )
+    return order, "queued"
 
-    if not table_group_service.is_member(g.club_id, g.table_no, g.guest_id):
-        return api_error(
-            403, "TABLE_ACCESS_REQUIRED",
-            "У вас нет доступа к заказам за этим столом — нужно быть одобренным участником группы",
+
+def reject_order(order_id: int, kj):
+    """
+    ТЗ п.19: отклонение заказа, ещё не переданного в VirtualDJ. Тоже атомарно —
+    отклонить можно только заказ, ещё не сыгранный.
+
+    2026-09-17, следом за исправлением App.jsx (карточка с ошибкой VDJ больше
+    не пропадает сама, а ждёт решения KJ, и кнопка "ОТКЛОНИТЬ" на ней теперь
+    показывается): здесь этого не учли, из-за чего кнопка нажималась, но
+    сервер отвечал 409 "заказ уже обработан" и ничего не менял — на практике
+    заказы с ошибкой оказывались вообще неудаляемыми. Поэтому отклонить
+    теперь можно и STATUS_PENDING (обычный случай — новый заказ), и
+    STATUS_ERROR (KJ разобрался с ошибкой и убирает карточку).
+
+    ДОБАВЛЕНО (2026-09-20, жалоба пользователя "нет возможности удалить" —
+    и у гостя, и у KJ не было способа убрать ОДИН уже принятый заказ по
+    отдельности, только отклонить его, пока он ещё pending, или закрыть
+    сразу весь стол): теперь можно отклонить и STATUS_QUEUED — тот же смысл,
+    что и кнопка "🗑 Убрать" на карточке места KJ Panel ниже. Деньги здесь
+    не списываются и не возвращаются: charge_at_completion срабатывает
+    только в complete_order() при нажатии "Готово" — отклонённый (в том
+    числе уже принятый, но так и не сыгранный) заказ до неё не доходит.
+    """
+    order = db.session.get(Order, order_id)
+    if order is None:
+        return None, "not_found"
+
+    if order.club_id != kj.club_id:
+        return None, "forbidden"
+
+    updated_rows = (
+        db.session.query(Order)
+        .filter(Order.id == order_id, Order.status.in_([STATUS_PENDING, STATUS_QUEUED, STATUS_ERROR]))
+        .update({"status": STATUS_REJECTED, "rejected_at": _utcnow()}, synchronize_session=False)
+    )
+    db.session.commit()
+
+    if updated_rows == 0:
+        db.session.refresh(order)
+        return order, "conflict"
+
+    db.session.refresh(order)
+    emit_order_rejected(order)
+
+    # См. пояснение в confirm_order() выше — только реальные Telegram-гости.
+    if order.channel == "telegram":
+        song_line = f"{order.artist} — {order.song_title}" if order.artist else order.song_title
+        notify_guest(order.telegram_user_id, f"❌ Ваш заказ отклонён KJ.\n\n🎵 {song_line}")
+
+    return order, "rejected"
+
+
+# ДОБАВЛЕНО (2026-09-20, жалоба пользователя "нет возможности удалить" в
+# "Мои заказы" Guest App): раньше гость мог только заменить песню в своём
+# заказе (replace_order выше) или дождаться решения KJ — самостоятельно
+# отменить СВОЙ ещё не сыгранный заказ было нельзя вообще. Разрешённые
+# статусы намеренно совпадают с can_replace_order (PENDING/QUEUED) —
+# то же самое "заказ ещё не завершил жизненный цикл", что и у замены песни;
+# STATUS_PROCESSING сознательно исключён (короткое переходное состояние
+# confirm_order, см. её докстринг — отменять заказ ровно в момент его
+# обработки KJ так же небезопасно, как и заменять в нём песню).
+CANCELABLE_BY_GUEST_STATUSES = (STATUS_PENDING, STATUS_QUEUED)
+
+
+def cancel_order_by_guest(order_id: int, guest_id: int, club_id: int):
+    """
+    Самостоятельная отмена гостем СВОЕГО заказа — GuestApp, "Мои заказы".
+    Владелец проверяется так же строго, как в replace_order (та же ранее
+    исправленная уязвимость — раньше владелец заказа при подобных действиях
+    вообще не проверялся, здесь сознательно не повторяем эту ошибку).
+
+    Деньги не затрагиваются: charge_at_completion выполняется только в
+    complete_order() при "Готово" — отменённый до этого момента заказ до
+    списания никогда не доходит, возвращать тут нечего.
+
+    Возвращает (order, outcome), где outcome — один из:
+        "not_found", "forbidden", "not_allowed", "cancelled"
+    """
+    order = db.session.get(Order, order_id)
+    if order is None:
+        return None, "not_found"
+
+    if order.club_id != club_id or order.telegram_user_id != guest_id:
+        return None, "forbidden"
+
+    updated_rows = (
+        db.session.query(Order)
+        .filter(Order.id == order_id, Order.status.in_(CANCELABLE_BY_GUEST_STATUSES))
+        .update({"status": STATUS_REJECTED, "rejected_at": _utcnow()}, synchronize_session=False)
+    )
+    db.session.commit()
+
+    if updated_rows == 0:
+        db.session.refresh(order)
+        return order, "not_allowed"
+
+    db.session.refresh(order)
+    emit_order_rejected(order)
+
+    return order, "cancelled"
+
+
+def complete_order(order_id: int, kj):
+    """
+    Запрос пользователя 2026-09-18: раз подтверждение заказа (confirm_order
+    выше) больше не заводит его в реальную очередь VirtualDJ — KJ сам решает,
+    когда фактически поставить песню в плеер — прежней автоматической
+    реконсиляции для таких заказов тоже больше нет и быть не может: у них
+    нет vdj_item_id, по которому раньше get_kj_queue_view() отслеживала
+    "песня пропала из живой очереди => доиграла => освобождаем место".
+
+    Вместо этого место на карточке стола (services/table_board_service.py,
+    ACTIVE_TABLE_STATUSES — STATUS_COMPLETED туда сознательно не входит)
+    освобождается явным действием KJ: кнопка "Готово" на занятой карточке
+    переводит заказ STATUS_QUEUED -> STATUS_COMPLETED. STATUS_COMPLETED и
+    completed_at существовали в модели заранее (см. models.py), но нигде не
+    проставлялись — это первое место, где они реально используются.
+    completion_source="manual" — второе предусмотренное в модели значение
+    ("automatic" зарезервировано под будущее сопоставление с историей
+    воспроизведения VirtualDJ, здесь не реализуется).
+
+    ИСПРАВЛЕНО (2026-09-19, жалоба пользователя "Готово что означает" ->
+    "означает что можно снимать оплату по тарифу"): списание денег
+    (services/billing_service.py::charge_at_completion) было написано и
+    покрыто тестами, но нигде не вызывалось из самой кнопки "Готово" — по
+    факту деньги никогда не списывались. Теперь вызывается прямо здесь,
+    сразу после того как заказ реально помечен завершённым. Сама функция
+    списания уже содержит все нужные проверки (см. её докстринг) и
+    списывает только у VIP-гостей с ненулевой платной услугой — для
+    обычных (не-VIP) заказов она безопасный no-op, поэтому отдельно
+    проверять guest_type здесь не нужно.
+    ChargeResult из неё не влияет на исход/outcome этой функции — списание
+    не должно блокировать сам факт завершения заказа, даже если что-то
+    пошло не так с деньгами (тот же принцип, что и раньше: complete_order
+    сама по себе НЕ проверяла деньги вообще).
+
+    Возвращает (order, outcome, charge), где outcome — один из:
+        "not_found", "forbidden", "conflict", "completed"
+    charge — ChargeResult при outcome == "completed", иначе None.
+    """
+    order = db.session.get(Order, order_id)
+    if order is None:
+        return None, "not_found", None
+
+    if order.club_id != kj.club_id:
+        return None, "forbidden", None
+
+    updated_rows = (
+        db.session.query(Order)
+        .filter(Order.id == order_id, Order.status == STATUS_QUEUED)
+        .update(
+            {
+                "status": STATUS_COMPLETED,
+                "completed_at": _utcnow(),
+                "completion_source": "manual",
+            },
+            synchronize_session=False,
         )
+    )
+    db.session.commit()
+
+    if updated_rows == 0:
+        db.session.refresh(order)
+        return order, "conflict", None
+
+    db.session.refresh(order)
+    emit_order_updated(order)
+
+    charge = charge_at_completion(order)
+
+    return order, "completed", charge
+
+
+def close_table_orders(club_id: int, table_no: int):
+    """
+    Запрос пользователя 2026-09-19 ("Закрыть стол" из карточки гостя, когда
+    компания встала и ушла, а на карточке стола ещё висят непроигранные
+    заказы): массово отклоняет ВСЕ ещё активные заказы этого стола — тот
+    же набор статусов, что занимает место на табло (см.
+    services/table_board_service.py::ACTIVE_TABLE_STATUSES) —
+    STATUS_PENDING/STATUS_PROCESSING/STATUS_QUEUED/STATUS_ERROR.
+
+    Стол — общий физический ресурс: закрываются заказы ВСЕХ гостей этого
+    стола, а не только того, чью карточку открыли (за столом могла сидеть
+    компания из нескольких аккаунтов). Ничего не списывает — деньги
+    (charge_at_completion) начисляются только за реально сыгранную и
+    отмеченную "Готово" песню, а не за отменённые из-за ухода гостей.
+
+    Возвращает список фактически затронутых Order (для сокет-уведомлений).
+    """
+    orders = (
+        Order.query
+        .filter(
+            Order.club_id == club_id,
+            Order.table_no == table_no,
+            Order.status.in_([STATUS_PENDING, STATUS_PROCESSING, STATUS_QUEUED, STATUS_ERROR]),
+        )
+        .all()
+    )
+    if not orders:
+        return []
+
+    order_ids = [order.id for order in orders]
+    db.session.query(Order).filter(Order.id.in_(order_ids)).update(
+        {"status": STATUS_REJECTED, "rejected_at": _utcnow()},
+        synchronize_session=False,
+    )
+    db.session.commit()
+
+    for order in orders:
+        db.session.refresh(order)
+        emit_order_rejected(order)
+
+    return orders
+
+
+def _queue_rank(vdj, vdj_item_id: str):
+    """
+    1-based позиция заказа в текущей очереди VirtualDJ клуба — по образцу
+    /api/guest/queue и /api/kj/queue/<club_id> (см. queue() в routes/guest.py),
+    единственный источник истины о положении в очереди сейчас (у нового Order
+    нет аналога старых orders.position/is_next/marked_next_at — они не
+    переносятся, решение согласовано с пользователем при утверждении правил
+    замены песни). Возвращает None, если vdj_item_id не найден в очереди.
+
+    Сравнение не строго "равно", а ещё и "заканчивается на" — подтверждено
+    живым тестом (vdj_bridge/PHASE6_VDJ_NETWORK_CONTROL.md, раздел 3.8):
+    NetworkControlVDJDriver.add_to_queue() сохраняет ПОЛНЫЙ путь с буквой
+    диска (например "D:\\...\\файл.mp4", получен от get_browsed_filepath), а
+    NetworkControlVDJDriver.get_queue() возвращает путь БЕЗ буквы диска
+    (получен из отдельных свойств "filepath"+"filename" — VirtualDJ не
+    отдаёт букву диска через них). Это два представления одного и того же
+    файла, а не разные файлы — отсюда "заканчивается на" вместо "равно".
+    Пустая строка/None никогда не считается совпадением (иначе "abc".
+    endswith("") дал бы ложное совпадение с чем угодно).
+
+    Известное ограничение (см. тот же раздел 3.8): если одна и та же песня
+    стоит в очереди VirtualDJ дважды одновременно (подтверждено вживую как
+    нормальная реальная ситуация), обе записи дадут одинаковый vdj_item_id,
+    и здесь вернётся позиция ПЕРВОЙ из них — при заказе той же песни дважды
+    ранг может быть определён не совсем точно. Показ живой очереди гостям и
+    KJ это не затрагивает (там просто название/исполнитель по позициям).
+    """
+    if not vdj_item_id:
+        return None
+    for idx, item in enumerate(vdj.get_queue(), start=1):
+        candidate = item.vdj_item_id
+        if not candidate:
+            continue
+        if candidate == vdj_item_id or vdj_item_id.endswith(candidate):
+            return idx
+    return None
+
+
+def can_replace_order(order, vdj) -> bool:
+    """
+    Матрица правил замены песни — ПЕРЕСМОТРЕНА 2026-09-20 (жалоба
+    пользователя: "нет возможности удалить / заменить / сменить категорию" —
+    у гостя на карточке заказа в статусе "🎶 В очереди" кнопки "Заменить"
+    не было вообще).
+
+    Старая (согласованная ранее) матрица опиралась на позицию заказа в
+    ЖИВОЙ очереди VirtualDJ:
+
+        STATUS_PENDING                          -> можно
+        STATUS_PROCESSING                        -> нельзя
+        STATUS_QUEUED, rank 1 или 2 в vdj.get_queue() -> нельзя
+        STATUS_QUEUED, rank >= 3                  -> можно
+        STATUS_QUEUED, vdj_item_id не в очереди   -> нельзя
+        STATUS_PLAYING/COMPLETED/REJECTED/ERROR   -> нельзя
+
+    Но с 2026-09-18 confirm_order() перестала сама передавать принятый заказ
+    в VirtualDJ (см. её докстринг) — STATUS_QUEUED теперь означает только
+    "KJ принял заказ", а vdj_item_id у такого заказа НИКОГДА не
+    проставляется. Из-за этого старая проверка ранга превратилась в
+    "нельзя всегда" — ни один реально принятый заказ больше не мог пройти
+    её, что и вызвало жалобу. Новая, подтверждённая пользователем матрица:
+
+        STATUS_PENDING   -> можно
+        STATUS_PROCESSING -> нельзя (короткое переходное состояние)
+        STATUS_QUEUED     -> можно (гость может менять песню/исполнителя/
+            категорию весь срок, пока заказ ждёт исполнения — вплоть до
+            момента, когда KJ нажмёт "Готово")
+        STATUS_PLAYING/COMPLETED/REJECTED/ERROR -> нельзя (заказ уже
+            завершил свой жизненный цикл)
+
+    Параметр vdj сохранён ради обратной совместимости вызовов (routes/guest.py,
+    replace_order ниже) — сверка с живой очередью VirtualDJ здесь больше не
+    нужна и не выполняется.
+    """
+    return order.status in (STATUS_PENDING, STATUS_QUEUED)
+
+
+def replace_order(order_id: int, guest_id: int, club_id: int, song_title: str, artist, service_id):
+    """
+    Замена песни в уже существующем заказе гостя (Role 3/4/5). Согласованная
+    и утверждённая пользователем спецификация:
+      - менять может только владелец заказа (старая уязвимость old
+        handlers/client.py::order_replace / replace_svc_execute, где владелец
+        НЕ проверялся вообще ни на одном из трёх шагов, сознательно не
+        переносится);
+      - меняются только song_title/artist/service_id — без отдельной денежной
+        операции (старая денежная логика replace_svc_execute, которая
+        проверяла баланс, но не списывала и не возвращала деньги, тоже не
+        переносится: charge-at-completion спишет по тому service_id, который
+        будет актуален на момент завершения песни — новая архитектура,
+        установленная ранее в проекте);
+      - лимита на количество замен нет.
+
+    Возвращает (order, outcome), где outcome — один из:
+        "not_found", "forbidden", "not_allowed", "service_not_found", "replaced"
+    """
+    order = db.session.get(Order, order_id)
+    if order is None:
+        return None, "not_found"
+
+    if order.club_id != club_id or order.telegram_user_id != guest_id:
+        return None, "forbidden"
+
+    vdj = get_vdj_client(order.club_id)
+    if not can_replace_order(order, vdj):
+        return order, "not_allowed"
 
     if service_id is not None:
-        if not isinstance(service_id, int):
-            return api_error(400, "VALIDATION_ERROR", "service_id должен быть числом")
         service = db.session.get(Service, service_id)
-        if service is None or service.club_id != g.club_id:
-            return api_error(404, "SERVICE_NOT_FOUND", "Услуга не найдена")
+        if service is None or service.club_id != club_id:
+            return order, "service_not_found"
 
-    active_count = vip_service.count_active_orders(g.club_id, g.guest_id)
-    max_active = current_app.config["MAX_ACTIVE_SONGS_PER_GUEST"]
-    if active_count >= max_active:
-        return api_error(
-            409, "ACTIVE_SONGS_LIMIT",
-            f"Можно иметь не более {max_active} заказов одновременно — дождитесь, пока сыграет текущий",
+    order.song_title = song_title
+    order.artist = artist
+    order.service_id = service_id
+    db.session.commit()
+
+    emit_order_updated(order)
+
+    return order, "replaced"
+
+
+def remove_from_vdj_queue(club_id: int, vdj_item_id: str):
+    """ТЗ п.20 + доп. ТЗ "KJ Pro" (запрос пользователя убрать песню прямо с
+    экрана "Живая очередь VirtualDJ"): удаление уже добавленного в очередь
+    VirtualDJ элемента — отдельная операция от отклонения ещё не переданного
+    заказа (reject_order выше).
+
+    club_id обязателен по той же причине, что и в confirm_order(): в режиме
+    VDJ_ADAPTER=bridge команду нужно адресовать мосту конкретного клуба,
+    а не какому попало.
+
+    Если этому элементу очереди соответствует заказ (сопоставление по
+    club_id+vdj_item_id, тем же способом, что и в get_kj_queue_view() ниже,
+    и только пока он ещё STATUS_QUEUED) — переводит его в STATUS_REJECTED.
+    Отдельного возврата денег, в отличие от старого бота
+    (handlers/kj.py::order_delete_confirmed -> db.refund_vip_for_order()),
+    здесь не требуется: в новой архитектуре списание происходит только при
+    ЗАВЕРШЕНИИ песни (services/billing_service.py::charge_at_completion), а
+    удалённая из очереди песня никогда не будет завершена — значит, с неё и
+    так ничего не спишется. Если соответствующего заказа не нашлось (песню
+    добавили прямо в VirtualDJ, минуя Backend) — просто ничего, кроме самой
+    VirtualDJ, не трогаем.
+
+    Возвращает найденный Order (или None, если его не было) — вызывающему
+    коду (routes/vdj.py) он не обязателен, но полезен для ответа фронтенду.
+
+    ВАЖНО про "потерянные" (orphaned) заказы (см. докстринг get_kj_queue_view
+    про то, откуда они берутся — например, старые записи ещё из тестового
+    mock-режима, у которых vdj_item_id никогда не существовал в настоящей
+    VirtualDJ): если такой позиции уже и так нет в живой очереди VirtualDJ —
+    физически удалять там нечего, поэтому vdj.remove_from_queue() вообще не
+    вызывается. Раньше он вызывался всегда, и для настоящего VirtualDJ
+    (NetworkControlVDJDriver, удаление по ID не поддерживается вообще, см.
+    его докстринг) это гарантированно проваливалось с ошибкой — хотя удалять
+    было нечего с самого начала (живой инцидент 2026-09-14: старые заказы
+    "mock-3"/"mock-4" из тестового режима не давали себя убрать после
+    включения настоящей VirtualDJ). Если же позиция всё ещё правда стоит в
+    очереди — вызов идёт как раньше, и для настоящего VirtualDJ он по-прежнему
+    может закончиться отказом (удаление там остаётся ручным действием KJ
+    прямо в VirtualDJ — это согласовано с пользователем отдельно, не баг).
+    """
+    vdj = get_vdj_client(club_id)
+
+    live_queue = vdj.get_queue()
+    still_in_vdj = any(
+        item.vdj_item_id
+        and (item.vdj_item_id == vdj_item_id or vdj_item_id.endswith(item.vdj_item_id))
+        for item in live_queue
+    )
+    if still_in_vdj:
+        vdj.remove_from_queue(vdj_item_id)
+
+    order = (
+        Order.query.filter_by(club_id=club_id, vdj_item_id=vdj_item_id, status=STATUS_QUEUED).first()
+    )
+    if order is not None:
+        order.status = STATUS_REJECTED
+        order.rejected_at = _utcnow()
+        db.session.commit()
+        emit_order_rejected(order)
+
+        if order.channel == "telegram":
+            song_line = f"{order.artist} — {order.song_title}" if order.artist else order.song_title
+            notify_guest(order.telegram_user_id, f"❌ Ваша песня удалена из очереди KJ.\n\n🎵 {song_line}")
+
+    emit_queue_updated(club_id, get_kj_queue_view(club_id))
+    return order
+
+
+def update_order_table(order_id: int, kj, table_no):
+    """
+    Доп. ТЗ "KJ Pro": смена номера стола у песни, уже стоящей в очереди —
+    экран "Живая очередь VirtualDJ" (запрос пользователя после того, как
+    выяснилось, что стол мог быть указан неверно уже постфактум). Сам
+    VirtualDJ номер стола не хранит вообще (см. докстринг get_kj_queue_view
+    ниже) — это чисто поле нашего Order.table_no, поэтому смена не требует
+    никакого обращения к VirtualDJ, только запись в базу.
+
+    Разрешено только пока заказ ещё STATUS_QUEUED — эта функция вызывается
+    только с экрана живой очереди, где показываются именно такие заказы.
+
+    Возвращает (order, outcome), где outcome — один из:
+        "not_found", "forbidden", "not_queued", "updated"
+    """
+    order = db.session.get(Order, order_id)
+    if order is None:
+        return None, "not_found"
+    if order.club_id != kj.club_id:
+        return None, "forbidden"
+    if order.status != STATUS_QUEUED:
+        return order, "not_queued"
+
+    order.table_no = table_no
+    db.session.commit()
+    emit_order_updated(order)
+    emit_queue_updated(order.club_id, get_kj_queue_view(order.club_id))
+    return order, "updated"
+
+
+def update_order_category(order_id: int, kj, service_id):
+    """
+    Доп. ТЗ "KJ Pro": назначение/смена категории (Service, см. её докстринг в
+    models.py) у песни, уже стоящей в очереди. До этого ни один эндпоинт
+    заказа не проставлял service_id вообще (см. комментарий у
+    Order.service_id в models.py) — это первое место, где KJ может сделать
+    это сам, вручную, для уже поставленной в очередь песни.
+
+    Тот же набор outcome, что и у update_order_table() выше, плюс
+    "service_not_found", если указанная категория не существует или
+    принадлежит другому клубу.
+    """
+    order = db.session.get(Order, order_id)
+    if order is None:
+        return None, "not_found"
+    if order.club_id != kj.club_id:
+        return None, "forbidden"
+    if order.status != STATUS_QUEUED:
+        return order, "not_queued"
+
+    if service_id is not None:
+        service = db.session.get(Service, service_id)
+        if service is None or service.club_id != kj.club_id:
+            return order, "service_not_found"
+
+    order.service_id = service_id
+    db.session.commit()
+    emit_order_updated(order)
+    emit_queue_updated(order.club_id, get_kj_queue_view(order.club_id))
+    return order, "updated"
+
+
+def get_kj_queue_view(club_id: int) -> list[dict]:
+    """
+    Живая очередь VirtualDJ клуба, где каждая позиция по возможности
+    сопоставлена с конкретным заказом (Order) в статусе STATUS_QUEUED — нужно
+    KJ Pro, чтобы показывать номер стола рядом с песней. Сам VirtualDJ номер
+    стола никогда не хранит (об этом знает только наша база), поэтому без
+    такого сопоставления колонка "Стол" всегда была бы пустой при работе с
+    настоящим VirtualDJ (см. обсуждение с пользователем про фоновую
+    синхронизацию живой очереди в KJ Pro).
+
+    Сопоставление — по vdj_item_id, тем же способом "равно или заканчивается
+    на", что и _queue_rank() выше (см. её докстринг про букву диска и
+    дубликаты), но здесь сразу для ВСЕЙ очереди целиком, а не для одного
+    заказа. Каждый Order используется как совпадение не более одного раза:
+    если одна и та же песня стоит в очереди VirtualDJ дважды одновременно
+    (подтверждено вживую как нормальный реальный случай, не баг), позиции
+    разбираются по порядку живой очереди, и каждой достаётся ещё не занятый
+    заказ — так же, как если бы KJ сам сверял список сверху вниз.
+
+    Если для позиции живой очереди подходящего заказа не нашлось — значит
+    песню добавили (или переместили сюда) прямо в VirtualDJ, в обход Guest
+    App и Backend (KJ вручную перетащил файл в очередь). Согласовано с
+    пользователем: автоматически заводить для такой позиции новый заказ в
+    базе нельзя (мы не знаем ни стола, ни гостя) — она просто показывается
+    KJ Pro "как есть", с order_id=None. Именно по наличию order_id (а не по
+    значению table_no) экран отличает такую позицию от легитимного заказа
+    без стола (order_id есть, table_no=None, гость сам не указал стол).
+
+    Обратный случай — заказ в базе всё ещё STATUS_QUEUED, но его
+    vdj_item_id уже не встречается в живой очереди VirtualDJ вообще (после
+    того, как unused_orders разобраны выше, здесь остаются именно такие) —
+    "потерянный" заказ. В тестовом режиме (VDJ_ADAPTER=mock) это возникает
+    при каждом перезапуске Backend: очередь mock-клиента хранится в памяти
+    процесса (vdj/mock_client.py) и обнуляется, а STATUS_QUEUED в постоянной
+    базе — нет (живой пример: пользователь столкнулся с этим 2026-09-14,
+    после нескольких перезапусков во время загрузки файлов гость упёрся в
+    лимит "не более 2 заказов одновременно" из-за пары таких заказов). В
+    реальном VirtualDJ то же самое возможно при разрыве и переподключении
+    моста. Раньше такие заказы нигде не показывались и KJ не мог их снять —
+    добавляем их в конец списка с order_id (он есть) и пометкой
+    "orphaned": true, чтобы уже существующая кнопка "Удалить" в KJ Pro (см.
+    remove_from_vdj_queue выше — она ищет заказ по vdj_item_id независимо от
+    того, жив ли он в самом VirtualDJ) могла закрыть и их тоже.
+
+    2026-09-18, запрос пользователя: confirm_order() больше не передаёт
+    песню в VirtualDJ сама — такой STATUS_QUEUED-заказ рождается сразу без
+    vdj_item_id (он остаётся пустым навсегда, пока KJ явно не нажмёт
+    "Готово", см. complete_order()). Без явного исключения такие заказы
+    выше просто никогда бы не нашли себе пару в live_queue (не с чем
+    сравнивать) и на следующей же строчке ниже были бы молча объявлены
+    "потерянными" и отклонены — притом что песню никто никуда не терял, KJ
+    просто ещё не успел поставить её в плеер вручную. Поэтому такие заказы
+    здесь целиком исключены из рассмотрения: их жизненным циклом теперь
+    управляет только явное действие KJ (кнопка "Готово"), а не сверка с
+    живой очередью VirtualDJ.
+    """
+    vdj = get_vdj_client(club_id)
+    live_queue = vdj.get_queue()
+
+    unused_orders = (
+        db.session.query(Order)
+        .filter(
+            Order.club_id == club_id,
+            Order.status == STATUS_QUEUED,
+            Order.vdj_item_id.isnot(None),
+        )
+        .order_by(Order.queued_at.asc())
+        .all()
+    )
+
+    result = []
+    for item in live_queue:
+        matched = None
+        if item.vdj_item_id:
+            for order in unused_orders:
+                if not order.vdj_item_id:
+                    continue
+                if order.vdj_item_id == item.vdj_item_id or item.vdj_item_id.endswith(order.vdj_item_id):
+                    matched = order
+                    break
+            if matched is not None:
+                unused_orders.remove(matched)
+
+        result.append(
+            {
+                "vdj_item_id": item.vdj_item_id,
+                "song_title": item.song_title,
+                "artist": item.artist,
+                "table_no": matched.table_no if matched else None,
+                "order_id": matched.id if matched else None,
+                # Доп. ТЗ "KJ Pro": нужен экрану живой очереди, чтобы показать
+                # и дать сменить категорию уже поставленной в очередь песни
+                # (см. update_order_category() выше).
+                "service_id": matched.service_id if matched else None,
+                "orphaned": False,
+            }
         )
 
-    detected_guest_type, _vip = _guest_type_and_vip(g.club_id, g.guest_id)
-    guest_type = detected_guest_type or ("no_table" if g.table_no is None else "client")
+    # Заказы, оставшиеся неразобранными выше — STATUS_QUEUED в базе, но нет
+    # такой позиции в живой очереди VirtualDJ вообще (см. докстринг).
+    #
+    # Запрос пользователя 2026-09-17: раньше такие "потерянные" заказы
+    # показывались KJ прямо в живой очереди с пометкой orphaned=True и
+    # кнопкой "Удалить" (см. историю в докстринге выше) — но на практике это
+    # только путает: KJ видит в очереди песню, которой там давно нет, и не
+    # понимает, что это не настоящий заказ, а мусор от рассинхронизации.
+    # Теперь вместо показа с ручным удалением — сразу молча снимаем такой
+    # заказ с очереди сами (STATUS_REJECTED, тем же способом, что и ручное
+    # удаление в remove_from_vdj_queue() выше), и в список живой очереди он
+    # вообще не попадает — KJ просто никогда его не увидит.
+    #
+    # Сознательно НЕ отправляем гостю уведомление "❌ Ваша песня удалена из
+    # очереди" (в отличие от remove_from_vdj_queue(), где это осознанное
+    # действие KJ прямо сейчас) — здесь мы просто обнаружили постфактум, что
+    # песня пропала из VirtualDJ неизвестно когда (возможно, уже давно), и
+    # присылать гостю через неопределённое время после этого "уведомление",
+    # никак не привязанное к моменту реального события, только сбило бы его
+    # с толку.
+    for order in unused_orders:
+        order.status = STATUS_REJECTED
+        order.rejected_at = _utcnow()
+    if unused_orders:
+        db.session.commit()
+    return result
+
+
+def claim_vdj_queue_item(kj, vdj_item_id: str, song_title: str, artist, table_no, service_id):
+    """
+    Доп. ТЗ "KJ Pro" (запрос пользователя 2026-09-14, после первого живого
+    теста с настоящей VirtualDJ: KJ добавил песни прямо в VirtualDJ, они
+    появились в живой очереди KJ Pro как позиции "без заказа" — get_kj_
+    queue_view() отдаёт их с order_id=None, см. её докстринг). У такой
+    позиции просто негде хранить стол/категорию — без Order они относятся
+    только к самой VirtualDJ, которая про стол/категорию ничего не знает
+    (см. тот же докстринг). "Присвоить" здесь означает: завести для уже
+    существующей в VirtualDJ позиции свой Order, НЕ трогая саму VirtualDJ
+    (песня там уже есть, add_to_queue не вызывается) — после этого позиция
+    перестаёт быть "без заказа" (сопоставляется по vdj_item_id как любой
+    другой Order) и дальше её стол/категория меняются уже обычными
+    update_order_table()/update_order_category() выше, как у любого другого
+    заказа.
+
+    source="virtualdj" — до сих пор только предусмотренное в модели значение
+    (см. комментарий у Order.source в models.py: "guest | manual |
+    virtualdj"), это первое место, где оно реально проставляется.
+    telegram_user_id=-1 и channel="webapp" — та же причина, что и в
+    add_manual_song() ниже (не гость, уведомлять некого).
+
+    Не перепроверяет, что vdj_item_id прямо сейчас всё ещё есть в
+    vdj.get_queue() — экран KJ Pro и так строит список из свежего вызова
+    get_kj_queue_view() непосредственно перед показом кнопки "Присвоить",
+    гонка в несколько секунд не критична: если песню за это время уже убрали
+    из VirtualDJ вручную, получится тот же случай, что уже существует —
+    "потерянный" заказ (см. докстринг get_kj_queue_view), просто с самого
+    начала.
+
+    Возвращает (order, outcome), outcome — один из: "already_claimed"
+    (для этой позиции уже есть заказ — race двух одновременных нажатий),
+    "service_not_found", "claimed".
+    """
+    existing = Order.query.filter_by(
+        club_id=kj.club_id, vdj_item_id=vdj_item_id, status=STATUS_QUEUED
+    ).first()
+    if existing is not None:
+        return existing, "already_claimed"
+
+    if service_id is not None:
+        service = db.session.get(Service, service_id)
+        if service is None or service.club_id != kj.club_id:
+            return None, "service_not_found"
 
     order = Order(
-        telegram_user_id=g.guest_id,
-        club_id=g.club_id,
-        table_no=g.table_no,
-        guest_type=guest_type,
+        telegram_user_id=-1,
+        club_id=kj.club_id,
+        table_no=table_no,
         song_title=song_title,
         artist=artist,
-        service_id=service_id,
-        source="guest",
+        status=STATUS_QUEUED,
+        source="virtualdj",
         channel="webapp",
+        vdj_item_id=vdj_item_id,
+        service_id=service_id,
+        queued_at=_utcnow(),
+        confirmed_by=kj.id,
+        confirmed_at=_utcnow(),
     )
     db.session.add(order)
     db.session.commit()
 
-    emit_order_created(order)
+    emit_queue_updated(kj.club_id, get_kj_queue_view(kj.club_id))
 
-    # Запрос пользователя 2026-09-19: сразу в ответе на отправку — номер
-    # места в общей очереди клуба (см. docstring
-    # table_board_service.get_club_queue_positions), чтобы фронтенд
-    # написал "Заказ отправлен! Ваш номер в очереди: N", а не звучал так,
-    # будто нужно чьё-то отдельное подтверждение.
-    data = order.to_dict()
-    data["queue_position"] = table_board_service.get_club_queue_positions(g.club_id).get(order.id)
-    return api_ok(data, status_code=201)
+    return order, "claimed"
 
 
-@bp.get("/services")
-@require_guest
-def list_services():
-    """Тарифы клуба (старое: services/venue_services, аудит п.12) — гость
-    видит одинаковый прайс независимо от роли; VIP просто может расплатиться
-    балансом при завершении песни (billing_service), не-VIP — вне бота."""
-    services = Service.query.filter_by(club_id=g.club_id).order_by(Service.id.asc()).all()
-    return api_ok([s.to_dict() for s in services])
-
-
-@bp.get("/songs/search")
-@require_guest
-def search_songs():
+def add_manual_song(kj, song_title: str, artist, table_no: int):
     """
-    Старое: bot.py::inline_search без спецпрефиксов "kj:"/"replace:" (аудит
-    п.1) — доступно любому гостю клуба (VIP/клиент со столом/без стола,
-    Role 3/4/5 — старый код тоже не ограничивал по роли, только по наличию
-    venue_id). Префиксы "kj:" (ручное добавление KJ) и "replace:" (замена
-    песни, к тому же не проверявшая в старом коде владельца заказа — аудит,
-    находка №3) сюда сознательно не перенесены: это отдельные, ещё не
-    реализованные функции, а не часть самого поиска.
+    KJ добавляет песню в очередь VirtualDJ прямо из панели KJ Pro, минуя
+    гостя и Guest App целиком — новый экран "Добавить песню" (следующий
+    после фоновой синхронизации живой очереди блок ТЗ). Согласовано с
+    пользователем отдельно, двумя решениями:
+      1) песню ищем в настоящих файлах VirtualDJ, а не в загруженном CSV-
+         каталоге клуба (services/song_service.py) — тот годится только
+         гостю как подсказка при наборе текста, реального пути к файлу не
+         хранит и здесь не подходит;
+      2) стол указывает сам KJ, заказ создаётся и уходит в очередь СРАЗУ,
+         одним действием — без промежуточного "pending" и без отдельного
+         подтверждения перетаскиванием, как в confirm_order() выше (KJ уже
+         принял решение в момент нажатия "Добавить").
+
+    Стол обязателен (в отличие от гостевого заказа, где table_no=None —
+    легитимный "заказ без стола", ТЗ п.27): здесь стол не выбирает гость,
+    его указывает KJ, так что null означал бы просто "забыли ввести", а не
+    осознанный выбор — поэтому пустой/нулевой table_no отклоняется вызывающим
+    кодом (маршрутом) ещё до этой функции.
+
+    telegram_user_id = -1: единственное безопасно "не гость" значение —
+    настоящие Telegram ID (старый бот) и id анонимных веб-сессий (см.
+    routes/guest.py::_new_guest_id, secrets.randbits(62)) всегда
+    неотрицательные, поэтому -1 гарантированно не совпадёт ни с одним
+    реальным гостем и никогда не попадёт в чьё-то "Мои заказы".
+
+    source="manual" — то самое значение, для которого поле Order.source уже
+    было заведено (см. комментарий у него в models.py: "guest | manual |
+    virtualdj"), просто раньше нигде не проставлялось.
+    channel="webapp" (не "telegram") — единственная его роль в остальном
+    коде (см. confirm_order() выше) — решать, пытаться ли уведомить гостя
+    через Telegram Bot API; здесь уведомлять некого, "webapp" это надёжно
+    выключает, не требуя заводить в этом поле третье значение.
+
+    Если VirtualDJ отклонил добавление (VirtualDJError) — заказ вообще не
+    создаётся (в отличие от confirm_order(), где заказ уже существовал до
+    попытки и в случае неудачи помечается STATUS_ERROR): здесь заказа до
+    успешного добавления в VirtualDJ просто не было, создавать его "уже
+    сломанным" незачем.
+
+    Возвращает (order, outcome), outcome — один из: "vdj_error", "queued".
+    Валидация song_title/table_no (тип, пустота) — на маршруте, как и у
+    POST /api/guest/order (routes/guest.py), эта функция получает уже
+    проверенные значения.
     """
-    query = request.args.get("q", "")
-    songs = song_service.search_songs(g.club_id, query)
-    return api_ok([s.to_dict() for s in songs])
-
-
-@bp.post("/songs/ai-search")
-@require_guest
-def ai_search_songs():
-    """
-    Старое: /ai команда бота + ai_search_handlers.py + ai_search.py (аудит
-    п.2) — свободное текстовое описание песни -> Claude извлекает 1-3
-    вероятных "исполнитель - название" -> Genius ищет реальные треки.
-    Доступно любому типу гостя, как и старая команда /ai (проверки роли не
-    было). Результат — НЕ из каталога клуба (нет id) и не создаёт заказ сам
-    по себе; выбор конкретного варианта на фронтенде заполняет обычную форму
-    заказа — та же самая адаптация под веб-UI, что и у GET /songs/search
-    (п.1), тот же существующий /api/guest/order с лимитом активных песен
-    подхватывается автоматически, без дублирования этой логики здесь.
-    """
-    payload = request.get_json(silent=True) or {}
-    text = payload.get("text", "")
-    if not isinstance(text, str) or not text.strip():
-        return api_error(400, "VALIDATION_ERROR", "text обязателен и должен быть непустой строкой")
-
-    results = ai_search_service.ai_powered_search(text.strip())
-    return api_ok(results)
-
-
-# Скриншот сжимается до разумного размера ещё на фронтенде (canvas, см.
-# guest-app/src/App.jsx) — это ограничение просто честный верхний предел,
-# чтобы случайно присланный огромный оригинал (гость обошёл сжатие,
-# прислав файл напрямую через API) не улетел в Claude API как есть.
-MAX_SCREENSHOT_BASE64_LEN = 8_000_000
-
-
-@bp.post("/songs/screenshot-search")
-@require_guest
-def screenshot_search_songs():
-    """
-    Третий способ поиска песни (см. ai_search_songs выше) — гость вместо
-    текста присылает скриншот (например, из Shazam/Spotify/ВК), где видно
-    название и исполнителя. Картинка приходит как base64 в теле JSON (без
-    multipart — так проще на фронтенде через FileReader/canvas). Дальше
-    Клод смотрит на картинку вместо текста (ai_search_service._ask_claude_vision),
-    а остальной путь (iTunes-поиск, выбор варианта гостем, обычный
-    /api/guest/order) не отличается от ai_search_songs.
-    """
-    payload = request.get_json(silent=True) or {}
-    image_base64 = payload.get("image_base64", "")
-    media_type = payload.get("media_type", "")
-
-    if not isinstance(image_base64, str) or not image_base64.strip():
-        return api_error(400, "VALIDATION_ERROR", "image_base64 обязателен и должен быть непустой строкой")
-    if len(image_base64) > MAX_SCREENSHOT_BASE64_LEN:
-        return api_error(400, "IMAGE_TOO_LARGE", "Изображение слишком большое")
-    if media_type not in ai_search_service.ALLOWED_SCREENSHOT_TYPES:
-        return api_error(400, "VALIDATION_ERROR", "media_type должен быть image/jpeg, image/png или image/webp")
-
-    results = ai_search_service.screenshot_powered_search(image_base64.strip(), media_type)
-    return api_ok(results)
-
-
-@bp.post("/vip/request")
-@require_guest
-def request_vip():
-    """Старое: handlers/client.py::request_vip_status (аудит п.8А)."""
-    existing = vip_service.get_pending_vip_request(g.club_id, g.guest_id)
-    if existing is not None:
-        return api_error(409, "VIP_REQUEST_PENDING", "Заявка уже отправлена, ждите решения KJ")
-
-    existing_vip = vip_service.get_vip_client(g.club_id, g.guest_id)
-    if existing_vip is not None:
-        return api_error(409, "ALREADY_VIP", "Вы уже VIP")
-
-    result = vip_service.create_vip_request(g.club_id, g.guest_id, g.table_no)
-    if result.outcome == "requires_google_link":
-        return api_error(
-            409, "GOOGLE_LINK_REQUIRED",
-            "Чтобы подать заявку на VIP, сначала сохраните профиль через Google",
-        )
-
-    emit_vip_request_created(result.request)
-    return api_ok(result.request.to_dict(), status_code=201)
-
-
-@bp.post("/profile/link-google")
-@require_guest
-def link_google():
-    """
-    ТЗ п.45 — единственный экран "выберите стол и войдите через Google":
-    номер стола и постоянная идентификация гостя устанавливаются здесь
-    ОДНИМ действием (заменяет прежний механизм access_code/redeem,
-    удалён целиком, и прежнее деление на "способ 1"/"способ 2" — QR
-    больше никогда не приносит номер стола сам по себе). table_no
-    обязателен в теле запроса, если у гостя ещё вообще нет стола (до этого
-    вызова он может только смотреть очередь и выбирать песню в форму, но
-    не заказывать); если стол уже выбран этим же способом ранее, а гость
-    сейчас лишь переключается на другой уже существующий Google-аккаунт —
-    table_no можно не передавать снова, тогда используется уже известный
-    стол. После успешного вызова гость получает стол, постоянный профиль и
-    становится Role 4 (или 3, если уже был одобрен как VIP).
-
-    guest_account_service.link_google САМ решает: если для этого
-    Google-аккаунта в этом клубе уже есть постоянный профиль — им
-    становится ОН (то немногое, что гость успел сделать в текущей сессии
-    ДО этого вызова, теряется — редкий случай "уже привязывал с другого
-    устройства", решение по п.45); если аккаунта ещё нет — постоянным
-    номером становится ТЕКУЩИЙ guest_id этой сессии, поэтому всё, что
-    гость уже заказал/добавил в избранное до этого вызова, никуда не
-    девается — оно и так уже записано на этот номер.
-    """
-    payload = request.get_json(silent=True) or {}
-    credential = payload.get("google_credential")
-    table_no = payload.get("table_no")
-
-    if table_no is None:
-        if g.table_no is None:
-            return api_error(400, "VALIDATION_ERROR", "table_no обязателен — сначала выберите стол")
-        effective_table_no = g.table_no
-    else:
-        if not isinstance(table_no, int) or isinstance(table_no, bool) or table_no <= 0:
-            return api_error(400, "VALIDATION_ERROR", "table_no должен быть положительным числом")
-        # KJ-04 доп. ТЗ "KJ Pro": у клуба может быть настроено количество
-        # столов (Club.table_count, KJ управляет им через
-        # PUT /api/kj/table-settings/<club_id>) — старый бот проверял именно
-        # здесь (bot.py/handlers/client.py: table_number > venue.table_count
-        # -> "table_count_exceeded"). table_count=None означает "без
-        # ограничения" (клуб ещё не настроил) — тогда пропускаем проверку.
-        club = db.session.get(Club, g.club_id)
-        if club is not None and club.table_count is not None and table_no > club.table_count:
-            return api_error(
-                400, "TABLE_OUT_OF_RANGE",
-                f"В этом клубе {club.table_count} столов — выберите номер от 1 до {club.table_count}",
-            )
-        effective_table_no = table_no
-
+    vdj = get_vdj_client(kj.club_id)
     try:
-        identity = verify_google_credential(
-            current_app.config["GOOGLE_AUTH_MODE"], current_app.config["GOOGLE_CLIENT_ID"], credential,
-        )
-    except GoogleAuthError as exc:
-        return api_error(401, "GOOGLE_AUTH_FAILED", exc.message)
+        vdj_item_id = vdj.add_to_queue(song_title, artist, table_no)
+    except VirtualDJError:
+        return None, "vdj_error"
 
-    result = guest_account_service.link_google(g.club_id, g.guest_id, identity["sub"], identity.get("email"))
-    new_guest_id = result.account.telegram_user_id
-
-    # Групповой стол: если постоянная личность отличается от текущей
-    # (нашёлся уже существовавший профиль) — переносим членство/заявку по
-    # той же логике, что раньше применялась к погашению VIP-кода (см.
-    # docstring table_group_service.transfer_identity — сама разбирается,
-    # что переносить нечего, если у гостя ещё не было стола). Групповое
-    # состояние на выбранном столе создаётся/подтверждается для итоговой
-    # личности в любом случае — стол выбирается здесь всегда впервые.
-    if new_guest_id != g.guest_id:
-        table_group_service.transfer_identity(g.club_id, effective_table_no, g.guest_id, new_guest_id)
-    table_group_state = table_group_service.ensure_session_group_state(g.club_id, effective_table_no, new_guest_id)
-
-    # Живой стол в БД (см. models.py::GuestStatus, auth.py::require_guest) —
-    # чтобы список гостей в KJ Panel видел актуальный стол сразу, не
-    # дожидаясь первого заказа этого гостя.
-    guest_status_service.set_table(g.club_id, new_guest_id, effective_table_no)
-
-    token = issue_guest_token(
-        new_guest_id, g.club_id, effective_table_no,
-        current_app.config["GUEST_JWT_SECRET"], current_app.config["GUEST_JWT_TTL_SECONDS"],
+    order = Order(
+        telegram_user_id=-1,
+        club_id=kj.club_id,
+        table_no=table_no,
+        song_title=song_title,
+        artist=artist,
+        status=STATUS_QUEUED,
+        source="manual",
+        channel="webapp",
+        vdj_item_id=vdj_item_id,
+        queued_at=_utcnow(),
+        confirmed_by=kj.id,
+        confirmed_at=_utcnow(),
     )
-    return api_ok({
-        # Строкой — см. комментарий в create_session выше.
-        "guest_id": str(new_guest_id), "club_id": g.club_id, "table_no": effective_table_no,
-        "token": token, "table_group_status": table_group_state.status,
-        "account": result.account.to_dict(),
-    })
-
-
-@bp.put("/profile/name")
-@require_guest
-def set_display_name():
-    """
-    Гость задаёт/меняет своё отображаемое имя (запрос пользователя 2026-09,
-    "самопереименование гостя") — это имя видит KJ в списке гостей и в
-    карточке гостя KJ Panel (см. services/guest_directory_service.py)
-    вместо (точнее, в дополнение к) голого номера guest_id. Хранится на
-    постоянном профиле (models.py::GuestAccount.display_name), как и email
-    — поэтому доступно только ПОСЛЕ входа через Google (см. link_google
-    выше): до этого у гостя ещё нет записи, к которой можно привязать имя,
-    тот же принцип, что и у request_vip/add_favorite. Менять можно сколько
-    угодно раз — это не разовая настройка при активации, а именно
-    "переименование".
-    """
-    payload = request.get_json(silent=True) or {}
-    raw_name = payload.get("display_name")
-
-    if not isinstance(raw_name, str):
-        return api_error(400, "VALIDATION_ERROR", "display_name обязателен и должен быть строкой")
-
-    name = raw_name.strip()
-    if not name:
-        return api_error(400, "VALIDATION_ERROR", "Имя не может быть пустым")
-    if len(name) > guest_account_service.MAX_DISPLAY_NAME_LEN:
-        return api_error(
-            400, "VALIDATION_ERROR",
-            f"Имя не должно быть длиннее {guest_account_service.MAX_DISPLAY_NAME_LEN} символов",
-        )
-
-    account = guest_account_service.set_display_name(g.club_id, g.guest_id, name)
-    if account is None:
-        return api_error(
-            409, "GOOGLE_LINK_REQUIRED",
-            "Чтобы задать имя, сначала войдите через Google",
-        )
-
-    return api_ok(account.to_dict())
-
-
-@bp.get("/vip/transactions")
-@require_guest
-def list_vip_transactions():
-    """
-    Старое: handlers/vip.py::vip_finances (аудит-отчёт по Finance/cashback
-    history) — 4 отдельные секции по типу с промежуточными итогами,
-    Telegram-сообщение. Здесь по решению — единая хронологическая лента
-    (мобильный React-список), одним запросом, включая ручные корректировки
-    KJ (topup/manual_debit), которые в старом боте гостю не были видны
-    вообще (аудит, найденный баг №7 по VIP-пополнению).
-
-    ?days=N — необязательный период (как старые кнопки
-    сегодня/неделя/месяц), без параметра — последние `limit` операций без
-    ограничения по дате.
-    """
-    days = request.args.get("days", type=int)
-    transactions = vip_service.list_transactions(g.club_id, g.guest_id, days=days)
-    return api_ok([
-        {
-            "id": tx.id,
-            "amount": float(tx.amount),
-            "type": tx.type,
-            "description": tx.description,
-            "order_id": tx.order_id,
-            "created_at": tx.created_at.isoformat() if tx.created_at else None,
-        }
-        for tx in transactions
-    ])
-
-
-@bp.post("/favorites")
-@require_guest
-def add_favorite():
-    """Старое: handlers/client.py::order_favorite (аудит п.3). Здесь без
-    привязки к каталогу песен (его пока нет, см. отчёт п.1) — песня
-    сохраняется как есть."""
-    payload = request.get_json(silent=True) or {}
-    song_title = payload.get("song_title")
-    artist = payload.get("artist")
-    service_id = payload.get("service_id")
-
-    if not song_title or not isinstance(song_title, str):
-        return api_error(400, "VALIDATION_ERROR", "song_title обязателен")
-    if service_id is not None:
-        if not isinstance(service_id, int):
-            return api_error(400, "VALIDATION_ERROR", "service_id должен быть числом")
-        service = db.session.get(Service, service_id)
-        if service is None or service.club_id != g.club_id:
-            return api_error(404, "SERVICE_NOT_FOUND", "Услуга не найдена")
-
-    favorite = vip_service.add_favorite(g.club_id, g.guest_id, song_title, artist, service_id)
-    return api_ok(favorite.to_dict(), status_code=201)
-
-
-@bp.get("/favorites")
-@require_guest
-def list_favorites():
-    favorites = vip_service.list_favorites(g.club_id, g.guest_id)
-    return api_ok([f.to_dict() for f in favorites])
-
-
-@bp.delete("/favorites/<int:favorite_id>")
-@require_guest
-def delete_favorite(favorite_id):
-    result = vip_service.remove_favorite(g.club_id, g.guest_id, favorite_id)
-    if result.outcome == "not_found":
-        return api_error(404, "FAVORITE_NOT_FOUND", "Не найдено")
-    if result.outcome == "forbidden":
-        return api_error(403, "FORBIDDEN", "Это не ваше избранное")
-    return api_ok({"deleted": True})
-
-
-@bp.post("/favorites/<int:favorite_id>/reorder")
-@require_guest
-def reorder_favorite(favorite_id):
-    """Старое: handlers/client.py|vip.py::fav_reorder (аудит п.3-4) —
-    "повторный заказ" в старой системе — это и есть заказ из избранного,
-    отдельного экрана истории с кнопкой "заказать снова" не было.
-
-    Тот же шлюз группового стола, что и в create_order выше — заказ из
-    избранного создаёт настоящий Order за столом гостя, поэтому проверка
-    членства обязательна и здесь, а не только в основном пути заказа.
-
-    ТЗ п.45: тот же гейт "без стола заказ недоступен" и "без Google заказ
-    недоступен", что и в create_order.
-    """
-    if g.table_no is None:
-        return api_error(409, "TABLE_REQUIRED", "Чтобы заказать песню, сначала выберите стол")
-
-    if guest_account_service.get_by_guest_id(g.club_id, g.guest_id) is None:
-        return api_error(409, "GOOGLE_LINK_REQUIRED", "Чтобы заказать песню, сначала войдите через Google")
-
-    if not table_group_service.is_member(g.club_id, g.table_no, g.guest_id):
-        return api_error(
-            403, "TABLE_ACCESS_REQUIRED",
-            "У вас нет доступа к заказам за этим столом — нужно быть одобренным участником группы",
-        )
-
-    guest_type, _vip = _guest_type_and_vip(g.club_id, g.guest_id)
-    guest_type = guest_type or ("no_table" if g.table_no is None else "client")
-    max_active = current_app.config["MAX_ACTIVE_SONGS_PER_GUEST"]
-
-    result = vip_service.reorder_favorite(
-        g.club_id, g.guest_id, g.table_no, guest_type, favorite_id, max_active,
-    )
-    if result.outcome == "not_found":
-        return api_error(404, "FAVORITE_NOT_FOUND", "Не найдено")
-    if result.outcome == "forbidden":
-        return api_error(403, "FORBIDDEN", "Это не ваше избранное")
-    if result.outcome == "limit_reached":
-        return api_error(
-            409, "ACTIVE_SONGS_LIMIT",
-            f"Можно иметь не более {max_active} заказов одновременно — дождитесь, пока сыграет текущий",
-        )
-
-    emit_order_created(result.order)
-    return api_ok(result.order.to_dict(), status_code=201)
-
-
-@bp.post("/order/<int:order_id>/replace")
-@require_guest
-def replace_order(order_id):
-    """
-    Замена песни в уже созданном заказе (старое: handlers/client.py
-    order_action/order_replace/replace_svc_execute — согласованная и
-    утверждённая пользователем спецификация замены песни).
-
-    club_id/guest_id берутся ТОЛЬКО из проверенного токена (g.*), как и в
-    create_order выше — владелец заказа проверяется в vdj_service.replace_order,
-    HTTP-слой лишь маппит её outcome на коды ответа.
-    """
-    payload = request.get_json(silent=True) or {}
-    song_title = payload.get("song_title")
-    artist = payload.get("artist")
-    service_id = payload.get("service_id")
-
-    if not song_title or not isinstance(song_title, str):
-        return api_error(400, "VALIDATION_ERROR", "song_title обязателен")
-    if service_id is not None and not isinstance(service_id, int):
-        return api_error(400, "VALIDATION_ERROR", "service_id должен быть числом")
-
-    order, outcome = vdj_service.replace_order(
-        order_id, g.guest_id, g.club_id, song_title, artist, service_id,
-    )
-
-    if outcome == "not_found":
-        return api_error(404, "ORDER_NOT_FOUND", "Заказ не найден")
-    if outcome == "forbidden":
-        return api_error(403, "FORBIDDEN", "Это не ваш заказ")
-    if outcome == "not_allowed":
-        return api_error(
-            409, "REPLACE_NOT_ALLOWED",
-            "Эту песню уже нельзя заменить — заказ обрабатывается или скоро прозвучит",
-        )
-    if outcome == "service_not_found":
-        return api_error(404, "SERVICE_NOT_FOUND", "Услуга не найдена")
-
-    return api_ok(order.to_dict())
-
-
-@bp.get("/orders")
-@require_guest
-def list_my_orders():
-    """
-    Заказы этого же гостя (той же анонимной сессии) в этом клубе.
-
-    can_replace — вычисляется здесь же (по утверждённой матрице замены песни,
-    см. vdj_service.can_replace_order), а не отдельным эндпоинтом: фронтенду
-    нужно решить, показывать ли кнопку "Заменить" уже в списке заказов, без
-    лишнего round-trip на каждую строку.
-
-    ?days=N — необязательный фильтр по периоду (старое: handlers/vip.py
-    ::vip_order_history, только для VIP, аудит по "Фильтрация истории
-    заказов"). Здесь доступно всем ролям — это не новая бизнес-логика, а
-    следствие того, что /orders в новой архитектуре и так один общий
-    эндпоинт для всех, старое разделение по ролям для этого экрана не
-    переносилось. Фильтруем по created_at (когда заказан), а не completed_at
-    — иначе из ленты пропадали бы ещё не сыгранные заказы текущего периода
-    (completed_at у них NULL), что было бы регрессией: гость смотрит на
-    "мои заказы" как на живой список, а не только на историю сыгранного.
-    Сравнение — timezone-aware datetime (тот же приём, что и в
-    vip_service.list_transactions), без старого бага со строковым
-    DATE('now', ...) и без бага отображения UTC как локального времени.
-
-    Отклонённые (rejected) и с ошибкой (error) заказы сюда намеренно не
-    попадают (решение пользователя, живой тест 2026-09): гостю в его
-    собственном списке они не нужны и только захламляют историю — он видит
-    там только то, что ещё в очереди/играется, и то, что уже спето. У KJ в
-    его собственной панели эти заказы по-прежнему видны как обычно, этот
-    фильтр касается только эндпоинта гостя.
-
-    waiting_position (доп. ТЗ "KJ Pro", запрос пользователя 2026-09-18) —
-    номер места (с 1) в невидимом для KJ ожидании, если заказ превышает
-    лимит песен на стол (см. docstring services/table_board_service.py::
-    get_waiting_positions) — null у заказа, который уже виден KJ на
-    карточке стола (в очереди, ждёт решения) или не привязан к столу
-    вообще.
-    """
-    query = Order.query.filter_by(club_id=g.club_id, telegram_user_id=g.guest_id).filter(
-        Order.status.notin_([STATUS_REJECTED, STATUS_ERROR])
-    )
-    days = request.args.get("days", type=int)
-    if days is not None:
-        from datetime import datetime, timedelta, timezone
-        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
-        query = query.filter(Order.created_at >= cutoff)
-    orders = query.order_by(Order.created_at.asc()).all()
-    vdj = get_vdj_client(g.club_id)
-    waiting_positions = table_board_service.get_waiting_positions(g.club_id, g.guest_id)
-    # Запрос пользователя 2026-09-19: номер места гостя в ОБЩЕЙ очереди
-    # клуба (по всем столам) — см. docstring
-    # table_board_service.get_club_queue_positions. Пересчитывается заново
-    # при каждом опросе, поэтому список "Мои заказы" сам покажет, как номер
-    # уменьшается по ходу вечера, без отдельных действий гостя.
-    queue_positions = table_board_service.get_club_queue_positions(g.club_id)
-    result = []
-    for order in orders:
-        data = order.to_dict()
-        data["can_replace"] = vdj_service.can_replace_order(order, vdj)
-        data["waiting_position"] = waiting_positions.get(order.id)
-        data["queue_position"] = queue_positions.get(order.id)
-        result.append(data)
-    return api_ok(result)
-
-
-def _require_table(f):
-    """Общая проверка для всех /table-group/* эндпоинтов ниже — они имеют
-    смысл только у гостя со столом (Role 5 эта механика не касается,
-    утверждённое решение)."""
-    from functools import wraps
-
-    @wraps(f)
-    def wrapper(*args, **kwargs):
-        if g.table_no is None:
-            return api_error(400, "NO_TABLE", "У вас нет стола — групповой стол недоступен")
-        return f(*args, **kwargs)
-    return wrapper
-
-
-@bp.get("/table-group")
-@require_guest
-@_require_table
-def get_table_group():
-    """
-    Состояние группового стола гостя — участники (в порядке входа, кто
-    админ) и, только если сам вызывающий админ, список ожидающих заявок на
-    вход (аналог старого table_group_manage, bot.py:1064-1098, но без
-    сокрытия самого факта существования группы от не-админов — им тоже
-    нужно видеть список участников и свою кнопку "Покинуть стол").
-    """
-    view = table_group_service.get_group_view(g.club_id, g.table_no, g.guest_id)
-    if view.outcome == "no_group":
-        return api_ok({"group": None, "members": [], "pending_requests": [], "is_admin": False})
-
-    return api_ok({
-        "group": view.group.to_dict(),
-        "is_admin": view.group.admin_guest_id == g.guest_id,
-        "members": [
-            {**m.to_dict(), "is_admin": m.guest_id == view.group.admin_guest_id}
-            for m in view.members
-        ],
-        "pending_requests": [r.to_dict() for r in view.pending_requests],
-    })
-
-
-@bp.post("/table-group/request-join")
-@require_guest
-@_require_table
-def request_table_group_join():
-    """
-    Явный повторный запрос присоединения — например, после того как гостя
-    кикнули, он сам вышел, или его заявку отклонили (table_group_status
-    "not_joined" в /me, см. выше). В отличие от POST /api/guest/session, НЕ
-    выдаёт новый guest_id/токен — гость не должен терять историю своих
-    заказов ради того, чтобы попроситься обратно. Просто повторяет ту же
-    атомарную логику ensure_session_group_state под уже существующей
-    личностью (той же, что и раньше — быть может, снова станет админом,
-    если стол за это время опустел).
-    """
-    state = table_group_service.ensure_session_group_state(g.club_id, g.table_no, g.guest_id)
-    return api_ok({"status": state.status})
-
-
-@bp.post("/table-group/join-requests/<int:request_id>/approve")
-@require_guest
-@_require_table
-def approve_table_join_request(request_id):
-    """Только текущий админ стола (bot.py:1000-1003) — авторизация внутри
-    table_group_service.approve_join_request по admin_guest_id из
-    TableGroup, а не по значению из тела запроса."""
-    result = table_group_service.approve_join_request(
-        g.club_id, g.table_no, g.guest_id, request_id, current_app.config["MAX_GROUP_SIZE"],
-    )
-    if result.outcome == "not_found":
-        return api_error(404, "REQUEST_NOT_FOUND", "Заявка не найдена")
-    if result.outcome == "forbidden":
-        return api_error(403, "FORBIDDEN", "Только админ стола может одобрять заявки")
-    if result.outcome == "already_decided":
-        return api_error(409, "ALREADY_DECIDED", "Заявка уже обработана")
-    if result.outcome == "table_full":
-        return api_error(409, "TABLE_FULL", "Стол уже заполнен — заявка автоматически отклонена")
-    return api_ok(result.request.to_dict())
-
-
-@bp.post("/table-group/join-requests/<int:request_id>/reject")
-@require_guest
-@_require_table
-def reject_table_join_request(request_id):
-    result = table_group_service.reject_join_request(g.club_id, g.table_no, g.guest_id, request_id)
-    if result.outcome == "not_found":
-        return api_error(404, "REQUEST_NOT_FOUND", "Заявка не найдена")
-    if result.outcome == "forbidden":
-        return api_error(403, "FORBIDDEN", "Только админ стола может отклонять заявки")
-    if result.outcome == "already_decided":
-        return api_error(409, "ALREADY_DECIDED", "Заявка уже обработана")
-    return api_ok(result.request.to_dict())
-
-
-@bp.post("/table-group/kick/<int:target_guest_id>")
-@require_guest
-@_require_table
-def kick_table_group_member(target_guest_id):
-    """Настоящее удаление участника — НОВАЯ реализация (в старом коде
-    кнопка "Выгнать" на самом деле передавала права админа, реального кика
-    не было, см. аудит-отчёт по Групповому столу, утверждённое решение)."""
-    result = table_group_service.kick_member(g.club_id, g.table_no, g.guest_id, target_guest_id)
-    if result.outcome == "forbidden":
-        return api_error(403, "FORBIDDEN", "Только админ стола может убирать участников")
-    if result.outcome == "cannot_target_self":
-        return api_error(400, "CANNOT_KICK_SELF", "Нельзя выгнать самого себя — используйте выход")
-    if result.outcome == "not_a_member":
-        return api_error(404, "NOT_A_MEMBER", "Этот гость не состоит в группе")
-    return api_ok({"kicked": True})
-
-
-@bp.post("/table-group/transfer/<int:target_guest_id>")
-@require_guest
-@_require_table
-def transfer_table_group_admin(target_guest_id):
-    """Отдельное действие — перенос РАБОЧЕЙ старой механики set_table_admin
-    (bot.py:1108-1141, там ошибочно подписанной как кик), утверждённое
-    решение: держим отдельно от настоящего кика выше."""
-    result = table_group_service.transfer_admin(g.club_id, g.table_no, g.guest_id, target_guest_id)
-    if result.outcome == "forbidden":
-        return api_error(403, "FORBIDDEN", "Только текущий админ стола может передать права")
-    if result.outcome == "cannot_target_self":
-        return api_error(400, "VALIDATION_ERROR", "Вы уже админ стола")
-    if result.outcome == "not_a_member":
-        return api_error(404, "NOT_A_MEMBER", "Этот гость не состоит в группе")
-    return api_ok({"transferred": True})
-
-
-@bp.post("/table-group/leave")
-@require_guest
-@_require_table
-def leave_table_group():
-    """Самостоятельный выход — НОВАЯ реализация (в старом коде это были
-    нерабочие мёртвые строки локализации, ни одного обработчика, см. аудит,
-    утверждённое решение). При выходе админа права переходят старейшему
-    оставшемуся участнику; если участников не осталось — группа удаляется
-    (table_group_service._remove_member_and_reassign, 1:1 правильная
-    старая логика unbind_user_table, database.py:394-435)."""
-    result = table_group_service.leave_group(g.club_id, g.table_no, g.guest_id)
-    if result.outcome == "not_a_member":
-        return api_error(404, "NOT_A_MEMBER", "Вы не состоите в группе этого стола")
-    return api_ok({"left": True})
-
-
-@bp.post("/chat")
-@require_guest
-def send_chat_message():
-    """
-    Гость пишет KJ (ТЗ §20, §49). Работает только если у клуба включён
-    чат (Club.chat_enabled — 1:1 перенос старого venues.chat_enabled) —
-    так же, как в старом боте пункт меню чата вообще не показывался, если
-    флаг выключен; здесь дополнительно проверяем на сервере, а не только
-    прячем кнопку (старый баг класса "проверка только видимостью кнопки",
-    который новый ТЗ явно требует не повторять — см. PHASE1_AUDIT, §54/§61).
-    """
-    club = db.session.get(Club, g.club_id)
-    if club is None or not club.chat_enabled:
-        return api_error(403, "CHAT_DISABLED", "Чат отключён в этом клубе")
-
-    payload = request.get_json(silent=True) or {}
-    message_text = payload.get("message_text")
-    if not message_text or not isinstance(message_text, str):
-        return api_error(400, "VALIDATION_ERROR", "message_text обязателен")
-
-    message = ChatMessage(
-        club_id=g.club_id,
-        telegram_user_id=g.guest_id,
-        table_no=g.table_no,
-        from_guest=True,
-        message_text=message_text,
-    )
-    db.session.add(message)
+    db.session.add(order)
     db.session.commit()
 
-    emit_chat_message(message)
+    emit_queue_updated(kj.club_id, get_kj_queue_view(kj.club_id))
 
-    return api_ok(message.to_dict(), status_code=201)
-
-
-@bp.get("/chat")
-@require_guest
-def list_chat_messages():
-    """Вся переписка этого гостя с KJ, в обе стороны, по времени."""
-    messages = (
-        ChatMessage.query
-        .filter_by(club_id=g.club_id, telegram_user_id=g.guest_id)
-        .order_by(ChatMessage.created_at.asc())
-        .all()
-    )
-    return api_ok([m.to_dict() for m in messages])
-
-
-@bp.get("/queue")
-@require_guest
-def queue():
-    """
-    Живая очередь VirtualDJ клуба — единая для всех ролей (это требование
-    было с самого начала задачи: очередь видна и KJ Pro, и Guest App, без
-    различий по источнику заказа, ТЗ §22/§35). По структуре ответа
-    идентична /api/kj/queue/<club_id>.
-    """
-    vdj = get_vdj_client(g.club_id)
-    items = vdj.get_queue()
-    return api_ok([
-        {
-            "vdj_item_id": i.vdj_item_id,
-            "song_title": i.song_title,
-            "artist": i.artist,
-            "table_no": i.table_no,
-        }
-        for i in items
-    ])
+    return order, "queued"
