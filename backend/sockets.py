@@ -271,6 +271,20 @@ def emit_vip_request_created(vip_request):
     socketio.emit("vip_request_created", vip_request.to_dict(), room=_club_room(vip_request.club_id))
 
 
+def emit_order_change_request_created(change_request):
+    """
+    ДОБАВЛЕНО 2026-09-20 — решение пользователя "Нужно одобрение KJ (запрос
+    → Одобрить/Отклонить)": новая заявка гостя на отмену/замену уже
+    принятого заказа (см. services/vdj_service.py::request_order_cancel/
+    request_order_replace). Аналог emit_vip_request_created выше — KJ
+    Panel должна узнать о заявке мгновенно (без ожидания следующего опроса)
+    и показать её в панели "🔔 Заявки от гостей", как и заявки на VIP.
+    """
+    socketio.emit(
+        "order_change_request_created", change_request.to_dict(), room=_club_room(change_request.club_id)
+    )
+
+
 def emit_chat_message(message):
     """
     Новое сообщение в чате гость↔KJ (см. models.py::ChatMessage). Пока
