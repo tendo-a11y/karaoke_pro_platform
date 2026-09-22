@@ -1704,8 +1704,6 @@ export default function App() {
               <OrderRow
                 key={o.id}
                 order={o}
-                onFavorite={handleAddFavorite}
-                favoriteBusy={favoriteBusyOrderId === o.id}
                 token={session.token}
                 services={services}
                 isReplacing={replacingOrderId === o.id}
