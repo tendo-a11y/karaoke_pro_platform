@@ -690,6 +690,24 @@ function AiSearch({ token, onPick }) {
   );
 }
 
+// Категория (тариф) по умолчанию для выбора после поиска песни — и в новом
+// заказе, и в замене песни (запрос пользователя 2026-09-22: раньше в обеих
+// формах подставлялся просто services[0] — первый тариф по возрастанию id,
+// см. routes/guest.py::list_services. Это работало, пока "KARAOKE" был
+// первой когда-либо созданной категорией клуба, но если её переименовать
+// или пересоздать в KJ Panel (services/category_service.py), она получает
+// новый id и перестаёт быть первой — тогда по умолчанию подставлялась
+// произвольная другая категория вместо привычной "KARAOKE — 35"). Теперь
+// по умолчанию всегда именно она, если существует у клуба (сравнение без
+// учёта регистра/пробелов, т.к. название могли переименовать в KJ Panel в
+// любом регистре) — а если её нет вообще, откатываемся на первую по списку,
+// как и раньше, чтобы select не остался пустым.
+function pickDefaultServiceId(services) {
+  if (services.length === 0) return "";
+  const karaoke = services.find((s) => s.name.trim().toLowerCase() === "karaoke");
+  return String((karaoke || services[0]).id);
+}
+
 // Форма замены песни в уже существующем заказе (согласованная и утверждённая
 // пользователем спецификация замены песни). Переиспользует SongSearch/
 // AiSearch — тот же способ выбрать песню, что и в основной форме заказа
@@ -709,7 +727,7 @@ function ReplaceForm({ order, token, services, busy, onSubmit, onCancel }) {
   // чтобы то, что видно в select, совпадало с тем, что реально отправится.
   useEffect(() => {
     if (!serviceId && services.length > 0) {
-      setServiceId(String(services[0].id));
+      setServiceId(pickDefaultServiceId(services));
     }
   }, [services, serviceId]);
 
@@ -1399,7 +1417,7 @@ export default function App() {
   // между тем, что видно, и тем, что отправится).
   useEffect(() => {
     if (!serviceId && services.length > 0) {
-      setServiceId(String(services[0].id));
+      setServiceId(pickDefaultServiceId(services));
     }
   }, [services, serviceId]);
 
