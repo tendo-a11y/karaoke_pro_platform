@@ -101,6 +101,16 @@ export const api = {
     request(`/api/kj/vip-requests/${requestId}/approve`, { method: "PUT", token }),
   rejectVipRequest: (token, requestId) =>
     request(`/api/kj/vip-requests/${requestId}/reject`, { method: "PUT", token }),
+  // ДОБАВЛЗНО (2026-09-20, решение пользователя "Нужно одобрение KJ (запрос
+  // → Одобрить/Отклонить)") — заявки гостей на отмену/замену уже принятого
+  // заказа, см. backend/routes/kj.py::list_order_change_requests и
+  // services/vdj_service.py::approve_order_change_request.
+  listOrderChangeRequests: (token, clubId) =>
+    request(`/api/kj/order-change-requests/${clubId}`, { token }),
+  approveOrderChangeRequest: (token, requestId) =>
+    request(`/api/kj/order-change-requests/${requestId}/approve`, { method: "PUT", token }),
+  rejectOrderChangeRequest: (token, requestId) =>
+    request(`/api/kj/order-change-requests/${requestId}/reject`, { method: "PUT", token }),
   listVipClients: (token, clubId) => request(`/api/kj/vip-clients/${clubId}`, { token }),
   updateVipCashback: (token, vipClientId, cashbackPercent) =>
     request(`/api/kj/vip-clients/${vipClientId}/cashback`, {
@@ -127,7 +137,7 @@ export const api = {
   // (см. routes/kj.py::update_table_settings), остальные не трогает.
   updateTableSettings: (token, clubId, fields) =>
     request(`/api/kj/table-settings/${clubId}`, { method: "PUT", token, body: fields }),
-  // Сброс застрявшего группового стол (жалоба пользователя 2026-09-22):
+  // Сброс застрявшего группового стола (жалоба пользователя 2026-09-22):
   // полностью удаляет группу/участников/заявки для table_no — следующий
   // гость за этим столом станет новым админом свежей группы.
   resetTableGroup: (token, clubId, tableNo) =>
@@ -161,7 +171,7 @@ export const api = {
   removeGuestFromTable: (token, guestId) =>
     request(`/api/kj/guests/${encodeURIComponent(guestId)}/remove-table`, { method: "POST", token }),
   // Запрос пользователя 2026-09-19 "Закрыть стол": снять со стола +
-  // заблокировать + отклонить оставшиеся заказы стола отним действием —
+  // заблокировать + отклонить отним действием —
   // см. guest_status_service.close_table на бэкенде.
   closeGuestTable: (token, guestId) =>
     request(`/api/kj/guests/${encodeURIComponent(guestId)}/close-table`, { method: "POST", token }),
