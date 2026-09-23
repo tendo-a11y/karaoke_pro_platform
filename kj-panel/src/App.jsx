@@ -628,6 +628,49 @@ function VipPanel({ token, clubId, socket }) {
     }
   }
 
+  // ДОБАВЛЕНО (2026-09-23, запрос пользователя "нужно иметь возможность
+  // блокировать вип") — раньше заблокировать VIP-гостя можно было, только
+  // предварительно найдя его во вкладке "Гости" и открыв его карточку; сам
+  // эндпоинт (POST /guests/<id>/block|unblock) уже существовал и не
+  // менялся, здесь просто прямой доступ к нему из вкладки VIP.
+  async function handleToggleBlock(client) {
+    const key = `block-${client.id}`;
+    setBusyKey(key);
+    setActionError(null);
+    try {
+      if (client.is_blocked) {
+        await api.unblockGuest(token, client.telegram_user_id);
+      } else {
+        await api.blockGuest(token, client.telegram_user_id);
+      }
+      await reload();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  // ДОБАВЛЕНО (2026-09-23, запрос пользователя "нет кнопки удалить. это
+  // означает перевести его в простые") — см. docstring
+  // vip_service.remove_vip_client про то, почему это удаление строки
+  // VipClient, а не отдельный флаг, и почему сервер откажет, если на
+  // счету ещё остались деньги (VIP_BALANCE_NOT_ZERO) — тогда ошибка
+  // покажется в actionError, и её видно прямо тут, объясняющей, что делать
+  // (обнулить баланс кнопкой "🔄 Установить" выше).
+  async function handleRemove(vipClientId) {
+    setBusyKey(`remove-${vipClientId}`);
+    setActionError(null);
+    try {
+      await api.removeVipClient(token, vipClientId);
+      await reload();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
   if (loadError) return <div className="banner banner--error">{loadError}</div>;
   if (!pending || !clients) return <p className="empty-hint">Загрузка…</p>;
 
@@ -669,6 +712,7 @@ function VipPanel({ token, clubId, socket }) {
             <li key={c.id} className="vip-row vip-row--client">
               <div>
                 Гость #{c.telegram_user_id} · баланс <strong>{c.balance} MDL</strong>
+                {c.is_blocked && <span className="guest-type-badge guest-type-badge--blocked"> 🚫 Заблокирован</span>}
               </div>
               <div className="vip-row__actions">
                 <input
@@ -698,6 +742,24 @@ function VipPanel({ token, clubId, socket }) {
                 />
                 <button type="button" className="btn-link" disabled={busyKey === `cb-${c.id}`} onClick={() => handleUpdateCashback(c.id)}>
                   Сохранить кэшбэк
+                </button>
+              </div>
+              {/* ДОБАВЛЕНО (2026-09-23, запрос пользователя): блокировка и
+              перевод обратно в простые — раньше во вкладке VIP не было ни
+              того, ни другого. */}
+              <div className="vip-row__actions">
+                <button
+                  type="button" className="btn btn--reject" disabled={busyKey === `block-${c.id}`}
+                  onClick={() => handleToggleBlock(c)}
+                >
+                  {c.is_blocked ? "Разблокировать" : "🚫 Заблокировать"}
+                </button>
+                <button
+                  type="button" className="btn btn--reject" disabled={busyKey === `remove-${c.id}`}
+                  onClick={() => handleRemove(c.id)}
+                  title="Перевести обратно в простые"
+                >
+                  {busyKey === `remove-${c.id}` ? "Переводим…" : "🗑 Удалить (в простые)"}
                 </button>
               </div>
             </li>
