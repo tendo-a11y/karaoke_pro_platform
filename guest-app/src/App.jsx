@@ -690,24 +690,6 @@ function AiSearch({ token, onPick }) {
   );
 }
 
-// Категория (тариф) по умолчанию для выбора после поиска песни — и в новом
-// заказе, и в замене песни (запрос пользователя 2026-09-22: раньше в обеих
-// формах подставлялся просто services[0] — первый тариф по возрастанию id,
-// см. routes/guest.py::list_services. Это работало, пока "KARAOKE" был
-// первой когда-либо созданной категорией клуба, но если её переименовать
-// или пересоздать в KJ Panel (services/category_service.py), она получает
-// новый id и перестаёт быть первой — тогда по умолчанию подставлялась
-// произвольная другая категория вместо привычной "KARAOKE — 35"). Теперь
-// по умолчанию всегда именно она, если существует у клуба (сравнение без
-// учёта регистра/пробелов, т.к. название могли переименовать в KJ Panel в
-// любом регистре) — а если её нет вообще, откатываемся на первую по списку,
-// как и раньше, чтобы select не остался пустым.
-function pickDefaultServiceId(services) {
-  if (services.length === 0) return "";
-  const karaoke = services.find((s) => s.name.trim().toLowerCase() === "karaoke");
-  return String((karaoke || services[0]).id);
-}
-
 // Форма замены песни в уже существующем заказе (согласованная и утверждённая
 // пользователем спецификация замены песни). Переиспользует SongSearch/
 // AiSearch — тот же способ выбрать песню, что и в основной форме заказа
@@ -718,24 +700,19 @@ function pickDefaultServiceId(services) {
 function ReplaceForm({ order, token, services, busy, onSubmit, onCancel }) {
   const [songTitle, setSongTitle] = useState(order.song_title);
   const [artist, setArtist] = useState(order.artist || "");
-  const [serviceId, setServiceId] = useState(order.service_id ? String(order.service_id) : "");
-  // Моргающая подсветка списка категорий, пока гость его явно не заметил
-  // (запрос пользователя 2026-09-22: гость после поиска песни не замечал,
-  // что вообще нужно выбрать категорию — сам список стоял незаметным среди
-  // остальных полей) — гаснет по первому фокусу/клику на select или по
-  // первому осознанному выбору в нём, см. select ниже.
-  const [serviceTouched, setServiceTouched] = useState(false);
+  // ИЗМЕНЕНО (2026-09-23, запрос пользователя): категория раньше
+  // подставлялась автоматически (см. историю — сначала первый тариф по id,
+  // потом принудительно "KARAOKE — 35") — и оба раза гость не замечал сам
+  // факт выбора категории, потому что его уже сделали за него. Явная
+  // моргающая подсветка тоже не помогла (не отображалась на части
+  // устройств — нативный <select> может игнорировать box-shadow/border).
+  // Решение пользователя: категория выбирается КАЖДЫЙ раз заново — и при
+  // новом заказе, и при замене песни (в отличие от входа через Google,
+  // который остаётся один раз за сессию) — поэтому здесь всегда пустое
+  // значение, никакого автоподставленного тарифа, даже если он уже был
+  // указан у заменяемого заказа (order.service_id).
+  const [serviceId, setServiceId] = useState("");
   const [error, setError] = useState(null);
-
-  // "Без тарифа" убран из списка ниже (запрос пользователя 2026-09-14) — а
-  // у заменяемого заказа тариф иногда исторически не был указан вообще
-  // (order.service_id == null), тогда подставляем первый доступный тариф,
-  // чтобы то, что видно в select, совпадало с тем, что реально отправится.
-  useEffect(() => {
-    if (!serviceId && services.length > 0) {
-      setServiceId(pickDefaultServiceId(services));
-    }
-  }, [services, serviceId]);
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -776,11 +753,10 @@ function ReplaceForm({ order, token, services, busy, onSubmit, onCancel }) {
         {services.length > 0 && (
           <select
             value={serviceId}
-            onChange={(e) => { setServiceId(e.target.value); setServiceTouched(true); }}
-            onFocus={() => setServiceTouched(true)}
-            className={serviceTouched ? "" : "category-select--attention"}
+            onChange={(e) => setServiceId(e.target.value)}
             required
           >
+            <option value="" disabled>Выберите категорию…</option>
             {services.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name}{s.is_free ? " (бесплатно)" : ` — ${s.price}`}
@@ -1250,9 +1226,6 @@ export default function App() {
   const [songTitle, setSongTitle] = useState("");
   const [artist, setArtist] = useState("");
   const [serviceId, setServiceId] = useState("");
-  // См. докстринг serviceTouched в ReplaceForm выше — та же моргающая
-  // подсветка списка категорий здесь, в основной форме заказа.
-  const [serviceTouched, setServiceTouched] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
   // ДОБАВЛЕНО (2026-09-19, запрос пользователя): держим не просто "успех
@@ -1422,19 +1395,15 @@ export default function App() {
     api.listServices(session.token).then(setServices).catch(() => {});
   }, [session]);
 
-  // Запрос пользователя 2026-09-14: тариф в клубе есть всегда, поэтому
-  // "Без тарифа" убран из списка выбора совсем (см. select ниже) — а
-  // серверные заказы всё ещё принимают null, поэтому здесь дополнительно
-  // подставляем первый тариф из списка, как только он загрузится, чтобы
-  // реальное состояние формы не осталось пустым просто потому что человек
-  // ничего не трогал (без этого select показывал бы первый тариф на
-  // экране, а по факту заказ ушёл бы без тарифа вообще — несоответствие
-  // между тем, что видно, и тем, что отправится).
-  useEffect(() => {
-    if (!serviceId && services.length > 0) {
-      setServiceId(pickDefaultServiceId(services));
-    }
-  }, [services, serviceId]);
+  // ИЗМЕНЕНО (2026-09-23, запрос пользователя): раньше здесь автоматически
+  // подставлялся тариф (сначала первый по id, потом принудительно "KARAOKE
+  // — 35"), как только загружался список услуг — именно поэтому гость не
+  // замечал сам факт выбора категории, за него уже выбрали. Решение
+  // пользователя: категория выбирается заново при КАЖДОМ заказе (и при
+  // каждой замене песни — см. ReplaceForm), поэтому автоподстановки больше
+  // нет — select ниже начинается пустым, с плейсхолдером "Выберите
+  // категорию…", и через required/disabled-плейсхолдер браузер не даст
+  // отправить форму без осознанного выбора.
 
   // Вынесено из handleSubmitOrder, чтобы этим же кодом мог воспользоваться
   // handleActivated выше — после единственного экрана "стол + Google"
@@ -1452,7 +1421,6 @@ export default function App() {
       setSongTitle("");
       setArtist("");
       setServiceId("");
-      setServiceTouched(false);
       // queue_position — номер места в общей очереди клуба (см. docstring
       // table_board_service.get_club_queue_positions на бэкенде); "0" — на
       // случай (не должен происходить в штатной работе), если сервер по
@@ -1689,16 +1657,17 @@ export default function App() {
               />
               {services.length > 0 && (
                 // "Без тарифа" убран из списка (запрос пользователя
-                // 2026-09-14 — тариф в клубе есть всегда) — serviceId
-                // теперь всегда указывает на реальный тариф, см. эффект
-                // автоподстановки первого тарифа выше.
+                // 2026-09-14 — тариф в клубе есть всегда). Значение всегда
+                // начинается пустым (запрос пользователя 2026-09-23) —
+                // плейсхолдер-опция ниже недоступна для повторного выбора
+                // (disabled), поэтому required реально не даёт отправить
+                // заказ без осознанного выбора категории каждый раз.
                 <select
                   value={serviceId}
-                  onChange={(e) => { setServiceId(e.target.value); setServiceTouched(true); }}
-                  onFocus={() => setServiceTouched(true)}
-                  className={serviceTouched ? "" : "category-select--attention"}
+                  onChange={(e) => setServiceId(e.target.value)}
                   required
                 >
+                  <option value="" disabled>Выберите категорию…</option>
                   {services.map((s) => (
                     <option key={s.id} value={s.id}>
                       {s.name}{s.is_free ? " (бесплатно)" : ` — ${s.price}`}
