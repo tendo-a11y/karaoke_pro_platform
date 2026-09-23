@@ -513,7 +513,19 @@ def list_vip_clients(club_id):
     if denied:
         return denied
     clients = vip_service.list_vip_clients(club_id)
-    return api_ok([c.to_dict() for c in clients])
+    # ДОБАВЛЕНО (2026-09-23, запрос пользователя "нужно иметь возможность
+    # блокировать VIP"): is_blocked нужен фронтенду вкладки VIP, чтобы
+    # показать актуальное состояние кнопки "Заблокировать"/"Разблокировать"
+    # — сами эндпоинты блокировки уже существуют и не менялись
+    # (POST /guests/<id>/block|unblock ниже, до этого использовались только
+    # из карточки гостя во вкладке "Гости").
+    result = []
+    for c in clients:
+        row = c.to_dict()
+        status = guest_status_service.get_status(club_id, c.telegram_user_id)
+        row["is_blocked"] = bool(status.is_blocked) if status else False
+        result.append(row)
+    return api_ok(result)
 
 
 @bp.put("/vip-clients/<int:vip_client_id>/cashback")
@@ -622,6 +634,29 @@ def set_vip_balance(vip_client_id):
     if result.outcome == "forbidden":
         return api_error(403, "FORBIDDEN", "Нет доступа к этому VIP-клиенту")
     return api_ok(result.vip_client.to_dict())
+
+
+@bp.delete("/vip-clients/<int:vip_client_id>")
+@require_kj
+def remove_vip_client(vip_client_id):
+    """
+    "🗑 Удалить" во вкладке VIP (запрос пользователя 2026-09-23) — переводит
+    VIP-гостя обратно в простые, см. docstring
+    vip_service.remove_vip_client про то, почему это именно удаление
+    строки VipClient, а не отдельный флаг, и почему баланс должен быть
+    предварительно обнулён.
+    """
+    result = vip_service.remove_vip_client(g.club_id, vip_client_id)
+    if result.outcome == "not_found":
+        return api_error(404, "VIP_CLIENT_NOT_FOUND", "VIP-клиент не найден")
+    if result.outcome == "forbidden":
+        return api_error(403, "FORBIDDEN", "Нет доступа к этому VIP-клиенту")
+    if result.outcome == "balance_not_zero":
+        return api_error(
+            409, "VIP_BALANCE_NOT_ZERO",
+            "Сначала обнулите баланс (кнопка «Установить» = 0), потом можно перевести в простые",
+        )
+    return api_ok({"removed": True})
 
 
 @bp.post("/songs/import")
