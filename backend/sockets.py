@@ -94,17 +94,17 @@ def register_handlers():
             return False
 
         join_room(_club_room(kj.club_id))
-        logger.info("WebSocket: KJ %s подключился Kклусу %s", kj.id, kj.club_id)
+        logger.info("WebSocket: KJ %s подключился к клубу %s", kj.id, kj.club_id)
         return True
 
     @socketio.on("connect", namespace="/bridge")
     def handle_bridge_connect(auth):
         """
-        Локальный мост VirtualDJ цоммвена.py, vdj_bridge/agent.py)
-        подключается седа — отдельный namespace и 0���tad�Ro подключается модель доверия от
+        Локальный мост VirtualDJ (см. vdj/bridge_client.py, vdj_bridge/agent.py)
+        подключается сюда — отдельный namespace и отдельная модель доверия от
         KJ Panel выше: это не человек с JWT-логином через браузер, а доверенный
-        процесс на компьютере KJ с статическим секретом (bridge_token),
-        который выдаётся клуба через 👄 manage.py set-bridge-token`.
+        процесс на компьютере KJ со статическим секретом (bridge_token),
+        который выдаётся клубу через `manage.py set-bridge-token`.
         """
         club_id = None
         token = None
@@ -135,9 +135,9 @@ def register_handlers():
         logger.info("Bridge: мост клуба %s подключился (sid=%s)", club_id, request.sid)
 
         # Запрос пользователя 2026-09: KJ Panel должна видеть живой статус
-        # мост ("подключён"/"не подключён") — см. vdj/bridge_status.py про
-        # то, почему это простое состояние пробемс, а не запись в БД.
-        # Рассылаем в комнату клуба (не место!) — именно там сидит KJ Panel,
+        # моста ("подключён"/"не подключён") — см. vdj/bridge_status.py про
+        # то, почему это простое состояние процесса, а не запись в БД.
+        # Рассылаем в комнату клуба (не моста!) — именно там сидит KJ Panel,
         # см. handle_connect выше. vdj_reachable здесь всегда None — мост
         # только что подключился и ещё не успел ни разу проверить VirtualDJ
         # (первый отчёт придёт отдельным событием bridge_vdj_status, см.
@@ -153,7 +153,7 @@ def register_handlers():
     @socketio.on("disconnect", namespace="/bridge")
     def handle_bridge_disconnect():
         """
-        Пара к handle_bridge_connect выше — мост отключился (закрыли вкладки
+        Пара к handle_bridge_connect выше — мост отключился (закрыли
         программу, выключили VirtualDJ и мост сам решил отключиться,
         пропало сетевое соединение и т.п.). Socket.IO не передаёт сюда
         club_id/auth повторно, только request.sid — поэтому club_id
@@ -162,7 +162,7 @@ def register_handlers():
         """
         club_id = bridge_status.mark_disconnected(request.sid)
         if club_id is None:
-            # sid не был7арегистрирован как мост (например, это
+            # sid не был зарегистрирован как мост (например, это
             # подключение было отклонено ещё в handle_bridge_connect до
             # join_room) — рассылать нечего, KJ Panel и так не думала, что
             # мост подключён.
@@ -310,7 +310,7 @@ def emit_chat_message(message):
     Новое сообщение в чате гость↔KJ (см. models.py::ChatMessage). Пока
     доставляется только KJ Panel (в комнату клуба, где она и так слушает
     order_*/queue_updated) — у Guest App ещё нет WebSocket-подключения
-    (handle_connect втомф файле принимает только KJ-токен), поэтому гость
+    (handle_connect в этом файле принимает только KJ-токен), поэтому гость
     видит новые сообщения через обычный поллинг GET /api/guest/chat.
     """
     socketio.emit("chat_message", message.to_dict(), room=_club_room(message.club_id))
