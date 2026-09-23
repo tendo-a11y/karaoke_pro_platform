@@ -719,6 +719,12 @@ function ReplaceForm({ order, token, services, busy, onSubmit, onCancel }) {
   const [songTitle, setSongTitle] = useState(order.song_title);
   const [artist, setArtist] = useState(order.artist || "");
   const [serviceId, setServiceId] = useState(order.service_id ? String(order.service_id) : "");
+  // Моргающая подсветка списка категорий, пока гость его явно не заметил
+  // (запрос пользователя 2026-09-22: гость после поиска песни не замечал,
+  // что вообще нужно выбрать категорию — сам список стоял незаметным среди
+  // остальных полей) — гаснет по первому фокусу/клику на select или по
+  // первому осознанному выбору в нём, см. select ниже.
+  const [serviceTouched, setServiceTouched] = useState(false);
   const [error, setError] = useState(null);
 
   // "Без тарифа" убран из списка ниже (запрос пользователя 2026-09-14) — а
@@ -768,7 +774,13 @@ function ReplaceForm({ order, token, services, busy, onSubmit, onCancel }) {
           maxLength={200}
         />
         {services.length > 0 && (
-          <select value={serviceId} onChange={(e) => setServiceId(e.target.value)} required>
+          <select
+            value={serviceId}
+            onChange={(e) => { setServiceId(e.target.value); setServiceTouched(true); }}
+            onFocus={() => setServiceTouched(true)}
+            className={serviceTouched ? "" : "category-select--attention"}
+            required
+          >
             {services.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name}{s.is_free ? " (бесплатно)" : ` — ${s.price}`}
@@ -1238,6 +1250,9 @@ export default function App() {
   const [songTitle, setSongTitle] = useState("");
   const [artist, setArtist] = useState("");
   const [serviceId, setServiceId] = useState("");
+  // См. докстринг serviceTouched в ReplaceForm выше — та же моргающая
+  // подсветка списка категорий здесь, в основной форме заказа.
+  const [serviceTouched, setServiceTouched] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
   // ДОБАВЛЕНО (2026-09-19, запрос пользователя): держим не просто "успех
@@ -1437,6 +1452,7 @@ export default function App() {
       setSongTitle("");
       setArtist("");
       setServiceId("");
+      setServiceTouched(false);
       // queue_position — номер места в общей очереди клуба (см. docstring
       // table_board_service.get_club_queue_positions на бэкенде); "0" — на
       // случай (не должен происходить в штатной работе), если сервер по
@@ -1676,7 +1692,13 @@ export default function App() {
                 // 2026-09-14 — тариф в клубе есть всегда) — serviceId
                 // теперь всегда указывает на реальный тариф, см. эффект
                 // автоподстановки первого тарифа выше.
-                <select value={serviceId} onChange={(e) => setServiceId(e.target.value)} required>
+                <select
+                  value={serviceId}
+                  onChange={(e) => { setServiceId(e.target.value); setServiceTouched(true); }}
+                  onFocus={() => setServiceTouched(true)}
+                  className={serviceTouched ? "" : "category-select--attention"}
+                  required
+                >
                   {services.map((s) => (
                     <option key={s.id} value={s.id}>
                       {s.name}{s.is_free ? " (бесплатно)" : ` — ${s.price}`}
