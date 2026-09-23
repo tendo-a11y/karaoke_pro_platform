@@ -321,6 +321,41 @@ def set_balance(club_id: int, vip_client_id: int, new_balance: Decimal) -> Balan
     return BalanceAdjustResult(vip_client=vip_client, transaction=tx, outcome="ok")
 
 
+class RemoveVipClientResult:
+    def __init__(self, outcome=None):
+        self.outcome = outcome  # not_found | forbidden | balance_not_zero | ok
+
+
+def remove_vip_client(club_id: int, vip_client_id: int) -> RemoveVipClientResult:
+    """
+    "Удалить" VIP-клиента (запрос пользователя 2026-09-23, KJ Panel вкладка
+    VIP: "нет кнопки удалить. это означает перевести его в простые") — по
+    факту не удаление гостя, а именно понижение обратно в "простые":
+    guest_type в guest_directory_service._guest_type определяется ровно
+    тем, есть ли строка VipClient — поэтому удаления этой строки достаточно,
+    гость на следующем же опросе списка гостей окажется "client"/"no_table"
+    сам собой, без отдельного флага-переключателя.
+
+    Если на счету ещё остались деньги — отказываем (не превращаем их
+    молча в ничьи): KJ должен сам осознанно обнулить баланс кнопкой
+    "🔄 Установить" = 0 перед понижением, а не терять его как побочный
+    эффект удаления. Записи Transaction (история операций) не трогаются —
+    они ссылаются на club_id+telegram_user_id, а не на VipClient.id (см.
+    докстринг Transaction), так что история гостя никуда не девается.
+    """
+    vip_client = db.session.get(VipClient, vip_client_id)
+    if vip_client is None:
+        return RemoveVipClientResult(outcome="not_found")
+    if vip_client.club_id != club_id:
+        return RemoveVipClientResult(outcome="forbidden")
+    if vip_client.balance:
+        return RemoveVipClientResult(outcome="balance_not_zero")
+
+    db.session.delete(vip_client)
+    db.session.commit()
+    return RemoveVipClientResult(outcome="ok")
+
+
 # --- Избранное (старое: database.py::add/remove/get_favorites, handlers/*::order_favorite, п.3) ---
 
 def add_favorite(club_id: int, guest_id: int, song_title: str, artist, service_id) -> Favorite:
