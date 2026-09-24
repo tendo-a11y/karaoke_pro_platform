@@ -52,14 +52,34 @@ const POLL_FAVORITES_MS = 5000;
 const POLL_TABLE_GROUP_MS = 5000;
 const POLL_VIP_TRANSACTIONS_MS = 8000;
 
-// Пикер периода для "Моих заказов" — старое: handlers/vip.py
-// ::vip_order_history (days_map = {"today":1,"week":7,"month":30}, только
-// VIP). Здесь тот же набор периодов, но доступно всем ролям.
+// Пикер периода для вкладки "История" (см. ORDERS_TABS ниже) — старое:
+// handlers/vip.py::vip_order_history (days_map = {"today":1,"week":7,
+// "month":30}, только VIP). Здесь тот же набор периодов, но доступно всем
+// ролям.
 const ORDER_HISTORY_PERIODS = [
   { label: "Сегодня", days: 1 },
   { label: "Неделя", days: 7 },
   { label: "Месяц", days: 30 },
   { label: "Все", days: null },
+];
+
+// ДОБАВЛЕНО (2026-09-24, запрос пользователя "правильно разделить на две
+// вкладки история и мои заказы. Мои заказы это то что происходит в рамках
+// одной сессии") — раньше был один список "Мои заказы" с кнопками периода
+// (см. ORDER_HISTORY_PERIODS выше), по умолчанию "Сегодня" (фикс от
+// 2026-09-22 на жалобу "вижу уже спетые песни из прошлых визитов"). Этого
+// оказалось недостаточно: guest_id у вошедшего через Google гостя
+// постоянный между визитами (см. docstring routes/guest.py::link_google), а
+// "Сегодня" — календарный день, а не "с момента как я в этот раз открыл
+// ссылку", так что гость, вернувшийся тем же вечером, снова видел
+// вперемешку старое и новое. Теперь два раздельных экрана: "current" — то,
+// что происходит в РАМКАХ ЭТОЙ СЕССИИ (?scope=session, см. докстринг
+// routes/guest.py::list_my_orders), без кнопок периода вообще — там всегда
+// показывается всё с момента выпуска текущего токена; "history" — прежний
+// список с кнопками периода, для сознательного просмотра прошлого.
+const ORDERS_TABS = [
+  { key: "current", label: "Мои заказы" },
+  { key: "history", label: "История" },
 ];
 
 // Иконка+знак по типу операции для единой ленты "Финансы" — старое:
@@ -1235,18 +1255,28 @@ export default function App() {
   const [submitOk, setSubmitOk] = useState(null);
 
   const [orders, setOrders] = useState([]);
-  // null = "Все", иначе количество дней (см. ORDER_HISTORY_PERIODS ниже) —
+  // ДОБАВЛЕНО (2026-09-24, см. докстринг ORDERS_TABS выше) — какая из двух
+  // вкладок открыта. "current" по умолчанию: это то, ради чего гость обычно
+  // и открывает "Мои заказы" — увидеть свою очередь прямо сейчас, а не
+  // копаться в истории.
+  const [ordersTab, setOrdersTab] = useState("current");
+  // null = "Все", иначе количество дней (см. ORDER_HISTORY_PERIODS выше) —
   // старое: handlers/vip.py::vip_order_history, только для VIP; здесь
-  // доступно всем ролям (аудит по "Фильтрация истории заказов").
+  // доступно всем ролям (аудит по "Фильтрация истории заказов"). Актуально
+  // только для вкладки "История" (ordersTab === "history") — у "Мои заказы"
+  // своя, не календарная, фильтрация: см. ORDERS_TABS выше и докстринг
+  // routes/guest.py::list_my_orders про ?scope=session.
   //
   // ИЗМЕНЕНО (2026-09-22, жалоба пользователя: гость открывает "Мои
-  // заказы" и видит уже спетые песни из прошлых визитов — потому что
-  // guest_id постоянный, а по умолчанию был активен фильтр "Все", т.е.
-  // вся история без ограничения по дате). По умолчанию теперь активен
-  // "Сегодня" (days=1) — история за более ранние периоды никуда не делась,
-  // она по-прежнему на месте, просто открывается по клику на
-  // "Неделя"/"Месяц"/"Все", а не показывается сразу.
-  const [orderHistoryDays, setOrderHistoryDays] = useState(1);
+  // заказы" и видит уже спетые песни из прошлых визитов) — по умолчанию
+  // было выставлено "Сегодня" (days=1), потому что "Мои заказы" тогда было
+  // одним общим списком без вкладок. ИЗМЕНЕНО ЕЩЁ РАЗ (2026-09-24, тот же
+  // разбор жалобы до конца, см. ORDERS_TABS) — раз "текущее" теперь у своей
+  // вкладки со ?scope=session, "История" — уже сознательный просмотр
+  // прошлого, и дефолт "Все" для неё удобнее (не приходится лишний раз
+  // щёлкать, чтобы увидеть весь список, который и так уже отфильтрован по
+  // вкладке от "текущего").
+  const [orderHistoryDays, setOrderHistoryDays] = useState(null);
   const [queue, setQueue] = useState([]);
   const [services, setServices] = useState([]);
   const [favoriteBusyOrderId, setFavoriteBusyOrderId] = useState(null);
@@ -1327,15 +1357,24 @@ export default function App() {
     };
   }, [clubId, linkInvalid]);
 
+  // ИЗМЕНЕНО (2026-09-24, см. ORDERS_TABS выше) — какой запрос уйдёт на
+  // сервер, зависит от открытой вкладки: "current" всегда ?scope=session
+  // (весь список гостя за этот визит, без кнопок периода), "history" —
+  // прежний ?days=N по orderHistoryDays. И то, и другое кладём в общий
+  // orders — сами вкладки на экране никогда не видны одновременно, так что
+  // отдельное состояние на каждую было бы лишним.
   const refreshOrders = useCallback(async () => {
     if (!session) return;
     try {
-      const data = await api.listMyOrders(session.token, orderHistoryDays);
+      const data = await api.listMyOrders(
+        session.token,
+        ordersTab === "current" ? { scope: "session" } : { days: orderHistoryDays },
+      );
       setOrders(data);
     } catch {
       // Временный сбой поллинга — не блокируем форму заказа баннером.
     }
-  }, [session, orderHistoryDays]);
+  }, [session, ordersTab, orderHistoryDays]);
 
   const refreshQueue = useCallback(async () => {
     if (!session) return;
@@ -1702,24 +1741,43 @@ export default function App() {
       </section>
 
       <section className="panel">
-        <h2>Мои заказы</h2>
-        <div className="order-history-periods">
-          {ORDER_HISTORY_PERIODS.map((p) => (
+        {/* ДОБАВЛЕНО (2026-09-24, см. ORDERS_TABS выше) — переключатель
+        "Мои заказы" / "История" вместо одного заголовка. */}
+        <div className="orders-tabs">
+          {ORDERS_TABS.map((t) => (
             <button
-              key={p.label}
+              key={t.key}
               type="button"
-              className={`link-btn${orderHistoryDays === p.days ? " order-history-periods__active" : ""}`}
-              onClick={() => setOrderHistoryDays(p.days)}
+              className={`orders-tabs__btn${ordersTab === t.key ? " orders-tabs__btn--active" : ""}`}
+              onClick={() => setOrdersTab(t.key)}
             >
-              {p.label}
+              {t.label}
             </button>
           ))}
         </div>
+        {ordersTab === "history" && (
+          <div className="order-history-periods">
+            {ORDER_HISTORY_PERIODS.map((p) => (
+              <button
+                key={p.label}
+                type="button"
+                className={`link-btn${orderHistoryDays === p.days ? " order-history-periods__active" : ""}`}
+                onClick={() => setOrderHistoryDays(p.days)}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+        )}
         {favoriteMessage && <div className="banner banner--ok">{favoriteMessage}</div>}
         {cancelError && <div className="banner banner--error">{cancelError}</div>}
         {orders.length === 0 ? (
           <p className="empty-hint">
-            {orderHistoryDays === null ? "Заказов пока нет." : "Заказов за этот период нет."}
+            {ordersTab === "current"
+              ? "Заказов пока нет — закажите первую песню выше."
+              : orderHistoryDays === null
+                ? "Заказов пока нет."
+                : "Заказов за этот период нет."}
           </p>
         ) : (
           <ul className="order-list">
