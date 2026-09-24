@@ -104,3 +104,64 @@ def test_invalid_days_param_ignored_not_500(client, db, club):
     resp = client.get("/api/guest/orders?days=abc", headers=_headers(session["token"]))
     assert resp.status_code == 200
     assert len(resp.get_json()["data"]) == 1
+
+
+# ДОБАВЛЕНО (2026-09-24, жалоба пользователя "почему в панели гостя висят
+# старые заказы, им уже 2 дня" + уточнение "правильно разделить на две
+# вкладки история и мои заказы, мои заказы — это то что происходит в рамках
+# одной сессии") — см. подробный докстринг routes/guest.py::list_my_orders
+# про ?scope=session и почему календарного ?days=N для этого недостаточно
+# (guest_id у вошедшего через Google гостя постоянный между визитами).
+def test_scope_session_excludes_orders_from_before_this_session(client, db, club):
+    session = _guest_session(client, club.club_id)
+    guest_id = int(session["guest_id"])
+    # "Прошлый визит" — заказ старше момента выпуска токена этой сессии.
+    _make_order(db, club.club_id, guest_id, "Прошлый визит", datetime.now(timezone.utc) - timedelta(hours=2))
+    _make_order(db, club.club_id, guest_id, "Этот визит", datetime.now(timezone.utc))
+
+    resp = client.get("/api/guest/orders?scope=session", headers=_headers(session["token"]))
+    assert resp.status_code == 200
+    titles = [o["song_title"] for o in resp.get_json()["data"]]
+    assert titles == ["Этот визит"]
+
+
+def test_scope_session_matches_own_google_identity_even_across_days(client, db, club):
+    """Ключевой сценарий из жалобы: тот же (постоянный) guest_id, но новый
+    токен, выпущенный сильно позже — старые заказы под ?scope=session не
+    всплывают, хотя под ?days=7 (и тем более без фильтра) всплыли бы."""
+    guest_id = 424242
+    _make_order(db, club.club_id, guest_id, "Позавчера", datetime.now(timezone.utc) - timedelta(days=2))
+
+    from auth import issue_guest_token
+    token = issue_guest_token(guest_id, club.club_id, 5, client.application.config["GUEST_JWT_SECRET"], 43200)
+    _make_order(db, club.club_id, guest_id, "Сейчас", datetime.now(timezone.utc))
+
+    resp = client.get("/api/guest/orders?scope=session", headers=_headers(token))
+    assert resp.status_code == 200
+    assert [o["song_title"] for o in resp.get_json()["data"]] == ["Сейчас"]
+
+    resp = client.get("/api/guest/orders?days=7", headers=_headers(token))
+    titles = {o["song_title"] for o in resp.get_json()["data"]}
+    assert titles == {"Позавчера", "Сейчас"}
+
+
+def test_scope_session_does_not_hide_not_yet_played_order_from_this_session(client, db, club):
+    session = _guest_session(client, club.club_id)
+    guest_id = int(session["guest_id"])
+    order = _make_order(db, club.club_id, guest_id, "Играет сейчас", datetime.now(timezone.utc))
+    assert order.completed_at is None
+
+    resp = client.get("/api/guest/orders?scope=session", headers=_headers(session["token"]))
+    assert [o["song_title"] for o in resp.get_json()["data"]] == ["Играет сейчас"]
+
+
+def test_scope_other_than_session_falls_back_to_days_behaviour(client, db, club):
+    """?scope=anything-else (или отсутствие ?scope вовсе) не должен молча
+    включать фильтр по сессии — это оставленное для ?days=N поведение."""
+    session = _guest_session(client, club.club_id)
+    guest_id = int(session["guest_id"])
+    _make_order(db, club.club_id, guest_id, "Месяц назад", datetime.now(timezone.utc) - timedelta(days=30))
+
+    resp = client.get("/api/guest/orders?scope=history&days=60", headers=_headers(session["token"]))
+    assert resp.status_code == 200
+    assert [o["song_title"] for o in resp.get_json()["data"]] == ["Месяц назад"]
