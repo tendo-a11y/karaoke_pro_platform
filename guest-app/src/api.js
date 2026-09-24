@@ -93,8 +93,21 @@ export const api = {
     request("/api/guest/order", {
       method: "POST", token, body: { song_title: songTitle, artist, service_id: serviceId },
     }),
-  listMyOrders: (token, days) =>
-    request(`/api/guest/orders${days != null ? `?days=${days}` : ""}`, { token }),
+  // ИЗМЕНЕНО (2026-09-24, запрос пользователя "правильно разделить на две
+  // вкладки история и мои заказы. Мои заказы это то что происходит в рамках
+  // одной сессии") — вместо одного-единственного ?days=N теперь два разных
+  // режима: { scope: "session" } для вкладки "Мои заказы" (см. докстринг
+  // backend/routes/guest.py::list_my_orders про ?scope=session) и { days }
+  // для вкладки "История" с прежними кнопками периода. Оставляем options
+  // объектом, а не позиционным days — иначе вызывающему коду пришлось бы
+  // писать listMyOrders(token, undefined) при использовании scope.
+  listMyOrders: (token, { days, scope } = {}) => {
+    const params = new URLSearchParams();
+    if (scope != null) params.set("scope", scope);
+    else if (days != null) params.set("days", days);
+    const qs = params.toString();
+    return request(`/api/guest/orders${qs ? `?${qs}` : ""}`, { token });
+  },
   replaceOrder: (token, orderId, songTitle, artist, serviceId) =>
     request(`/api/guest/order/${orderId}/replace`, {
       method: "POST", token, body: { song_title: songTitle, artist, service_id: serviceId },
