@@ -1,4 +1,5 @@
 import time
+from datetime import datetime, timezone
 from functools import wraps
 
 import jwt
@@ -303,6 +304,25 @@ def require_guest(view):
         g.guest_id = guest_id
         g.club_id = club_id
         g.table_no = table_no
+        # ДОБАВЛЕНО (2026-09-24, запрос пользователя "правильно разделить на
+        # две вкладки история и мои заказы. Мои заказы это то что происходит
+        # в рамках одной сессии") — момент выпуска ЭТОГО токена (не момент
+        # первого открытия ссылки клубом когда-то давно: guest_id у
+        # вошедшего через Google гостя постоянный, см. docstring
+        # routes/guest.py::link_google, и без этого "сессией" пришлось бы
+        # считать вообще всю историю личности). Токен переиздаётся заново
+        # при каждом новом визите (session/link-google — оба вызывают
+        # issue_guest_token с iat=сейчас) и живёт GUEST_JWT_TTL_SECONDS
+        # (config.py, по умолчанию 12 часов), так что "с момента выпуска
+        # этого токена" на практике и есть "с начала этого визита за столом".
+        # Используется в routes/guest.py::list_my_orders (?scope=session) —
+        # без отдельного отслеживания сессии на клиенте (sessionStorage и
+        # т.п.), источник истины тот же подписанный токен, что и для
+        # guest_id/club_id/table_no выше.
+        iat = payload.get("iat")
+        g.session_started_at = (
+            datetime.fromtimestamp(iat, tz=timezone.utc) if isinstance(iat, (int, float)) else None
+        )
         return view(*args, **kwargs)
 
     return wrapper
