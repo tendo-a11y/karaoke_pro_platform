@@ -21,6 +21,7 @@ from services.billing_service import charge_at_completion
 from services.notify import notify_guest
 from sockets import (
     emit_order_change_request_created,
+    emit_order_change_request_decided,
     emit_order_confirmed,
     emit_order_rejected,
     emit_order_updated,
@@ -537,6 +538,7 @@ def approve_order_change_request(request_id: int, kj):
         change_request.decided_by = kj.id
         change_request.decided_at = _utcnow()
         db.session.commit()
+        emit_order_change_request_decided(change_request)
         return change_request, None, "stale"
 
     if change_request.kind == ORDER_CHANGE_KIND_CANCEL:
@@ -550,6 +552,7 @@ def approve_order_change_request(request_id: int, kj):
         change_request.decided_by = kj.id
         change_request.decided_at = _utcnow()
         db.session.commit()
+        emit_order_change_request_decided(change_request)
         return change_request, order, "stale"
 
     if change_request.kind == ORDER_CHANGE_KIND_CANCEL:
@@ -569,6 +572,7 @@ def approve_order_change_request(request_id: int, kj):
     change_request.decided_by = kj.id
     change_request.decided_at = _utcnow()
     db.session.commit()
+    emit_order_change_request_decided(change_request)
 
     return change_request, order, "approved"
 
@@ -594,6 +598,7 @@ def reject_order_change_request(request_id: int, kj):
     change_request.decided_by = kj.id
     change_request.decided_at = _utcnow()
     db.session.commit()
+    emit_order_change_request_decided(change_request)
 
     return change_request, "rejected"
 
