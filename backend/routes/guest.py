@@ -739,6 +739,27 @@ def list_my_orders():
     vip_service.list_transactions), без старого бага со строковым
     DATE('now', ...) и без бага отображения UTC как локального времени.
 
+    ?scope=session — альтернатива ?days=N (ДОБАВЛЕНО 2026-09-24, жалоба
+    пользователя "почему в панели гостя висят старые заказы, им уже 2 дня" и
+    его же уточнение "правильно разделить на две вкладки история и мои
+    заказы, мои заказы — это то что происходит в рамках одной сессии").
+    Проблема с ?days=N как единственным фильтром: guest_id у вошедшего через
+    Google гостя постоянный (см. docstring routes/guest.py::link_google,
+    services/guest_account_service.py), а сам токен живёт до
+    GUEST_JWT_TTL_SECONDS (12 часов по умолчанию) — календарные "Сегодня/
+    Неделя/Месяц" тут не то же самое, что "этот приход в клуб": гость,
+    вернувшийся тем же вечером или на следующий день с тем же Google-
+    аккаунтом, при "Сегодня" всё ещё видел бы вперемешку и текущий заказ, и
+    то, что заказывал в прошлый визит несколько часов/дней назад.
+    ?scope=session вместо календарной даты берёт g.session_started_at (см.
+    auth.py::require_guest) — момент выпуска ИМЕННО ЭТОГО токена, т.е. факт
+    начала текущего визита, а не произвольное число дней назад. Отдельного
+    состояния на клиенте (sessionStorage и т.п.) для этого не заводим —
+    источник истины тот же подписанный токен, что и у guest_id/club_id/
+    table_no. Используется вкладкой "Мои заказы" (Guest App), тогда как
+    ?days=N остаётся у вкладки "История" — так деление на вкладки следует
+    из смысла запроса, а не наоборот.
+
     Отклонённые (rejected) и с ошибкой (error) заказы сюда намеренно не
     попадают (решение пользователя, живой тест 2026-09): гостю в его
     собственном списке они не нужны и только захламляют историю — он видит
@@ -763,11 +784,19 @@ def list_my_orders():
     query = Order.query.filter_by(club_id=g.club_id, telegram_user_id=g.guest_id).filter(
         Order.status.notin_([STATUS_REJECTED, STATUS_ERROR])
     )
-    days = request.args.get("days", type=int)
-    if days is not None:
-        from datetime import datetime, timedelta, timezone
-        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
-        query = query.filter(Order.created_at >= cutoff)
+    scope = request.args.get("scope")
+    if scope == "session":
+        # session_started_at может быть None только если в токене почему-то
+        # нет iat (в токенах, выпущенных issue_guest_token, он есть всегда) —
+        # тогда ведём себя как без фильтра вовсе, а не роняем запрос 500-й.
+        if g.session_started_at is not None:
+            query = query.filter(Order.created_at >= g.session_started_at)
+    else:
+        days = request.args.get("days", type=int)
+        if days is not None:
+            from datetime import datetime, timedelta, timezone
+            cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+            query = query.filter(Order.created_at >= cutoff)
     orders = query.order_by(Order.created_at.asc()).all()
     vdj = get_vdj_client(g.club_id)
     waiting_positions = table_board_service.get_waiting_positions(g.club_id, g.guest_id)
