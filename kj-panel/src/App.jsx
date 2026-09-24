@@ -419,9 +419,21 @@ function OrderChangeRequestsPanel({ token, clubId, socket }) {
         return list.some((r) => r.id === changeRequest.id) ? list : [...list, changeRequest];
       });
     };
+    // ДОБАВЛЕНО (2026-09-23, жалоба пользователя "не одобрить не отклонить
+    // нельзя" — заявка уже обработана): раньше решение по заявке, принятое
+    // в одной вкладке/на одном устройстве, никак не доходило до других
+    // открытых панелей — там заявка навсегда оставалась в списке "🔔
+    // Заявки от гостей", а любой клик по Одобрить/Отклонить получал 409
+    // ALREADY_DECIDED (см. sockets.py::emit_order_change_request_decided).
+    // Слушаем то же событие и просто убираем заявку из списка.
+    const onDecided = (changeRequest) => {
+      setPending((prev) => (prev || []).filter((r) => r.id !== changeRequest.id));
+    };
     socket.on("order_change_request_created", onCreated);
+    socket.on("order_change_request_decided", onDecided);
     return () => {
       socket.off("order_change_request_created", onCreated);
+      socket.off("order_change_request_decided", onDecided);
     };
   }, [socket]);
 
@@ -433,6 +445,13 @@ function OrderChangeRequestsPanel({ token, clubId, socket }) {
       await reload();
     } catch (err) {
       setActionError(err instanceof ApiError ? err.message : String(err));
+      // Заявку мог уже решить кто-то другой (другая вкладка/устройство) —
+      // без перезагрузки списка она осталась бы висеть в нём навсегда,
+      // раз за разом отвечая той же ошибкой на любой клик (см. докстринг
+      // emit_order_change_request_decided выше).
+      if (err instanceof ApiError && err.code === "ALREADY_DECIDED") {
+        await reload();
+      }
     } finally {
       setBusyKey(null);
     }
@@ -446,6 +465,9 @@ function OrderChangeRequestsPanel({ token, clubId, socket }) {
       await reload();
     } catch (err) {
       setActionError(err instanceof ApiError ? err.message : String(err));
+      if (err instanceof ApiError && err.code === "ALREADY_DECIDED") {
+        await reload();
+      }
     } finally {
       setBusyKey(null);
     }
