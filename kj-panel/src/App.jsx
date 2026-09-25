@@ -1090,6 +1090,17 @@ function TableSettingsPanel({ token, clubId }) {
   const [queueMode, setQueueMode] = useState("manual");
   const [queueModeBusy, setQueueModeBusy] = useState(false);
   const [queueModeError, setQueueModeError] = useState(null);
+  // ДОБАВЛЕНО (2026-09-25, баг: заказ стола 3 обогнал в очереди уже
+  // стоявшие заказы стола 16, потому что круговой обход всегда стартовал с
+  // 1-го стола) — "Начало очереди": KJ вручную указывает, с какого стола
+  // реально начался круг сегодня (см. backend/routes/kj.py::
+  // update_table_settings, models.py::Club.queue_start_table). Отдельное
+  // поле с своей кнопкой сохранения — по аналогии с тумблером режима выше,
+  // не смешиваем с формой table_count/songs_per_table ниже.
+  const [queueStartTableDraft, setQueueStartTableDraft] = useState("1");
+  const [queueStartTableBusy, setQueueStartTableBusy] = useState(false);
+  const [queueStartTableError, setQueueStartTableError] = useState(null);
+  const [queueStartTableSaved, setQueueStartTableSaved] = useState(false);
   const [loadError, setLoadError] = useState(null);
   const [actionError, setActionError] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -1101,6 +1112,7 @@ function TableSettingsPanel({ token, clubId }) {
       setTableCountDraft(data.table_count == null ? "" : String(data.table_count));
       setSongsPerTableDraft(data.songs_per_table == null ? "" : String(data.songs_per_table));
       setQueueMode(data.queue_mode || "manual");
+      setQueueStartTableDraft(String(data.queue_start_table || 1));
       setLoadError(null);
     } catch (err) {
       setLoadError(err instanceof ApiError ? err.message : String(err));
@@ -1126,6 +1138,28 @@ function TableSettingsPanel({ token, clubId }) {
       setQueueModeError(err instanceof ApiError ? err.message : String(err));
     } finally {
       setQueueModeBusy(false);
+    }
+  }
+
+  async function handleSaveQueueStartTable(event) {
+    event.preventDefault();
+    const trimmed = queueStartTableDraft.trim();
+    const value = Number(trimmed);
+    if (!Number.isInteger(value) || value < 1) {
+      setQueueStartTableError("Введите номер стола — целое число не меньше 1");
+      return;
+    }
+    setQueueStartTableBusy(true);
+    setQueueStartTableError(null);
+    setQueueStartTableSaved(false);
+    try {
+      const data = await api.updateTableSettings(token, clubId, { queue_start_table: value });
+      setQueueStartTableDraft(String(data.queue_start_table || 1));
+      setQueueStartTableSaved(true);
+    } catch (err) {
+      setQueueStartTableError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setQueueStartTableBusy(false);
     }
   }
 
@@ -1191,6 +1225,35 @@ function TableSettingsPanel({ token, clubId }) {
             </button>
           ))}
         </div>
+        {queueMode === "sequential" && (
+          <div className="queue-start-table-block">
+            <p className="empty-hint">
+              С какого стола реально начался вечер — круг идёт по возрастанию от этого стола до последнего, затем
+              продолжает с 1-го и до этого стола. Столы с меньшим номером не будут обгонять уже стоящие в очереди,
+              пока круг не дойдёт до них.
+            </p>
+            {queueStartTableError && <div className="banner banner--error">{queueStartTableError}</div>}
+            <form className="table-settings-form" onSubmit={handleSaveQueueStartTable}>
+              <label className="table-settings-field">
+                <span>Начало очереди (номер стола)</span>
+                <input
+                  type="number"
+                  min="1"
+                  value={queueStartTableDraft}
+                  onChange={(e) => {
+                    setQueueStartTableDraft(e.target.value);
+                    setQueueStartTableSaved(false);
+                  }}
+                  disabled={queueStartTableBusy}
+                />
+              </label>
+              <button type="submit" className="btn btn--accent" disabled={queueStartTableBusy}>
+                {queueStartTableBusy ? "Сохраняем…" : "Сохранить"}
+              </button>
+            </form>
+            {queueStartTableSaved && <p className="empty-hint">Сохранено.</p>}
+          </div>
+        )}
       </section>
       <section>
         <h2>Настройки столов</h2>
