@@ -78,6 +78,53 @@ def test_invalid_queue_mode_rejected(client, db, club, kj):
     assert resp.get_json()["error"] == "VALIDATION_ERROR"
 
 
+# --- "Начало очереди" (queue_start_table) ---
+
+def test_default_queue_start_table_is_1(client, db, club, kj):
+    resp = client.get(f"/api/kj/table-settings/{club.club_id}", headers=_headers(kj["token"]))
+    assert resp.status_code == 200
+    assert resp.get_json()["data"]["queue_start_table"] == 1
+
+
+def test_can_set_queue_start_table_without_touching_other_fields(client, db, club, kj):
+    club.table_count = 20
+    club.songs_per_table = 3
+    club.queue_mode = "sequential"
+    db.session.commit()
+
+    resp = client.put(
+        f"/api/kj/table-settings/{club.club_id}", json={"queue_start_table": 16},
+        headers=_headers(kj["token"]),
+    )
+    assert resp.status_code == 200
+    data = resp.get_json()["data"]
+    assert data["queue_start_table"] == 16
+    assert data["table_count"] == 20
+    assert data["songs_per_table"] == 3
+    assert data["queue_mode"] == "sequential"
+
+
+def test_queue_start_table_beyond_table_count_rejected(client, db, club, kj):
+    club.table_count = 10
+    db.session.commit()
+
+    resp = client.put(
+        f"/api/kj/table-settings/{club.club_id}", json={"queue_start_table": 11},
+        headers=_headers(kj["token"]),
+    )
+    assert resp.status_code == 400
+    assert resp.get_json()["error"] == "VALIDATION_ERROR"
+
+
+def test_queue_start_table_non_positive_rejected(client, db, club, kj):
+    resp = client.put(
+        f"/api/kj/table-settings/{club.club_id}", json={"queue_start_table": 0},
+        headers=_headers(kj["token"]),
+    )
+    assert resp.status_code == 400
+    assert resp.get_json()["error"] == "VALIDATION_ERROR"
+
+
 # --- orders-board: queue_position появляется только в sequential ---
 
 def test_manual_mode_board_has_no_queue_position(client, db, club, kj):
@@ -207,6 +254,64 @@ def test_crazy_order_goes_first_in_sequential_mode_regardless_of_table(db, club)
 
     ordered = compute_queue_order(club.club_id)
     assert [o.id for o in ordered] == [o_crazy.id, o1.id, o2.id]
+
+
+def test_sequential_default_start_table_is_1_same_as_before(db, club):
+    """queue_start_table не задан (None) — поведение как до появления этой
+    настройки, обход по-прежнему с 1-го стола."""
+    club.table_count = 20
+    club.songs_per_table = 5
+    club.queue_mode = "sequential"
+    db.session.commit()
+
+    o16 = _make_order(db, club.club_id, table_no=16, offset_seconds=0)
+    o3 = _make_order(db, club.club_id, table_no=3, offset_seconds=1, guest_id=2)
+
+    ordered = compute_queue_order(club.club_id)
+    assert [o.id for o in ordered] == [o3.id, o16.id]
+
+
+def test_sequential_manual_start_table_fixes_reported_bug(db, club):
+    """Баг пользователя (2026-09-25): KJ вручную запустил очередь со стола
+    16 (queue_start_table=16). Появившийся позже заказ стола 3 не должен
+    обгонять уже стоящие заказы стола 16 только из-за того, что 3 < 16 —
+    обход обязан начаться с 16-го стола и дойти до 3-го уже после полного
+    оборота через table_count обратно на 1."""
+    club.table_count = 20
+    club.songs_per_table = 5
+    club.queue_mode = "sequential"
+    club.queue_start_table = 16
+    db.session.commit()
+
+    o16a = _make_order(db, club.club_id, table_no=16, offset_seconds=0)
+    o16b = _make_order(db, club.club_id, table_no=16, offset_seconds=1)
+    o16c = _make_order(db, club.club_id, table_no=16, offset_seconds=2)
+    o3 = _make_order(db, club.club_id, table_no=3, offset_seconds=3, guest_id=2)
+
+    ordered = compute_queue_order(club.club_id)
+    assert [o.id for o in ordered] == [o16a.id, o16b.id, o16c.id, o3.id]
+
+    positions = get_club_queue_positions(club.club_id)
+    assert positions[o3.id] == 4
+
+
+def test_sequential_start_table_near_end_wraps_after_short_first_leg(db, club):
+    """Пример пользователя: 18 столов, "Начало очереди" = 17 — первый
+    отрезок до оборота короткий (всего 2 стола: 17, 18), дальше обход
+    продолжает с 1-го стола, оставаясь тем же кругом."""
+    club.table_count = 18
+    club.songs_per_table = 5
+    club.queue_mode = "sequential"
+    club.queue_start_table = 17
+    db.session.commit()
+
+    o17 = _make_order(db, club.club_id, table_no=17, offset_seconds=0)
+    o18 = _make_order(db, club.club_id, table_no=18, offset_seconds=1)
+    o1 = _make_order(db, club.club_id, table_no=1, offset_seconds=2, guest_id=2)
+    o5 = _make_order(db, club.club_id, table_no=5, offset_seconds=3, guest_id=3)
+
+    ordered = compute_queue_order(club.club_id)
+    assert [o.id for o in ordered] == [o17.id, o18.id, o1.id, o5.id]
 
 
 def test_guest_queue_position_reflects_sequential_order(client, db, club):
