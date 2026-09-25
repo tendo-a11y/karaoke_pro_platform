@@ -1072,9 +1072,24 @@ function CategoriesPanel({ token, clubId }) {
 // деплое (backend/routes/kj.py::update_table_settings меняет только те
 // ключи, что реально пришли в запросе, но раз оба поля тут в одной форме,
 // они и уходят вместе одним PUT).
+// ДОБАВЛЕНО (2026-09-24, запрос пользователя "нужно добавить варианты
+// очереди"): значения того же поля Club.queue_mode, что и на бэкенде (см.
+// services/table_board_service.py::QUEUE_MODE_MANUAL/QUEUE_MODE_SEQUENTIAL) —
+// подписи для быстрого тумблера на вкладке "Столы". Режим меняет только
+// отображение (порядок/номер на карточках KJ и номер очереди у гостя), а
+// не саму механику постановки песни — KJ по-прежнему сам вручную ставит
+// песню в VirtualDJ/"Добавить песню", когда сочтёт нужным.
+const QUEUE_MODE_OPTIONS = [
+  { value: "manual", label: "Как решает диджей", hint: "Порядок ведёт сам KJ, номера очереди не показываются" },
+  { value: "sequential", label: "Последовательно", hint: "Круговой обход столов по номерам, CRAZY — всегда первой" },
+];
+
 function TableSettingsPanel({ token, clubId }) {
   const [tableCountDraft, setTableCountDraft] = useState("");
   const [songsPerTableDraft, setSongsPerTableDraft] = useState("");
+  const [queueMode, setQueueMode] = useState("manual");
+  const [queueModeBusy, setQueueModeBusy] = useState(false);
+  const [queueModeError, setQueueModeError] = useState(null);
   const [loadError, setLoadError] = useState(null);
   const [actionError, setActionError] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -1085,9 +1100,32 @@ function TableSettingsPanel({ token, clubId }) {
       const data = await api.getTableSettings(token, clubId);
       setTableCountDraft(data.table_count == null ? "" : String(data.table_count));
       setSongsPerTableDraft(data.songs_per_table == null ? "" : String(data.songs_per_table));
+      setQueueMode(data.queue_mode || "manual");
       setLoadError(null);
     } catch (err) {
       setLoadError(err instanceof ApiError ? err.message : String(err));
+    }
+  }
+
+  // Быстрый тумблер (запрос пользователя: "Быстрый тумблер на вкладке
+  // Столы") — сохраняется сразу по клику, отдельно от формы
+  // table_count/songs_per_table ниже и её кнопки "Сохранить"; шлёт только
+  // { queue_mode }, не трогая остальные настройки (патч-семантика бэкенда,
+  // см. api.js::updateTableSettings).
+  async function handleQueueModeChange(nextMode) {
+    if (nextMode === queueMode) return;
+    const previous = queueMode;
+    setQueueMode(nextMode);
+    setQueueModeBusy(true);
+    setQueueModeError(null);
+    try {
+      const data = await api.updateTableSettings(token, clubId, { queue_mode: nextMode });
+      setQueueMode(data.queue_mode || "manual");
+    } catch (err) {
+      setQueueMode(previous);
+      setQueueModeError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setQueueModeBusy(false);
     }
   }
 
@@ -1132,6 +1170,28 @@ function TableSettingsPanel({ token, clubId }) {
 
   return (
     <div className="table-settings-panel">
+      <section>
+        <h2>Режим очереди</h2>
+        <p className="empty-hint">
+          Как показывать порядок исполнения на карточках столов и номер очереди у гостя. Ни один из режимов
+          не мешает KJ вручную поставить любую песню в VirtualDJ в любой момент.
+        </p>
+        {queueModeError && <div className="banner banner--error">{queueModeError}</div>}
+        <div className="queue-mode-toggle">
+          {QUEUE_MODE_OPTIONS.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              className={`queue-mode-toggle__btn ${queueMode === option.value ? "queue-mode-toggle__btn--active" : ""}`}
+              disabled={queueModeBusy}
+              onClick={() => handleQueueModeChange(option.value)}
+              title={option.hint}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      </section>
       <section>
         <h2>Настройки столов</h2>
         <p className="empty-hint">
@@ -1473,6 +1533,14 @@ function OrdersBoardSlot({ slot, categories, busy, onAccept, onReject, onComplet
   return (
     <div className={`table-slot table-slot--${needsDecision ? "pending" : "queued"}`}>
       <button type="button" className="table-slot__body" onClick={() => onOpenGuest(slot.guest_id)}>
+        {/* ДОБАВЛЕНО (2026-09-24, режим очереди "Последовательно" — вкладка
+        "Столы"): номер места в общем круговом порядке клуба. Приходит с
+        бэкенда только когда у клуба включён sequential (см. docstring
+        services/table_board_service.py::_slot_dict) — в режиме "Как решает
+        диджей" (manual) этого поля нет вовсе, и бейдж не рисуется. */}
+        {slot.queue_position != null && (
+          <div className="table-slot__queue-position">№{slot.queue_position}</div>
+        )}
         <div className="table-slot__song">🎵 {slot.song_title}</div>
         {slot.artist && <div className="table-slot__artist">🎤 {slot.artist}</div>}
         {!canEditCategory && categoryName && <div className="table-slot__category">{categoryName}</div>}
