@@ -78,6 +78,17 @@ class Club(db.Model):
     # продолжает действовать, пока KJ не сохранит здесь число.
     songs_per_table = db.Column(db.Integer, nullable=True)
 
+    # ДОБАВЛЕНО (2026-09-24, запрос пользователя "нужно добавить варианты
+    # очереди" — быстрый тумблер на вкладке "Столы" KJ Panel): режим
+    # построения очереди для отображения на карточках KJ и номера очереди
+    # у гостя — "manual" (как сейчас, порядок ведёт сам KJ) или
+    # "sequential" (круговой обход столов по номерам, см. докстринг
+    # services/table_board_service.py::QUEUE_MODE_SEQUENTIAL). Меняет
+    # только отображение, не саму механику постановки песни в VirtualDJ.
+    # server_default — чтобы у уже существующих клубов после миграции сразу
+    # стояло "manual", то есть их поведение не менялось само по себе.
+    queue_mode = db.Column(db.String(16), nullable=False, default="manual", server_default="manual")
+
     # Секрет для локального VDJ-моста (см. vdj/bridge_client.py). Backend
     # централизован (обычно в облаке), а VirtualDJ стоит локально на
     # компьютере KJ без доступа из интернета — мостик сам подключается
@@ -102,6 +113,7 @@ class Club(db.Model):
             "email": self.email,
             "table_count": self.table_count,
             "songs_per_table": self.songs_per_table,
+            "queue_mode": self.queue_mode,
         }
 
 
