@@ -10,7 +10,7 @@ from services import category_service, guest_directory_service, guest_status_ser
 from services.guest_directory_service import GUEST_TYPES, GuestDirectoryError
 from services.category_service import CategoryServiceError
 from services.google_auth_service import GoogleAuthError, verify_google_credential
-from services.table_board_service import get_orders_board
+from services.table_board_service import QUEUE_MODE_CHOICES, get_orders_board, get_queue_mode
 from services.vdj_service import (
     add_manual_song,
     approve_order_change_request,
@@ -878,6 +878,13 @@ _TABLE_SETTINGS_FIELDS = {
     "songs_per_table": "songs_per_table должен быть положительным целым числом, либо null (не задано)",
 }
 
+# ДОБАВЛЕНО (2026-09-24, "варианты очереди" — быстрый тумблер на вкладке
+# "Столы"): queue_mode отдельно от числовых полей выше — это строка из
+# фиксированного набора QUEUE_MODE_CHOICES, а не число/null, поэтому у неё
+# своя валидация и она не может быть null (см. models.py::Club.queue_mode,
+# server_default="manual").
+_QUEUE_MODE_ERROR = f"queue_mode должен быть одним из: {', '.join(QUEUE_MODE_CHOICES)}"
+
 
 @bp.get("/table-settings/<int:club_id>")
 @require_kj
@@ -888,7 +895,11 @@ def get_table_settings(club_id):
     club = db.session.get(Club, club_id)
     if club is None:
         return api_error(404, "CLUB_NOT_FOUND", "Клуб не найден")
-    return api_ok({"table_count": club.table_count, "songs_per_table": club.songs_per_table})
+    return api_ok({
+        "table_count": club.table_count,
+        "songs_per_table": club.songs_per_table,
+        "queue_mode": get_queue_mode(club),
+    })
 
 
 @bp.put("/table-settings/<int:club_id>")
@@ -905,7 +916,9 @@ def update_table_settings(club_id):
     # этого эндпоинта обновляются раздельными коммитами (см. историю
     # деплоя), и старый фронтенд, знающий только про table_count, не должен
     # тихо обнулять songs_per_table каждым своим сохранением, пока не
-    # обновлён сам.
+    # обновлён сам. queue_mode — тот же принцип: тумблер на вкладке "Столы"
+    # шлёт только { queue_mode } (без table_count/songs_per_table), не
+    # трогая остальные настройки.
     updates = {}
     for field, error_message in _TABLE_SETTINGS_FIELDS.items():
         if field not in payload:
@@ -915,13 +928,23 @@ def update_table_settings(club_id):
             return api_error(400, "VALIDATION_ERROR", error_message)
         updates[field] = value
 
+    if "queue_mode" in payload:
+        value = payload.get("queue_mode")
+        if value not in QUEUE_MODE_CHOICES:
+            return api_error(400, "VALIDATION_ERROR", _QUEUE_MODE_ERROR)
+        updates["queue_mode"] = value
+
     club = db.session.get(Club, club_id)
     if club is None:
         return api_error(404, "CLUB_NOT_FOUND", "Клуб не найден")
     for field, value in updates.items():
         setattr(club, field, value)
     db.session.commit()
-    return api_ok({"table_count": club.table_count, "songs_per_table": club.songs_per_table})
+    return api_ok({
+        "table_count": club.table_count,
+        "songs_per_table": club.songs_per_table,
+        "queue_mode": get_queue_mode(club),
+    })
 
 
 # --- Список гостей / карточка гостя (запрос пользователя 2026-09: сортировка
