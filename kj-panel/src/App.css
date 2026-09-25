@@ -438,6 +438,12 @@ OrderChangeRequestsPanel), а не терялась среди обычных к
   color: #fff;
 }
 
+/* ДОБАВЛЕНО (2026-09-25, "Начало очереди" — исправление бага с обгоном
+   стола 3 стола 16 в круговом обходе): блок с номером стола-якоря, виден
+   только в режиме "Последовательно" (см. App.jsx::TableSettingsPanel). */
+.queue-start-table-block { margin-top: 14px; }
+.queue-start-table-block .table-settings-form { margin-top: 8px; }
+
 .categories-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
 
 .category-row {
