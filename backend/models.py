@@ -89,6 +89,17 @@ class Club(db.Model):
     # стояло "manual", то есть их поведение не менялось само по себе.
     queue_mode = db.Column(db.String(16), nullable=False, default="manual", server_default="manual")
 
+    # ДОБАВЛЕНО (2026-09-25, баг: заказ со стола 3 обогнал в очереди уже
+    # стоявшие заказы стола 16, т.к. круговой обход QUEUE_MODE_SEQUENTIAL
+    # всегда стартовал с 1-го стола независимо от того, откуда реально
+    # начался вечер) — "Начало очереди" на вкладке "Столы": номер стола, с
+    # которого начинается круговой обход (см. докстринг
+    # services/table_board_service.py::QUEUE_MODE_SEQUENTIAL). Задаётся
+    # вручную KJ (Role 2), не выводится автоматически из данных заказов —
+    # решение пользователя. None/не задано — обход по-прежнему начинается с
+    # 1-го стола (то же поведение, что было до этой настройки).
+    queue_start_table = db.Column(db.Integer, nullable=True)
+
     # Секрет для локального VDJ-моста (см. vdj/bridge_client.py). Backend
     # централизован (обычно в облаке), а VirtualDJ стоит локально на
     # компьютере KJ без доступа из интернета — мостик сам подключается
@@ -114,6 +125,7 @@ class Club(db.Model):
             "table_count": self.table_count,
             "songs_per_table": self.songs_per_table,
             "queue_mode": self.queue_mode,
+            "queue_start_table": self.queue_start_table,
         }
 
 
