@@ -83,10 +83,27 @@ DEFAULT_SONGS_PER_TABLE = 2
 #   место никуда не переносится. Считается заново при каждом обращении —
 #   отдельного счётчика "номер круга" в БД не заводим, тот же приём, что и
 #   у get_club_queue_positions ниже.
+#
+# ИСПРАВЛЕНО/ДОБАВЛЕНО (2026-09-25, баг от пользователя: заказ со стола 3
+# показал гостю номер в очереди 1, хотя перед этим уже стояли 3 заказа со
+# стола 16): круг ВСЕГДА начинался с 1-го стола, поэтому любой новый заказ
+# стола с номером МЕНЬШЕ, чем у уже стоящих в очереди столов, обгонял их,
+# даже если очередь клуба фактически "началась" с гораздо большего номера
+# (пользователь: "не указано с какого стола началась очередь, а началась с
+# 16-го"). Решение пользователя — не угадывать это автоматически по данным
+# заказов, а завести явную ручную настройку: Club.queue_start_table
+# ("Начало очереди" на вкладке "Столы", задаёт Роль 2/KJ) — номер стола, с
+# которого начинается обход. Круг идёт по возрастанию от этого стола до
+# table_count, затем оборачивается на 1 и до queue_start_table-1 (см.
+# _round_robin_order) — например, при table_count=18 и queue_start_table=17
+# первый отрезок до оборота короткий (столы 17, 18), дальше обход
+# продолжает 1..16, оставаясь тем же кругом. Пока KJ явно не задал — по
+# умолчанию 1 (то же самое поведение, что было до этой настройки).
 QUEUE_MODE_MANUAL = "manual"
 QUEUE_MODE_SEQUENTIAL = "sequential"
 QUEUE_MODE_CHOICES = (QUEUE_MODE_MANUAL, QUEUE_MODE_SEQUENTIAL)
 DEFAULT_QUEUE_MODE = QUEUE_MODE_MANUAL
+DEFAULT_QUEUE_START_TABLE = 1
 
 # Категория CRAZY ("Песня вне очереди", см. services/category_service.py::
 # DEFAULT_CATEGORIES) — запрос пользователя 2026-09-24: заказ этой
@@ -107,6 +124,12 @@ def get_table_capacity(club: Club) -> int:
 
 def get_queue_mode(club: Club) -> str:
     return club.queue_mode or DEFAULT_QUEUE_MODE
+
+
+def get_queue_start_table(club: Club) -> int:
+    if club.queue_start_table:
+        return club.queue_start_table
+    return DEFAULT_QUEUE_START_TABLE
 
 
 def _split_crazy_orders(orders: list[Order]) -> tuple[list[Order], list[Order]]:
@@ -132,21 +155,32 @@ def _split_crazy_orders(orders: list[Order]) -> tuple[list[Order], list[Order]]:
     return crazy, rest
 
 
-def _round_robin_order(orders: list[Order], table_count: int, capacity: int) -> list[Order]:
-    """Круговой обход столов 1..table_count — см. докстринг QUEUE_MODE_SEQUENTIAL
-    выше. orders — заказы С заданным table_no."""
+def _round_robin_order(
+    orders: list[Order], table_count: int, capacity: int, anchor_table: int = 1,
+) -> list[Order]:
+    """Круговой обход столов, начиная с anchor_table и далее по кругу
+    (anchor_table..table_count, затем 1..anchor_table-1) — см. докстринг
+    QUEUE_MODE_SEQUENTIAL выше про сам приём и его исправление 2026-09-25
+    (обход больше не зашит на старт с 1-го стола). orders — заказы С заданным
+    table_no."""
     by_table: dict[int, list[Order]] = {}
     for order in orders:
         by_table.setdefault(order.table_no, []).append(order)
     for bucket in by_table.values():
         bucket.sort(key=lambda o: (o.created_at, o.id))
 
+    if table_count > 0:
+        anchor = ((anchor_table - 1) % table_count) + 1
+    else:
+        anchor = 1
+    table_sequence = list(range(anchor, table_count + 1)) + list(range(1, anchor))
+
     cursor = {table_no: 0 for table_no in by_table}
     sequence: list[Order] = []
     remaining = len(orders)
     while remaining > 0:
         progressed = False
-        for table_no in range(1, table_count + 1):
+        for table_no in table_sequence:
             bucket = by_table.get(table_no)
             if not bucket:
                 continue
@@ -199,7 +233,13 @@ def compute_queue_order(club_id: int) -> list[Order]:
         tabled = [o for o in rest if o.table_no is not None]
         table_count = club.table_count or max((o.table_no for o in tabled), default=0)
         if table_count > 0:
-            ordered_tabled = _round_robin_order(tabled, table_count, get_table_capacity(club))
+            # Якорь — Club.queue_start_table, задаётся вручную KJ на
+            # вкладке "Столы" ("Начало очереди", см. докстринг
+            # QUEUE_MODE_SEQUENTIAL выше) — не автоматика, число тех, кто
+            # первым сделал заказ, может не совпадать со столом, откуда KJ
+            # реально решил начать вечер.
+            anchor_table = get_queue_start_table(club)
+            ordered_tabled = _round_robin_order(tabled, table_count, get_table_capacity(club), anchor_table)
         else:
             ordered_tabled = sorted(tabled, key=lambda o: (o.created_at, o.id))
         tableless_sorted = sorted(tableless, key=lambda o: (o.created_at, o.id))
