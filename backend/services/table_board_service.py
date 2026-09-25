@@ -37,7 +37,7 @@ STATUS_QUEUED теперь означает не "реально стоит в �
 сознательно игнорирует такие заказы — у них никогда не будет vdj_item_id).
 """
 from extensions import db
-from models import STATUS_ERROR, STATUS_PENDING, STATUS_PROCESSING, STATUS_QUEUED, Club, Order
+from models import STATUS_ERROR, STATUS_PENDING, STATUS_PROCESSING, STATUS_QUEUED, Club, Order, Service
 from services.vdj_service import get_kj_queue_view
 
 # Заказ занимает место на карточке, пока не отклонён и не ушёл из очереди —
@@ -58,11 +58,154 @@ ACTIVE_TABLE_STATUSES = (STATUS_PENDING, STATUS_PROCESSING, STATUS_QUEUED, STATU
 # на этой панели не изменилась внезапно сама по себе.
 DEFAULT_SONGS_PER_TABLE = 2
 
+# ДОБАВЛЕНО (2026-09-24, запрос пользователя "нужно добавить варианты
+# очереди" на вкладке "Столы" KJ Panel):
+#
+# QUEUE_MODE_MANUAL ("непоследовательный", значение по умолчанию для уже
+#   существующих клубов — старое поведение вообще не меняется) — очередь
+#   ведёт сам KJ вручную, номера очереди на карточках не показываются.
+#
+# QUEUE_MODE_SEQUENTIAL ("последовательный") — обсуждение с пользователем:
+#   режим меняет ТОЛЬКО отображение (порядок/номер на карточках KJ и номер
+#   очереди у гостя в "Мои заказы"), а не саму механику постановки песни —
+#   KJ по-прежнему сам вручную ставит песню в VirtualDJ/"Добавить песню"
+#   когда сочтёт нужным, никакой блокировки нет.
+#
+#   Порядок в этом режиме — круговой обход столов по возрастанию номера
+#   (1..Club.table_count, а не только "занятых" столов), на каждом проходе
+#   с каждого стола берётся не больше capacity (то же "Песен на стол
+#   одновременно") его старейших ещё не взятых заказов; если у стола
+#   заказов больше или новый заказ стола пришёл уже после того, как место
+#   стола в текущем проходе определено — лишнее уходит в СЛЕДУЮЩИЙ проход,
+#   а не встраивается задним числом в текущий (пример пользователя: "если
+#   заняты только до 10 стола и в очереди уже есть 3 стол, то он начинает
+#   новый круг"). Пустые на момент расчёта столы просто пропускаются, их
+#   место никуда не переносится. Считается заново при каждом обращении —
+#   отдельного счётчика "номер круга" в БД не заводим, тот же приём, что и
+#   у get_club_queue_positions ниже.
+QUEUE_MODE_MANUAL = "manual"
+QUEUE_MODE_SEQUENTIAL = "sequential"
+QUEUE_MODE_CHOICES = (QUEUE_MODE_MANUAL, QUEUE_MODE_SEQUENTIAL)
+DEFAULT_QUEUE_MODE = QUEUE_MODE_MANUAL
+
+# Категория CRAZY ("Песня вне очереди", см. services/category_service.py::
+# DEFAULT_CATEGORIES) — запрос пользователя 2026-09-24: заказ этой
+# категории всегда встаёт первым в очереди, ДО кругового расчёта, в ОБОИХ
+# режимах (manual и sequential), независимо от того, кто его выбрал — гость
+# при заказе или сам KJ через "Добавить песню"/"Присвоить". Определяем по
+# названию категории (Service.name), как и сама категория задаётся сейчас —
+# отдельного флага не заводим (решение пользователя: "категория Crazy есть
+# и зашита в код сейчас").
+CRAZY_CATEGORY_NAME = "CRAZY"
+
 
 def get_table_capacity(club: Club) -> int:
     if club.songs_per_table is not None:
         return club.songs_per_table
     return DEFAULT_SONGS_PER_TABLE
+
+
+def get_queue_mode(club: Club) -> str:
+    return club.queue_mode or DEFAULT_QUEUE_MODE
+
+
+def _split_crazy_orders(orders: list[Order]) -> tuple[list[Order], list[Order]]:
+    """(crazy, остальные) — crazy отсортированы между собой по времени
+    создания, остальные возвращаются в том же порядке, что и на входе."""
+    if not orders:
+        return [], []
+    service_ids = {o.service_id for o in orders if o.service_id is not None}
+    if not service_ids:
+        return [], orders
+    crazy_ids = {
+        row.id for row in Service.query.filter(
+            Service.id.in_(service_ids), Service.name == CRAZY_CATEGORY_NAME,
+        ).all()
+    }
+    if not crazy_ids:
+        return [], orders
+    crazy = sorted(
+        (o for o in orders if o.service_id in crazy_ids),
+        key=lambda o: (o.created_at, o.id),
+    )
+    rest = [o for o in orders if o.service_id not in crazy_ids]
+    return crazy, rest
+
+
+def _round_robin_order(orders: list[Order], table_count: int, capacity: int) -> list[Order]:
+    """Круговой обход столов 1..table_count — см. докстринг QUEUE_MODE_SEQUENTIAL
+    выше. orders — заказы С заданным table_no."""
+    by_table: dict[int, list[Order]] = {}
+    for order in orders:
+        by_table.setdefault(order.table_no, []).append(order)
+    for bucket in by_table.values():
+        bucket.sort(key=lambda o: (o.created_at, o.id))
+
+    cursor = {table_no: 0 for table_no in by_table}
+    sequence: list[Order] = []
+    remaining = len(orders)
+    while remaining > 0:
+        progressed = False
+        for table_no in range(1, table_count + 1):
+            bucket = by_table.get(table_no)
+            if not bucket:
+                continue
+            start = cursor[table_no]
+            if start >= len(bucket):
+                continue
+            take = bucket[start:start + capacity]
+            sequence.extend(take)
+            cursor[table_no] = start + len(take)
+            remaining -= len(take)
+            progressed = True
+        if not progressed:
+            # Остались заказы столов вне диапазона 1..table_count (номер
+            # стола больше текущего table_count клуба, например, после
+            # уменьшения числа столов) — не зацикливаемся, а докидываем их
+            # в конец по времени создания.
+            leftover = []
+            for table_no, bucket in by_table.items():
+                leftover.extend(bucket[cursor[table_no]:])
+                cursor[table_no] = len(bucket)
+            leftover.sort(key=lambda o: (o.created_at, o.id))
+            sequence.extend(leftover)
+            remaining = 0
+    return sequence
+
+
+def compute_queue_order(club_id: int) -> list[Order]:
+    """
+    Глобальный порядок исполнения по всему клубу — используется и для
+    номера очереди у гостя (get_club_queue_positions), и, только в режиме
+    QUEUE_MODE_SEQUENTIAL, для номеров на карточках KJ (get_orders_board).
+
+    CRAZY — всегда в начале, в обоих режимах (см. докстринг
+    CRAZY_CATEGORY_NAME). Всё остальное — круговым обходом столов
+    (_round_robin_order) в режиме sequential, иначе как и раньше — просто
+    по времени создания (никакого поведенческого изменения для клубов,
+    ещё не включивших sequential).
+    """
+    club = db.session.get(Club, club_id)
+    orders = (
+        Order.query
+        .filter(Order.club_id == club_id, Order.status.in_(ACTIVE_TABLE_STATUSES))
+        .order_by(Order.created_at.asc(), Order.id.asc())
+        .all()
+    )
+    crazy, rest = _split_crazy_orders(orders)
+
+    if club is not None and get_queue_mode(club) == QUEUE_MODE_SEQUENTIAL:
+        tableless = [o for o in rest if o.table_no is None]
+        tabled = [o for o in rest if o.table_no is not None]
+        table_count = club.table_count or max((o.table_no for o in tabled), default=0)
+        if table_count > 0:
+            ordered_tabled = _round_robin_order(tabled, table_count, get_table_capacity(club))
+        else:
+            ordered_tabled = sorted(tabled, key=lambda o: (o.created_at, o.id))
+        tableless_sorted = sorted(tableless, key=lambda o: (o.created_at, o.id))
+        rest = ordered_tabled + tableless_sorted
+
+    return crazy + rest
 
 
 def partition_table_orders(club_id: int, table_no: int, capacity: int):
@@ -80,8 +223,8 @@ def partition_table_orders(club_id: int, table_no: int, capacity: int):
     return orders[:capacity], orders[capacity:]
 
 
-def _slot_dict(order: Order) -> dict:
-    return {
+def _slot_dict(order: Order, queue_positions: dict | None = None) -> dict:
+    data = {
         "order_id": order.id,
         "guest_id": order.telegram_user_id,
         "song_title": order.song_title,
@@ -98,6 +241,13 @@ def _slot_dict(order: Order) -> dict:
         # читает charge_at_completion), чтобы решить, показывать кнопку.
         "guest_type": order.guest_type,
     }
+    # ДОБАВЛЕНО (2026-09-24, режим очереди QUEUE_MODE_SEQUENTIAL) — номер
+    # места в общем круговом порядке клуба. Ключ появляется в ответе,
+    # только когда режим клуба sequential (queue_positions передан не
+    # None) — в manual (по умолчанию) ответ побайтово как раньше.
+    if queue_positions is not None:
+        data["queue_position"] = queue_positions.get(order.id)
+    return data
 
 
 def get_orders_board(club_id: int) -> list[dict]:
@@ -124,12 +274,22 @@ def get_orders_board(club_id: int) -> list[dict]:
         return []
 
     capacity = get_table_capacity(club)
+    mode = get_queue_mode(club)
+    # Номера очереди на карточках считаем только в режиме sequential — в
+    # manual (умолчание, старое поведение) queue_positions остаётся None,
+    # и _slot_dict вообще не добавляет ключ "queue_position" в ответ (см.
+    # её докстринг) — ответ для уже существующих клубов не меняется.
+    queue_positions = None
+    if mode == QUEUE_MODE_SEQUENTIAL:
+        ordered = compute_queue_order(club_id)
+        queue_positions = {order.id: index for index, order in enumerate(ordered, start=1)}
+
     board = []
     for table_no in range(1, club.table_count + 1):
         active, _waiting = partition_table_orders(club_id, table_no, capacity)
-        slots = [_slot_dict(order) for order in active]
+        slots = [_slot_dict(order, queue_positions) for order in active]
         slots += [None] * (capacity - len(slots))
-        board.append({"table_no": table_no, "capacity": capacity, "slots": slots})
+        board.append({"table_no": table_no, "capacity": capacity, "queue_mode": mode, "slots": slots})
     return board
 
 
@@ -180,17 +340,19 @@ def get_club_queue_positions(club_id: int) -> dict:
 
     В очередь считаются все ещё не сыгранные и не отклонённые заказы клуба
     (тот же набор статусов ACTIVE_TABLE_STATUSES, что и на карточках KJ —
-    pending/processing/queued/error), по всем столам вместе, отсортированные
-    по времени создания. Это отдельное понятие от get_waiting_positions()
-    выше (та — служебная, только для "невидимого" излишка сверх
-    songs_per_table на ОДНОМ столе, для экрана KJ) — здесь же считаем
-    позицию НЕЗАВИСИМО от лимита мест на карточке, потому что гостю важно
-    место во всей очереди клуба, а не то, видит ли её уже KJ на доске.
+    pending/processing/queued/error), по всем столам вместе. Это отдельное
+    понятие от get_waiting_positions() выше (та — служебная, только для
+    "невидимого" излишка сверх songs_per_table на ОДНОМ столе, для экрана
+    KJ) — здесь же считаем позицию НЕЗАВИСИМО от лимита мест на карточке,
+    потому что гостю важно место во всей очереди клуба, а не то, видит ли
+    её уже KJ на доске.
+
+    ОБНОВЛЕНО (2026-09-24, "варианты очереди"): порядок теперь берём из
+    compute_queue_order() — CRAZY всегда первым (в обоих режимах очереди),
+    а для остальных заказов — круговой обход столов в режиме sequential,
+    иначе как и раньше просто по времени создания. Для клубов, ещё не
+    включивших sequential и без заказов категории CRAZY, результат
+    побайтово совпадает со старым поведением.
     """
-    orders = (
-        Order.query
-        .filter(Order.club_id == club_id, Order.status.in_(ACTIVE_TABLE_STATUSES))
-        .order_by(Order.created_at.asc(), Order.id.asc())
-        .all()
-    )
-    return {order.id: index for index, order in enumerate(orders, start=1)}
+    ordered = compute_queue_order(club_id)
+    return {order.id: index for index, order in enumerate(ordered, start=1)}
