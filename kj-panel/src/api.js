@@ -136,9 +136,12 @@ export const api = {
   deleteCategory: (token, clubId, categoryId) =>
     request(`/api/kj/categories/${clubId}/${categoryId}`, { method: "DELETE", token }),
   getTableSettings: (token, clubId) => request(`/api/kj/table-settings/${clubId}`, { token }),
-  // fields — объект с любым подмножеством {table_count, songs_per_table};
-  // бэкенд меняет только те ключи, что реально присутствуют в теле запроса
-  // (см. routes/kj.py::update_table_settings), остальные не трогает.
+  // fields — объект с любым подмножеством {table_count, songs_per_table,
+  // queue_mode}; бэкенд меняет только те ключи, что реально присутствуют в
+  // теле запроса (см. routes/kj.py::update_table_settings), остальные не
+  // трогает — этим же пользуется быстрый тумблер режима очереди (см.
+  // App.jsx::TableSettingsPanel), отправляя один только queue_mode, не
+  // трогая table_count/songs_per_table.
   updateTableSettings: (token, clubId, fields) =>
     request(`/api/kj/table-settings/${clubId}`, { method: "PUT", token, body: fields }),
   // Сброс застрявшего группового стола (жалоба пользователя 2026-09-22):
