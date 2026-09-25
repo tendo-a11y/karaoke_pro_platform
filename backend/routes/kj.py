@@ -10,7 +10,12 @@ from services import category_service, guest_directory_service, guest_status_ser
 from services.guest_directory_service import GUEST_TYPES, GuestDirectoryError
 from services.category_service import CategoryServiceError
 from services.google_auth_service import GoogleAuthError, verify_google_credential
-from services.table_board_service import QUEUE_MODE_CHOICES, get_orders_board, get_queue_mode
+from services.table_board_service import (
+    QUEUE_MODE_CHOICES,
+    get_orders_board,
+    get_queue_mode,
+    get_queue_start_table,
+)
 from services.vdj_service import (
     add_manual_song,
     approve_order_change_request,
@@ -885,6 +890,18 @@ _TABLE_SETTINGS_FIELDS = {
 # server_default="manual").
 _QUEUE_MODE_ERROR = f"queue_mode должен быть одним из: {', '.join(QUEUE_MODE_CHOICES)}"
 
+# ДОБАВЛЕНО (2026-09-25, запрос пользователя после бага с обгоном стола 3
+# стола 16 в круговом обходе): "Начало очереди" — номер стола, с которого
+# KJ вручную запускает круг QUEUE_MODE_SEQUENTIAL (см. models.py::
+# Club.queue_start_table и докстринг services/table_board_service.py::
+# QUEUE_MODE_SEQUENTIAL). Число, как table_count/songs_per_table, но
+# дополнительно не может быть больше текущего table_count клуба — стола с
+# таким номером просто не существует.
+_QUEUE_START_TABLE_ERROR = (
+    "queue_start_table должен быть положительным целым числом не больше "
+    "table_count, либо null (не задано)"
+)
+
 
 @bp.get("/table-settings/<int:club_id>")
 @require_kj
@@ -899,6 +916,7 @@ def get_table_settings(club_id):
         "table_count": club.table_count,
         "songs_per_table": club.songs_per_table,
         "queue_mode": get_queue_mode(club),
+        "queue_start_table": get_queue_start_table(club),
     })
 
 
@@ -910,14 +928,18 @@ def update_table_settings(club_id):
         return denied
     payload = request.get_json(silent=True) or {}
 
+    club = db.session.get(Club, club_id)
+    if club is None:
+        return api_error(404, "CLUB_NOT_FOUND", "Клуб не найден")
+
     # Патч-семантика (а не "всегда переустановить оба поля"): значение
     # меняется только для ключей, реально присутствующих в теле запроса.
     # Это специально сделано так из-за порядка выкладки — фронтенд и бэкенд
     # этого эндпоинта обновляются раздельными коммитами (см. историю
     # деплоя), и старый фронтенд, знающий только про table_count, не должен
     # тихо обнулять songs_per_table каждым своим сохранением, пока не
-    # обновлён сам. queue_mode — тот же принцип: тумблер на вкладке "Столы"
-    # шлёт только { queue_mode } (без table_count/songs_per_table), не
+    # обновлён сам. queue_mode/queue_start_table — тот же принцип: тумблер и
+    # поле "Начало очереди" на вкладке "Столы" шлют только свои ключи, не
     # трогая остальные настройки.
     updates = {}
     for field, error_message in _TABLE_SETTINGS_FIELDS.items():
@@ -934,9 +956,16 @@ def update_table_settings(club_id):
             return api_error(400, "VALIDATION_ERROR", _QUEUE_MODE_ERROR)
         updates["queue_mode"] = value
 
-    club = db.session.get(Club, club_id)
-    if club is None:
-        return api_error(404, "CLUB_NOT_FOUND", "Клуб не найден")
+    if "queue_start_table" in payload:
+        value = payload.get("queue_start_table")
+        if value is not None:
+            if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+                return api_error(400, "VALIDATION_ERROR", _QUEUE_START_TABLE_ERROR)
+            effective_table_count = updates.get("table_count", club.table_count)
+            if effective_table_count is not None and value > effective_table_count:
+                return api_error(400, "VALIDATION_ERROR", _QUEUE_START_TABLE_ERROR)
+        updates["queue_start_table"] = value
+
     for field, value in updates.items():
         setattr(club, field, value)
     db.session.commit()
@@ -944,6 +973,7 @@ def update_table_settings(club_id):
         "table_count": club.table_count,
         "songs_per_table": club.songs_per_table,
         "queue_mode": get_queue_mode(club),
+        "queue_start_table": get_queue_start_table(club),
     })
 
 
