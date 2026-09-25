@@ -191,6 +191,20 @@ h2 { font-size: 16px; color: var(--muted); text-transform: uppercase; letter-spa
 .table-slot__badge { color: var(--ok); font-size: 12px; font-weight: 600; }
 .table-slot__error { color: var(--danger); font-size: 12px; }
 
+/* ДОБАВЛЕНО (2026-09-24, режим очереди "Последовательно"): номер места в
+   общем круговом порядке клуба — маленький бейдж-кружок в углу карточки,
+   виден, только когда у клуба включён queue_mode=sequential (см.
+   App.jsx::OrdersBoardSlot). */
+.table-slot__queue-position {
+  align-self: flex-start;
+  background: var(--accent);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+
 /* Смена категории прямо на карточке места (запрос пользователя 2026-09-19),
    тот же внешний вид, что и у .queue-row__category-select, только на всю
    ширину карточки места. */
@@ -395,6 +409,34 @@ OrderChangeRequestsPanel), а не терялась среди обычных к
   flex: 0 0 160px;
 }
 .table-settings-form .btn { flex: 0 0 auto; padding: 8px 16px; }
+
+/* ДОБАВЛЕНО (2026-09-24, "варианты очереди" — быстрый тумблер на вкладке
+   "Столы", запрос пользователя): два больших кликабельных сегмента вместо
+   чекбокса, чтобы сразу было видно оба варианта и который выбран сейчас;
+   сохраняется сразу по клику (см. App.jsx::TableSettingsPanel::
+   handleQueueModeChange), без отдельной кнопки "Сохранить". */
+.queue-mode-toggle {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.queue-mode-toggle__btn {
+  flex: 1;
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.queue-mode-toggle__btn:disabled { opacity: 0.6; cursor: default; }
+.queue-mode-toggle__btn--active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
 
 .categories-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
 
