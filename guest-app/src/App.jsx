@@ -254,6 +254,11 @@ function VipHistoryPanel({ token }) {
   const [transactions, setTransactions] = useState([]);
   const [error, setError] = useState(null);
   const [loaded, setLoaded] = useState(false);
+  // ДОБАВЛЕНО (2026-09-26, запрос пользователя): раньше вся лента операций
+  // сразу разворачивалась под заголовком — на экране гостя это занимало
+  // много места без необходимости. Теперь список свёрнут по умолчанию и
+  // раскрывается только по клику на сам заголовок "Финансы".
+  const [open, setOpen] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -282,28 +287,47 @@ function VipHistoryPanel({ token }) {
 
   return (
     <section className="panel vip-history-panel">
-      <h2>🧾 Финансы</h2>
-      {error && <div className="banner banner--error">{error}</div>}
-      {transactions.length === 0 ? (
-        <p className="empty-hint">Пока нет операций по счёту.</p>
-      ) : (
-        <ul className="order-list">
-          {transactions.map((tx) => {
-            const meta = TX_TYPE_META[tx.type] || { icon: "•", label: tx.type, sign: "" };
-            return (
-              <li key={tx.id} className="order-row vip-tx-row">
-                <div className="vip-tx-row__main">
-                  <span>{meta.icon} {meta.label}</span>
-                  <strong className={meta.sign === "+" ? "vip-tx-amount--credit" : "vip-tx-amount--debit"}>
-                    {meta.sign}{tx.amount.toFixed(2)}
-                  </strong>
-                </div>
-                {tx.description && <div className="order-row__artist">{tx.description}</div>}
-                <div className="order-row__status">{new Date(tx.created_at).toLocaleString()}</div>
-              </li>
-            );
-          })}
-        </ul>
+      <h2
+        className="collapsible-header"
+        role="button"
+        tabIndex={0}
+        aria-expanded={open}
+        onClick={() => setOpen((prev) => !prev)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            setOpen((prev) => !prev);
+          }
+        }}
+      >
+        🧾 Финансы
+        <span className="collapsible-caret">{open ? "▲" : "▼"}</span>
+      </h2>
+      {open && (
+        <>
+          {error && <div className="banner banner--error">{error}</div>}
+          {transactions.length === 0 ? (
+            <p className="empty-hint">Пока нет операций по счёту.</p>
+          ) : (
+            <ul className="order-list">
+              {transactions.map((tx) => {
+                const meta = TX_TYPE_META[tx.type] || { icon: "•", label: tx.type, sign: "" };
+                return (
+                  <li key={tx.id} className="order-row vip-tx-row">
+                    <div className="vip-tx-row__main">
+                      <span>{meta.icon} {meta.label}</span>
+                      <strong className={meta.sign === "+" ? "vip-tx-amount--credit" : "vip-tx-amount--debit"}>
+                        {meta.sign}{tx.amount.toFixed(2)}
+                      </strong>
+                    </div>
+                    {tx.description && <div className="order-row__artist">{tx.description}</div>}
+                    <div className="order-row__status">{new Date(tx.created_at).toLocaleString()}</div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </>
       )}
     </section>
   );
