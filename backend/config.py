@@ -1,16 +1,40 @@
 import os
 
 
+def _normalize_database_url(url):
+    """
+    В requirements.txt зафиксирован конкретный драйвер psycopg2-binary —
+    другой (например psycopg v3) в образе просто не установлен. Railway
+    подставляет DATABASE_URL из встроенного Postgres-плагина как есть, без
+    суффикса драйвера ("postgresql://..."), и то, какой драйвер SQLAlchemy
+    выберет по умолчанию для такой голой схемы, зависит от установленной
+    версии SQLAlchemy (она не запинена в requirements.txt и подтягивается
+    последней доступной при каждой сборке образа) — 26.09.2026 это привело
+    к падению бэкенда при старте (ModuleNotFoundError: No module named
+    'psycopg', т.к. SQLAlchemy выбрал драйвер psycopg v3, которого нет в
+    образе), хотя код и переменные окружения не менялись. Чтобы это не
+    зависело от версии SQLAlchemy, здесь драйвер всегда прописывается явно.
+    """
+    if not url:
+        return None
+    prefix, sep, rest = url.partition("://")
+    if not sep:
+        return url
+    base_scheme = prefix.split("+", 1)[0]
+    if base_scheme in ("postgres", "postgresql"):
+        return f"postgresql+psycopg2://{rest}"
+    return url
+
+
 class Config:
     """
     Конфигурация Backend API.
     Все секреты берутся из переменных окружения (см. .env.example) — ТЗ п.33.
     """
 
-    SQLALCHEMY_DATABASE_URI = os.getenv(
-        "DATABASE_URL",
-        "postgresql+psycopg2://postgres:postgres@localhost:5432/karaoke_orders",
-    )
+    SQLALCHEMY_DATABASE_URI = _normalize_database_url(
+        os.getenv("DATABASE_URL")
+    ) or "postgresql+psycopg2://postgres:postgres@localhost:5432/karaoke_orders"
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     SQLALCHEMY_ENGINE_OPTIONS = {"pool_pre_ping": True}
 
@@ -108,10 +132,9 @@ class Config:
 
 class TestingConfig(Config):
     TESTING = True
-    SQLALCHEMY_DATABASE_URI = os.getenv(
-        "TEST_DATABASE_URL",
-        "postgresql+psycopg2://postgres:postgres@localhost:5432/karaoke_orders_test",
-    )
+    SQLALCHEMY_DATABASE_URI = _normalize_database_url(
+        os.getenv("TEST_DATABASE_URL")
+    ) or "postgresql+psycopg2://postgres:postgres@localhost:5432/karaoke_orders_test"
     VDJ_ADAPTER = "mock"
     BOT_INTERNAL_TOKEN = "test_bot_token"
     KJ_JWT_SECRET = "test_jwt_secret"
