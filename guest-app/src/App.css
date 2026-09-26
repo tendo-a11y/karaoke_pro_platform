@@ -67,6 +67,22 @@ body { margin: 0; background: var(--bg); color: var(--text); }
   letter-spacing: 0.04em;
 }
 
+/* ДОБАВЛЕНО (2026-09-26, запрос пользователя): заголовок-переключатель для
+   сворачиваемых панелей (сейчас — "Финансы") — раскрывает содержимое по
+   клику вместо того, чтобы всегда показывать его развёрнутым. */
+.panel h2.collapsible-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  user-select: none;
+}
+
+.collapsible-caret {
+  font-size: 11px;
+  color: var(--muted);
+}
+
 .order-form, .chat-form {
   display: flex;
   flex-direction: column;
