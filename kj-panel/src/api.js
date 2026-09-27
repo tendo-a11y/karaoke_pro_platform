@@ -183,6 +183,20 @@ export const api = {
   closeGuestTable: (token, guestId) =>
     request(`/api/kj/guests/${encodeURIComponent(guestId)}/close-table`, { method: "POST", token }),
   getBridgeStatus: (token, clubId) => request(`/api/kj/bridge/status/${clubId}`, { token }),
+  // ДОБАВЛЕНО (запрос пользователя 2026-09-27, "закрыть стол по инициативе
+  // гостя-админа") — заявки гостя-админа группового стола на закрытие
+  // (backend/routes/kj.py::list_table_close_requests/approve_table_close_
+  // request_route/reject_table_close_request_route). hideReceipt — чекбокс
+  // "Не показывать чек" на экране подтверждения; чек всё равно считается и
+  // сохраняется на бэкенде, просто не раздаётся гостям.
+  listTableCloseRequests: (token, clubId) =>
+    request(`/api/kj/table-close-requests/${clubId}`, { token }),
+  approveTableCloseRequest: (token, requestId, hideReceipt) =>
+    request(`/api/kj/table-close-requests/${requestId}/approve`, {
+      method: "PUT", token, body: { hide_receipt: hideReceipt },
+    }),
+  rejectTableCloseRequest: (token, requestId) =>
+    request(`/api/kj/table-close-requests/${requestId}/reject`, { method: "PUT", token }),
 };
 
 export { ApiError, BACKEND_URL };
