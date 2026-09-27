@@ -151,6 +151,11 @@ export const api = {
   transferTableGroupAdmin: (token, guestId) =>
     request(`/api/guest/table-group/transfer/${guestId}`, { method: "POST", token }),
   leaveTableGroup: (token) => request("/api/guest/table-group/leave", { method: "POST", token }),
+  // ДОБАВЛЕНО (запрос пользователя 2026-09-27, "закрыть стол по инициативе
+  // гостя-админа") — см. backend/routes/guest.py::request_table_group_close
+  // и docstring backend/services/table_close_service.py. Только заявка;
+  // реальное закрытие стола происходит после подтверждения KJ в KJ Panel.
+  requestTableClose: (token) => request("/api/guest/table-group/request-close", { method: "POST", token }),
   listVipTransactions: (token) => request("/api/guest/vip/transactions", { token }),
 };
 
