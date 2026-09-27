@@ -6,7 +6,7 @@ from auth import issue_guest_token, require_guest
 from errors import api_error, api_ok
 from extensions import db
 from models import STATUS_ERROR, STATUS_ORDER_CHANGE_PENDING, STATUS_REJECTED, ChatMessage, Club, Order, OrderChangeRequest, Service
-from services import ai_search_service, guest_account_service, guest_status_service, song_service, table_board_service, table_group_service, vdj_service, vip_service
+from services import ai_search_service, guest_account_service, guest_status_service, song_service, table_board_service, table_close_service, table_group_service, vdj_service, vip_service
 from services.google_auth_service import GoogleAuthError, verify_google_credential
 from sockets import emit_chat_message, emit_order_created, emit_vip_request_created
 from vdj import get_vdj_client
@@ -121,12 +121,21 @@ def me():
             # (POST /table-group/request-join), а не показывать "ждите".
             table_group_status = "not_joined"
 
+    # Чек за закрытие стола (запрос пользователя 2026-09-27) — раздаётся
+    # поллингом этого же эндпоинта, потому что у Guest App нет WebSocket-
+    # подключения (см. докстринг sockets.py::emit_chat_message). Не зависит
+    # от table_group_status выше (после approve группа уже удалена, гость
+    # там неизбежно увидит "not_joined") — берётся отдельно из ещё не
+    # истёкшего окна table_close_service.pending_receipt_for_guest.
+    table_close_receipt = table_close_service.pending_receipt_for_guest(g.club_id, g.guest_id)
+
     return api_ok({
         # Строкой — см. комментарий в create_session выше.
         "guest_id": str(g.guest_id),
         "club_id": g.club_id,
         "table_no": g.table_no,
         "table_group_status": table_group_status,
+        "table_close_receipt": table_close_receipt,
         "club_name": club.name if club else None,
         # Guest App использует это, чтобы решить, показывать ли вообще UI
         # чата — а не только полагаться на 403 CHAT_DISABLED после попытки
@@ -979,6 +988,26 @@ def leave_table_group():
     if result.outcome == "not_a_member":
         return api_error(404, "NOT_A_MEMBER", "Вы не состоите в группе этого стола")
     return api_ok({"left": True})
+
+
+@bp.post("/table-group/request-close")
+@require_guest
+@_require_table
+def request_table_group_close():
+    """
+    "Закрыть стол" по инициативе гостя-админа (запрос пользователя
+    2026-09-27) — только заявка, реальное закрытие происходит после того,
+    как KJ подтвердит её в KJ Panel (см. docstring
+    table_close_service.request_close/approve_request и models.
+    TableCloseRequest про то, чем это отличается от уже существующей
+    guest_status_service.close_table).
+    """
+    result = table_close_service.request_close(g.club_id, g.table_no, g.guest_id)
+    if result.outcome == "forbidden":
+        return api_error(403, "FORBIDDEN", "Только админ стола может запросить закрытие")
+    if result.outcome == "already_pending":
+        return api_ok(result.request.to_dict())
+    return api_ok(result.request.to_dict(), status_code=201)
 
 
 @bp.post("/chat")
