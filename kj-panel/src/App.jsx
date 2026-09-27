@@ -514,6 +514,131 @@ function OrderChangeRequestsPanel({ token, clubId, socket }) {
   );
 }
 
+// ДОБАВЛЕНО (запрос пользователя 2026-09-27, "закрыть стол по инициативе
+// гостя-админа" — корневое исправление бага "первый гость навсегда админ
+// стола", см. докстринг backend/models.py::TableCloseRequest). Гость-админ
+// группового стола отправляет заявку на закрытие (кнопка "🔒 Закрыть стол"
+// в Guest App), а KJ подтверждает или отклоняет её здесь — тот же паттерн,
+// что и OrderChangeRequestsPanel выше (список + сокет-события created/
+// decided), плюс чекбокс "Не показывать чек" на подтверждении: чек всё
+// равно считается и сохраняется на бэкенде, просто не раздаётся гостям
+// через поллинг /api/guest/me, если чекбокс отмечен.
+function TableCloseRequestsPanel({ token, clubId, socket }) {
+  const [pending, setPending] = useState(null);
+  const [actionError, setActionError] = useState(null);
+  const [busyKey, setBusyKey] = useState(null);
+  const [hideReceiptByRequest, setHideReceiptByRequest] = useState({});
+
+  async function reload() {
+    try {
+      const data = await api.listTableCloseRequests(token, clubId);
+      setPending(data);
+    } catch {
+      // Тихо — как и OrderChangeRequestsPanel выше: отдельная панель не
+      // должна ломать показ основного экрана заказов из-за временной
+      // ошибки её собственной загрузки.
+    }
+  }
+
+  useEffect(() => {
+    reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clubId]);
+
+  useEffect(() => {
+    if (!socket) return undefined;
+    const onCreated = (closeRequest) => {
+      setPending((prev) => {
+        const list = prev || [];
+        return list.some((r) => r.id === closeRequest.id) ? list : [...list, closeRequest];
+      });
+    };
+    const onDecided = (closeRequest) => {
+      setPending((prev) => (prev || []).filter((r) => r.id !== closeRequest.id));
+    };
+    socket.on("table_close_request_created", onCreated);
+    socket.on("table_close_request_decided", onDecided);
+    return () => {
+      socket.off("table_close_request_created", onCreated);
+      socket.off("table_close_request_decided", onDecided);
+    };
+  }, [socket]);
+
+  async function handleApprove(requestId) {
+    setBusyKey(requestId);
+    setActionError(null);
+    try {
+      await api.approveTableCloseRequest(token, requestId, !!hideReceiptByRequest[requestId]);
+      await reload();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+      // Заявку мог уже решить кто-то другой (другая вкладка/устройство) —
+      // без перезагрузки списка она осталась бы висеть в нём навсегда.
+      if (err instanceof ApiError && err.code === "ALREADY_DECIDED") {
+        await reload();
+      }
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  async function handleReject(requestId) {
+    setBusyKey(requestId);
+    setActionError(null);
+    try {
+      await api.rejectTableCloseRequest(token, requestId);
+      await reload();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+      if (err instanceof ApiError && err.code === "ALREADY_DECIDED") {
+        await reload();
+      }
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  if (!pending || pending.length === 0) return null;
+
+  return (
+    <section className="table-close-requests-panel">
+      <h2>🔒 Заявки на закрытие стола ({pending.length})</h2>
+      {actionError && <div className="banner banner--error">{actionError}</div>}
+      <ul className="vip-list">
+        {pending.map((r) => (
+          <li key={r.id} className="vip-row">
+            <span>Стол {r.table_no}</span>
+            <span className="vip-row__actions">
+              <label className="table-close-hide-receipt">
+                <input
+                  type="checkbox"
+                  checked={!!hideReceiptByRequest[r.id]}
+                  onChange={(e) =>
+                    setHideReceiptByRequest((prev) => ({ ...prev, [r.id]: e.target.checked }))
+                  }
+                />
+                Не показывать чек
+              </label>
+              <button
+                type="button" className="btn btn--accent" disabled={busyKey === r.id}
+                onClick={() => handleApprove(r.id)}
+              >
+                Подтвердить
+              </button>
+              <button
+                type="button" className="btn btn--reject" disabled={busyKey === r.id}
+                onClick={() => handleReject(r.id)}
+              >
+                Отклонить
+              </button>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 // Block D KJ Pro — заявки на VIP-статус (аудит handlers/kj.py:1291-1401,
 // vip_request_approve/reject) + список VIP-клиентов с ручными операциями
 // над балансом/кэшбэком (kj.py:2133-2229). ТЗ п.45 (финальная единая
@@ -2204,6 +2329,7 @@ export default function App() {
       ) : (
         <main className="app-main">
           <OrderChangeRequestsPanel token={token} clubId={me.club_id} socket={socketInstance} />
+          <TableCloseRequestsPanel token={token} clubId={me.club_id} socket={socketInstance} />
 
           <section>
             <h2>Заказы по столам</h2>
