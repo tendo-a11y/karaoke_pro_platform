@@ -31,7 +31,7 @@ import argparse
 import secrets
 
 from app import create_app
-from auth import issue_admin_token, issue_kj_token
+from auth import issue_admin_token, issue_guest_token, issue_kj_token
 from extensions import db
 from models import AdminUser, Club, KJOperator
 
@@ -156,24 +156,53 @@ def cmd_reset_table_group(args):
     гость получает доступ к форме заказа сразу же, без лишнего клика
     "Запросить присоединение" на экране "Групповой стол".
     """
-    app = create_app()
-    with app.app_context():
-        from models import TableGroup, TableGroupMember, TableJoinRequest
+    print(
+        f"START: reset-table-group club_id={args.club_id} table_no={args.table_no} "
+        f"guest_id={args.guest_id}",
+        flush=True,
+    )
+    try:
+        app = create_app()
+        with app.app_context():
+            from models import TableGroup, TableGroupMember, TableJoinRequest
 
-        TableJoinRequest.query.filter_by(club_id=args.club_id, table_no=args.table_no).delete()
-        TableGroupMember.query.filter_by(club_id=args.club_id, table_no=args.table_no).delete()
-        TableGroup.query.filter_by(club_id=args.club_id, table_no=args.table_no).delete()
-        db.session.flush()
+            TableJoinRequest.query.filter_by(club_id=args.club_id, table_no=args.table_no).delete()
+            TableGroupMember.query.filter_by(club_id=args.club_id, table_no=args.table_no).delete()
+            TableGroup.query.filter_by(club_id=args.club_id, table_no=args.table_no).delete()
+            db.session.flush()
 
-        group = TableGroup(club_id=args.club_id, table_no=args.table_no, admin_guest_id=args.guest_id)
-        db.session.add(group)
-        db.session.flush()
-        db.session.add(TableGroupMember(club_id=args.club_id, table_no=args.table_no, guest_id=args.guest_id))
-        db.session.commit()
+            group = TableGroup(club_id=args.club_id, table_no=args.table_no, admin_guest_id=args.guest_id)
+            db.session.add(group)
+            db.session.flush()
+            db.session.add(TableGroupMember(club_id=args.club_id, table_no=args.table_no, guest_id=args.guest_id))
+            db.session.commit()
+    except Exception:
+        import traceback
+
+        traceback.print_exc()
+        raise
     print(
         f"OK: групповой стол {args.table_no} клуба {args.club_id} сброшен, "
-        f"новый админ — гость {args.guest_id}"
+        f"новый админ — гость {args.guest_id}",
+        flush=True,
     )
+
+
+def cmd_guest_link(args):
+    """
+    Печатает JWT гостя (аналог kj-link/admin-link) для указанных
+    club_id/table_no/guest_id — нужен только для ручной диагностики через
+    curl/браузер (сравнить показания /api/guest/me и /api/guest/table-group
+    с тем, что видно в самом Guest App), приложение сам этот путь никогда
+    не использует.
+    """
+    app = create_app()
+    with app.app_context():
+        token = issue_guest_token(
+            args.guest_id, args.club_id, args.table_no,
+            app.config["GUEST_JWT_SECRET"], app.config["GUEST_JWT_TTL_SECONDS"],
+        )
+    print(f"GUEST_TOKEN: {token}", flush=True)
 
 
 def cmd_set_bridge_token(args):
@@ -245,6 +274,12 @@ def main():
     p.add_argument("--table-no", type=int, required=True)
     p.add_argument("--guest-id", type=int, required=True)
     p.set_defaults(func=cmd_reset_table_group)
+
+    p = sub.add_parser("guest-link")
+    p.add_argument("--club-id", type=int, required=True)
+    p.add_argument("--table-no", type=int, required=True)
+    p.add_argument("--guest-id", type=int, required=True)
+    p.set_defaults(func=cmd_guest_link)
 
     p = sub.add_parser("set-bridge-token")
     p.add_argument("--club-id", type=int, required=True)
