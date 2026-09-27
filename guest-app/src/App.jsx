@@ -881,6 +881,33 @@ function TableGroupPanel({ token, guestId, hasTable, status, onGroupChanged }) {
     }
   }
 
+  // ДОБАВЛЕНО (запрос пользователя 2026-09-27, "закрыть стол по инициативе
+  // гостя-админа") — только заявка (backend/services/table_close_service.py
+  // ::request_close), реальное закрытие происходит после подтверждения KJ.
+  // closeState живёт только в этом компоненте (нет отдельного эндпоинта
+  // "статус моей заявки на закрытие" — не нужен: после approve группа
+  // удаляется и status снаружи станет "not_joined", после reject админ
+  // просто может нажать кнопку ещё раз), поэтому сбрасываем его всякий раз,
+  // когда status реально меняется — иначе после approve/reject эта ветка
+  // осталась бы навсегда висеть поверх новой (другой) ветки ниже.
+  const [closeState, setCloseState] = useState(null); // null | "requesting" | "pending"
+
+  useEffect(() => {
+    setCloseState(null);
+  }, [status]);
+
+  async function handleRequestClose() {
+    setCloseState("requesting");
+    setError(null);
+    try {
+      await api.requestTableClose(token);
+      setCloseState("pending");
+    } catch (err) {
+      setCloseState(null);
+      setError(err instanceof ApiError ? err.message : String(err));
+    }
+  }
+
   if (!hasTable) return null;
 
   // status приходит из /api/guest/me (см. routes/guest.py::me) — источник
@@ -983,6 +1010,18 @@ function TableGroupPanel({ token, guestId, hasTable, status, onGroupChanged }) {
             >
               🚪 Покинуть стол
             </button>
+          )}
+
+          {status === "admin" && (
+            <div className="table-group-close">
+              {closeState === "pending" ? (
+                <p className="empty-hint">⏳ Запрос на закрытие стола отправлен — ждите подтверждения KJ.</p>
+              ) : (
+                <button type="button" disabled={closeState === "requesting"} onClick={handleRequestClose}>
+                  {closeState === "requesting" ? "Отправляем…" : "🔒 Закрыть стол"}
+                </button>
+              )}
+            </div>
           )}
         </>
       )}
@@ -1257,11 +1296,55 @@ function ActivationPanel({ token, onActivated, onCancel }) {
   );
 }
 
+// Чек закрытия стола (запрос пользователя 2026-09-27) — после того как KJ
+// подтвердил закрытие группового стола (см. docstring
+// services/table_close_service.py::approve_request), гость какое-то время
+// видит чек через обычный поллинг /api/guest/me — у Guest App нет
+// WebSocket-подключения (см. докстринг backend/sockets.py::
+// emit_chat_message), поэтому доставка только так, пока не истекло окно
+// RECEIPT_POLL_WINDOW_SECONDS на бэкенде. table_close_receipt в /me — это
+// весь TableCloseRequest.to_dict() (не только сами цифры), сами цифры
+// чека лежат в receipt.receipt (см. pending_receipt_for_guest). Дедупликация
+// "показать один раз", как и предполагает докстринг на бэкенде, — здесь,
+// по id заявки: закрыли баннер — тот же чек больше не всплывёт, даже если
+// следующий опрос ещё вернёт его (окно не истекает мгновенно).
+function TableCloseReceiptBanner({ closeRequest, onDismiss }) {
+  if (!closeRequest || !closeRequest.receipt) return null;
+  const receipt = closeRequest.receipt;
+
+  return (
+    <section className="panel table-close-receipt">
+      <h2>🧾 Чек стола {receipt.table_no}</h2>
+      {receipt.categories.length > 0 && (
+        <ul className="order-list">
+          {receipt.categories.map((c) => (
+            <li key={c.category} className="order-row">
+              <div className="order-row__song">{c.category}</div>
+              <div className="order-row__artist">
+                {c.count} шт. × {c.price.toFixed(2)} = {c.sum.toFixed(2)}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="empty-hint">
+        Песен: {receipt.song_count} · Итого: {receipt.total.toFixed(2)}
+      </p>
+      <button type="button" className="link-btn" onClick={onDismiss}>
+        Закрыть
+      </button>
+    </section>
+  );
+}
+
 export default function App() {
   const { clubId } = useMemo(() => parseLinkParams(), []);
 
   const [session, setSession] = useState(null);
   const [meInfo, setMeInfo] = useState(null);
+  // Дедупликация показа чека закрытия стола "один раз" по id заявки — см.
+  // докстринг TableCloseReceiptBanner выше.
+  const [dismissedCloseRequestIds, setDismissedCloseRequestIds] = useState(() => new Set());
   // !clubId — не результат асинхронной операции, а сразу известное по URL
   // состояние, поэтому это часть рендера, а не setState в эффекте.
   const linkInvalid = !clubId;
@@ -1659,6 +1742,15 @@ export default function App() {
           {meInfo.table_no != null ? `Стол ${meInfo.table_no}` : "Без стола"}
         </span>
       </header>
+
+      {meInfo.table_close_receipt && !dismissedCloseRequestIds.has(meInfo.table_close_receipt.id) && (
+        <TableCloseReceiptBanner
+          closeRequest={meInfo.table_close_receipt}
+          onDismiss={() =>
+            setDismissedCloseRequestIds((prev) => new Set(prev).add(meInfo.table_close_receipt.id))
+          }
+        />
+      )}
 
       {activated && (
         <ProfileNamePanel token={session.token} meInfo={meInfo} onNameChanged={refreshMe} />
