@@ -958,6 +958,77 @@ class OrderChangeRequest(db.Model):
         }
 
 
+STATUS_TABLE_CLOSE_PENDING = "pending"
+STATUS_TABLE_CLOSE_APPROVED = "approved"
+STATUS_TABLE_CLOSE_REJECTED = "rejected"
+
+
+class TableCloseRequest(db.Model):
+    """
+    Запрос гостя-админа группового стола на закрытие стола (запрос
+    пользователя 2026-09-27) — инициатива у гостя (кнопка в Guest App),
+    подтверждение у KJ (роль 2) в KJ Panel. Это НЕ то же самое, что уже
+    существующий guest_status_service.close_table (KJ вручную снимает со
+    стола ОДНОГО гостя из его карточки и намеренно не трогает TableGroup,
+    см. докстринг там, — рассчитан на случай "гость сбежал/заблокирован",
+    а не на штатное завершение сессии всей компанией).
+
+    Подтверждение здесь (services/table_close_service.py::approve_request)
+    ОБЯЗАТЕЛЬНО удаляет TableGroup/TableGroupMember/TableJoinRequest этого
+    стола — именно это и чинит фактическое зависание "первый гость навсегда
+    админ стола": TableGroup не имеет самостоятельного истечения (см. его
+    докстринг), единственный официальный путь освободить стол — теперь этот
+    запрос, а не ручная правка базы.
+
+    receipt_json/member_guest_ids замораживаются в момент approve — после
+    него сами Order (частично)/TableGroup/TableGroupMember уже
+    изменены/удалены следующей компанией, поэтому это единственное место,
+    где потом взять "кому показать чек" и "что в чеке" (см. routes/
+    guest.py::me — оттуда чек и раздаётся поллингом: у Guest App нет
+    WebSocket-подключения, см. докстринг sockets.py::emit_chat_message).
+    hide_receipt — чекбокс KJ на экране подтверждения ("Не показывать
+    чек"): чек всё равно считается и сохраняется для истории, просто не
+    отдаётся гостям.
+    """
+
+    __tablename__ = "table_close_requests"
+
+    id = db.Column(db.Integer, primary_key=True)
+    club_id = db.Column(db.Integer, db.ForeignKey("clubs.club_id"), nullable=False, index=True)
+    table_no = db.Column(db.Integer, nullable=False)
+    requested_by_guest_id = db.Column(db.BigInteger, nullable=False)
+    status = db.Column(db.String(20), nullable=False, default=STATUS_TABLE_CLOSE_PENDING, index=True)
+    hide_receipt = db.Column(db.Boolean, nullable=False, default=False)
+    # Снимок guest_id всех участников на момент approve — строками (см.
+    # комментарий у TableGroup.to_dict() про потерю точности больших int в
+    # JSON/JS), иначе после удаления TableGroupMember некому будет сказать,
+    # кому раздавать чек.
+    member_guest_ids = db.Column(db.JSON, nullable=True)
+    receipt_json = db.Column(db.JSON, nullable=True)
+    created_at = db.Column(db.DateTime(timezone=True), default=utcnow, nullable=False)
+    decided_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    decided_by = db.Column(db.Integer, db.ForeignKey("kj_operators.id"), nullable=True)
+
+    club = db.relationship("Club")
+
+    __table_args__ = (
+        db.Index("ix_table_close_requests_lookup", "club_id", "status"),
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "club_id": self.club_id,
+            "table_no": self.table_no,
+            "requested_by_guest_id": str(self.requested_by_guest_id),
+            "status": self.status,
+            "hide_receipt": self.hide_receipt,
+            "receipt": self.receipt_json,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "decided_at": self.decided_at.isoformat() if self.decided_at else None,
+        }
+
+
 class GuestStatus(db.Model):
     """
     Живой статус гостя, который KJ управляет из карточки гостя в KJ Panel
