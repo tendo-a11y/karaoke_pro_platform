@@ -341,6 +341,10 @@ select {
 .table-group-panel > button { margin-top: 8px; }
 .table-group-panel > .link-btn { margin-top: 12px; }
 
+.table-group-close { margin-top: 12px; }
+
+.table-close-receipt { border: 1px solid var(--ok); }
+
 .vip-tx-row__main {
   display: flex;
   justify-content: space-between;
