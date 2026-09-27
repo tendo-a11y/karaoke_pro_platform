@@ -314,3 +314,26 @@ def emit_chat_message(message):
     видит новые сообщения через обычный поллинг GET /api/guest/chat.
     """
     socketio.emit("chat_message", message.to_dict(), room=_club_room(message.club_id))
+
+
+def emit_table_close_request_created(close_request):
+    """
+    Новая заявка гостя-админа на закрытие группового стола (запрос
+    пользователя 2026-09-27, см. докстринг models.TableCloseRequest) —
+    KJ Panel должна узнать о ней мгновенно, тот же паттерн, что и у
+    emit_order_change_request_created/emit_vip_request_created выше.
+    """
+    socketio.emit(
+        "table_close_request_created", close_request.to_dict(), room=_club_room(close_request.club_id)
+    )
+
+
+def emit_table_close_request_decided(close_request):
+    """
+    Решение по заявке на закрытие стола (approve/reject) — все подключённые
+    панели клуба сразу убирают заявку из списка ожидающих, тот же паттерн,
+    что и у emit_order_change_request_decided выше.
+    """
+    socketio.emit(
+        "table_close_request_decided", close_request.to_dict(), room=_club_room(close_request.club_id)
+    )
