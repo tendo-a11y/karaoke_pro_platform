@@ -143,6 +143,39 @@ def cmd_set_admin_google_email(args):
     print(f"OK: почта {new_email} привязана к администратору {args.telegram_id} — можно входить в Admin App через Google")
 
 
+def cmd_reset_table_group(args):
+    """
+    Разовая ручная починка "зависшего" группового стола (см. модель
+    TableGroup) — первый гость, который когда-либо ввёл этот номер стола,
+    становится его "админом" навсегда; если тот админ — старая/потерянная
+    тестовая сессия (например, сессия автотеста), все следующие гости на
+    этом же столе застревают в статусе "pending" (ждут одобрения), а
+    одобрить их некому, потому что того самого админа больше нет за
+    компьютером. Команда убирает старые group/members/join-requests для
+    club_id+table_no и сразу делает указанного guest_id новым админом —
+    гость получает доступ к форме заказа сразу же, без лишнего клика
+    "Запросить присоединение" на экране "Групповой стол".
+    """
+    app = create_app()
+    with app.app_context():
+        from models import TableGroup, TableGroupMember, TableJoinRequest
+
+        TableJoinRequest.query.filter_by(club_id=args.club_id, table_no=args.table_no).delete()
+        TableGroupMember.query.filter_by(club_id=args.club_id, table_no=args.table_no).delete()
+        TableGroup.query.filter_by(club_id=args.club_id, table_no=args.table_no).delete()
+        db.session.flush()
+
+        group = TableGroup(club_id=args.club_id, table_no=args.table_no, admin_guest_id=args.guest_id)
+        db.session.add(group)
+        db.session.flush()
+        db.session.add(TableGroupMember(club_id=args.club_id, table_no=args.table_no, guest_id=args.guest_id))
+        db.session.commit()
+    print(
+        f"OK: групповой стол {args.table_no} клуба {args.club_id} сброшен, "
+        f"новый админ — гость {args.guest_id}"
+    )
+
+
 def cmd_set_bridge_token(args):
     """
     Генерирует (или показывает существующий) секрет для локального моста
@@ -206,6 +239,12 @@ def main():
     p.add_argument("--telegram-id", type=int, required=True)
     p.add_argument("--google-email", required=True)
     p.set_defaults(func=cmd_set_admin_google_email)
+
+    p = sub.add_parser("reset-table-group")
+    p.add_argument("--club-id", type=int, required=True)
+    p.add_argument("--table-no", type=int, required=True)
+    p.add_argument("--guest-id", type=int, required=True)
+    p.set_defaults(func=cmd_reset_table_group)
 
     p = sub.add_parser("set-bridge-token")
     p.add_argument("--club-id", type=int, required=True)
