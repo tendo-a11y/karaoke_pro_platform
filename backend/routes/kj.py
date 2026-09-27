@@ -6,7 +6,7 @@ from auth import issue_kj_google_token, require_kj
 from errors import api_error, api_ok
 from extensions import db
 from models import ChatMessage, Club, KJOperator, Order, VipClient, VipRequest
-from services import category_service, guest_directory_service, guest_status_service, song_service, vip_service
+from services import category_service, guest_directory_service, guest_status_service, song_service, table_close_service, vip_service
 from services.guest_directory_service import GUEST_TYPES, GuestDirectoryError
 from services.category_service import CategoryServiceError
 from services.google_auth_service import GoogleAuthError, verify_google_credential
@@ -1068,6 +1068,62 @@ def close_guest_table(guest_id):
         "status": result["status"].to_dict(),
         "closed_order_ids": [order.id for order in result["closed_orders"]],
     })
+
+
+# --- Запросы гостей на закрытие группового стола (запрос пользователя
+# 2026-09-27, см. докстринг models.TableCloseRequest) — инициатива у
+# гостя-админа стола, а не у KJ (в отличие от close_guest_table выше).
+# Подтверждение освобождает TableGroup для следующей компании и считает
+# чек за эту сессию стола.
+
+@bp.get("/table-close-requests/<int:club_id>")
+@require_kj
+def list_table_close_requests(club_id):
+    """Неразобранные (pending) заявки клуба — тот же паттерн, что и
+    list_order_change_requests выше: только pending, без экрана истории."""
+    denied = _ensure_own_club(club_id)
+    if denied:
+        return denied
+    return api_ok([r.to_dict() for r in table_close_service.list_pending(club_id)])
+
+
+@bp.put("/table-close-requests/<int:request_id>/approve")
+@require_kj
+def approve_table_close_request_route(request_id):
+    """
+    Подтверждение закрытия стола. hide_receipt (тело запроса, необязательно,
+    по умолчанию False) — чекбокс "Не показывать чек" на экране
+    подтверждения: чек всё равно считается и сохраняется, просто не
+    раздаётся гостям через поллинг /api/guest/me.
+    """
+    payload = request.get_json(silent=True) or {}
+    hide_receipt = bool(payload.get("hide_receipt", False))
+
+    result = table_close_service.approve_request(request_id, g.kj, hide_receipt)
+    if result.outcome == "not_found":
+        return api_error(404, "REQUEST_NOT_FOUND", "Заявка не найдена")
+    if result.outcome == "forbidden":
+        return api_error(403, "FORBIDDEN", "Нет доступа к этой заявке")
+    if result.outcome == "already_decided":
+        return api_error(409, "ALREADY_DECIDED", "Заявка уже обработана")
+    return api_ok({
+        "request": result.request.to_dict(),
+        "closed_order_ids": [order.id for order in result.closed_orders],
+    })
+
+
+@bp.put("/table-close-requests/<int:request_id>/reject")
+@require_kj
+def reject_table_close_request_route(request_id):
+    """KJ отклоняет заявку — стол остаётся как есть, ничего не закрывается."""
+    result = table_close_service.reject_request(request_id, g.kj)
+    if result.outcome == "not_found":
+        return api_error(404, "REQUEST_NOT_FOUND", "Заявка не найдена")
+    if result.outcome == "forbidden":
+        return api_error(403, "FORBIDDEN", "Нет доступа к этой заявке")
+    if result.outcome == "already_decided":
+        return api_error(409, "ALREADY_DECIDED", "Заявка уже обработана")
+    return api_ok(result.request.to_dict())
 
 
 # --- Статус моста VirtualDJ (запрос пользователя 2026-09: "переключатель"
