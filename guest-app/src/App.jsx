@@ -1315,6 +1315,28 @@ function TableCloseReceiptBanner({ closeRequest, onDismiss }) {
   return (
     <section className="panel table-close-receipt">
       <h2>🧾 Чек стола {receipt.table_no}</h2>
+      {/* ДОБАВЛЕНО (запрос пользователя 2026-09-28, "VIP и обычный гость за
+      одним столом"): разбивка по гостям вместо одной общей суммы — VIP уже
+      списан с баланса за свои песни при каждом "Готово" (см. docstring
+      table_close_service.py::_build_receipt), поэтому у стола со смешанной
+      компанией нужно явно видеть, чья доля уже оплачена, а чья ещё нет,
+      иначе за столом могли попросить оплатить чек ещё раз целиком. */}
+      {receipt.guests && receipt.guests.length > 0 && (
+        <ul className="order-list">
+          {receipt.guests.map((g) => (
+            <li key={g.guest_id} className="order-row">
+              <div className="order-row__song">
+                {g.display_name || `Гость #${g.guest_id}`}
+                {g.guest_type === "vip" ? " · VIP" : ""}
+              </div>
+              <div className="order-row__artist">
+                {g.count} шт. · {g.sum.toFixed(2)}
+                {g.paid ? " · оплачено с баланса" : ""}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
       {receipt.categories.length > 0 && (
         <ul className="order-list">
           {receipt.categories.map((c) => (
@@ -1328,7 +1350,9 @@ function TableCloseReceiptBanner({ closeRequest, onDismiss }) {
         </ul>
       )}
       <p className="empty-hint">
-        Песен: {receipt.song_count} · Итого: {receipt.total.toFixed(2)}
+        Песен: {receipt.song_count} · Общая сумма чека: {receipt.total.toFixed(2)}
+        {" · К оплате: "}
+        {receipt.payable_total.toFixed(2)}
       </p>
       <button type="button" className="link-btn" onClick={onDismiss}>
         Закрыть
