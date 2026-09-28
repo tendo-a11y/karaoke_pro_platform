@@ -10,7 +10,7 @@
 """
 from datetime import datetime, timedelta, timezone
 
-from models import Order
+from models import STATUS_COMPLETED, Order
 
 
 def _headers(token):
@@ -153,6 +153,33 @@ def test_scope_session_does_not_hide_not_yet_played_order_from_this_session(clie
 
     resp = client.get("/api/guest/orders?scope=session", headers=_headers(session["token"]))
     assert [o["song_title"] for o in resp.get_json()["data"]] == ["Играет сейчас"]
+
+
+def test_scope_session_excludes_completed_orders_moved_to_history(client, db, club):
+    """
+    Запрос пользователя 2026-09-28 (живой баг "в панели KJ нет заказов, а в
+    панели гостя снова висит заказ" — разбор показал, что это уже сыгранная
+    KJ-ом ("Готово") песня, которая должна была уйти в историю, а не
+    оставаться в "Мои заказы"): completed-заказы этой же сессии больше не
+    попадают под ?scope=session — только под ?days=N ("История"), где им и
+    место. Rejected-заказы ("Убрать") продолжают полностью исчезать
+    отовсюду у гостя — это не менялось, см. общий фильтр выше.
+    """
+    session = _guest_session(client, club.club_id)
+    guest_id = int(session["guest_id"])
+    order = _make_order(db, club.club_id, guest_id, "Спетая песня", datetime.now(timezone.utc))
+    order.status = STATUS_COMPLETED
+    db.session.commit()
+    _make_order(db, club.club_id, guest_id, "Ещё не сыграна", datetime.now(timezone.utc))
+
+    resp = client.get("/api/guest/orders?scope=session", headers=_headers(session["token"]))
+    assert resp.status_code == 200
+    titles = [o["song_title"] for o in resp.get_json()["data"]]
+    assert titles == ["Ещё не сыграна"]
+
+    resp = client.get("/api/guest/orders?days=1", headers=_headers(session["token"]))
+    titles = {o["song_title"] for o in resp.get_json()["data"]}
+    assert titles == {"Спетая песня", "Ещё не сыграна"}
 
 
 def test_scope_other_than_session_falls_back_to_days_behaviour(client, db, club):
