@@ -1248,18 +1248,50 @@ function ActivationPanel({ token, onActivated, onCancel }) {
     }
   }
 
+  // ИСПРАВЛЕНО (жалоба пользователя 2026-09-28 "нету у меня входа"): скрипт
+  // https://accounts.google.com/gsi/client подключён в index.html как
+  // async defer — он грузится параллельно с самим React-приложением, и
+  // нет никакой гарантии, что window.google.accounts.id уже существует
+  // именно в момент, когда монтируется этот экран (медленная сеть, первый
+  // заход без кэша браузера на accounts.google.com — на практике вполне
+  // обычная ситуация, не редкий крайний случай). Раньше здесь была ОДНА
+  // проверка сразу при монтировании: если скрипт Google в этот момент ещё
+  // не успел подгрузиться — гость навсегда получал ошибку "не удалось
+  // загрузить вход через Google" и кнопка так и не появлялась, даже если
+  // скрипт долетал долей секунды позже. Теперь вместо одной проверки —
+  // опрос каждые 150мс в течение 10 секунд, чего с большим запасом хватает
+  // на реальную загрузку внешнего скрипта; ошибка показывается только если
+  // за 10 секунд скрипт так и не появился (это уже настоящий сбой сети, а
+  // не гонка при рендере).
   useEffect(() => {
-    if (!window.google?.accounts?.id || !googleButtonRef.current) {
-      setError("Не удалось загрузить вход через Google — проверьте подключение к интернету и обновите страницу");
-      return;
+    let cancelled = false;
+    let attempts = 0;
+    const maxAttempts = 67; // ~10 секунд при шаге 150мс
+
+    function tryInit() {
+      if (cancelled) return;
+      if (window.google?.accounts?.id && googleButtonRef.current) {
+        window.google.accounts.id.initialize({
+          client_id: GOOGLE_CLIENT_ID,
+          callback: handleGoogleCredential,
+        });
+        window.google.accounts.id.renderButton(googleButtonRef.current, {
+          theme: "outline", size: "large", text: "signin_with", locale: "ru", width: 280,
+        });
+        return;
+      }
+      attempts += 1;
+      if (attempts >= maxAttempts) {
+        setError("Не удалось загрузить вход через Google — проверьте подключение к интернету и обновите страницу");
+        return;
+      }
+      setTimeout(tryInit, 150);
     }
-    window.google.accounts.id.initialize({
-      client_id: GOOGLE_CLIENT_ID,
-      callback: handleGoogleCredential,
-    });
-    window.google.accounts.id.renderButton(googleButtonRef.current, {
-      theme: "outline", size: "large", text: "signin_with", locale: "ru", width: 280,
-    });
+
+    tryInit();
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
