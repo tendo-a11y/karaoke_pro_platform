@@ -197,6 +197,23 @@ export const api = {
     }),
   rejectTableCloseRequest: (token, requestId) =>
     request(`/api/kj/table-close-requests/${requestId}/reject`, { method: "PUT", token }),
+  // ДОБАВЛЕНО (запрос пользователя 2026-09-28, "карточка стола") — полный
+  // состав компании за столом (в отличие от доски "Заказы по столам", где
+  // видны только активные заказы), закрытие стола сразу действием KJ без
+  // заявки гостя и перенос стола на новый номер целиком (backend/routes/
+  // kj.py::list_table_groups/get_table_group/close_table_group_route/
+  // move_table_group_route).
+  listTableGroups: (token, clubId) => request(`/api/kj/table-groups/${clubId}`, { token }),
+  getTableGroup: (token, clubId, tableNo) =>
+    request(`/api/kj/table-groups/${clubId}/${tableNo}`, { token }),
+  closeTableGroup: (token, clubId, tableNo, hideReceipt) =>
+    request(`/api/kj/table-groups/${clubId}/${tableNo}/close`, {
+      method: "PUT", token, body: { hide_receipt: hideReceipt },
+    }),
+  moveTableGroup: (token, clubId, tableNo, newTableNo) =>
+    request(`/api/kj/table-groups/${clubId}/${tableNo}/move`, {
+      method: "PUT", token, body: { new_table_no: newTableNo },
+    }),
 };
 
 export { ApiError, BACKEND_URL };
