@@ -30,6 +30,7 @@ from sqlalchemy.exc import IntegrityError
 
 from extensions import db
 from models import (
+    Order,
     STATUS_TABLE_JOIN_APPROVED,
     STATUS_TABLE_JOIN_PENDING,
     STATUS_TABLE_JOIN_REJECTED,
@@ -37,6 +38,7 @@ from models import (
     TableGroupMember,
     TableJoinRequest,
 )
+from services import guest_status_service
 
 
 def _utcnow():
@@ -332,3 +334,98 @@ def leave_group(club_id: int, table_no: int, guest_id: int) -> MemberActionResul
         return MemberActionResult(outcome="not_a_member")
     _remove_member_and_reassign(club_id, table_no, guest_id)
     return MemberActionResult(outcome="ok")
+
+
+def list_occupied_table_nos(club_id: int) -> set[int]:
+    """
+    Номера столов, за которыми прямо сейчас сидит какая-то компания (есть
+    строка TableGroup) — используется KJ Panel, чтобы при переносе стола
+    (см. move_table ниже) предлагать выбирать номер только из СВОБОДНЫХ
+    столов: move_table сознательно не умеет разруливать конфликт "стол
+    назначения уже занят" (решение пользователя 2026-09-28 — KJ физически
+    видит, куда сажает гостей, и в интерфейсе просто не должен иметь
+    возможности выбрать уже занятый стол).
+    """
+    rows = TableGroup.query.filter_by(club_id=club_id).with_entities(TableGroup.table_no).all()
+    return {row[0] for row in rows}
+
+
+class MoveResult:
+    def __init__(self, outcome, group=None, member_guest_ids=None):
+        self.outcome = outcome
+        # not_found | same_table | destination_occupied | ok
+        self.group = group
+        self.member_guest_ids = member_guest_ids or []
+
+
+def move_table(club_id: int, old_table_no: int, new_table_no: int) -> MoveResult:
+    """
+    Перенос группового стола на новый номер целиком (запрос пользователя
+    2026-09-28, карточка стола в KJ Panel — "гости пересели с одного стола
+    на другой, добавился ещё человек"). KJ Panel даёт выбрать только
+    свободный стол назначения (см. list_occupied_table_nos выше), поэтому
+    здесь только повторная защита от гонки (тот же принцип, что и во всех
+    остальных admin-only действиях этого модуля) — если пока KJ выбирал
+    номер кто-то другой успел занять его, отказываем, а не сливаем две
+    компании в одну (слияние двух групп пользователем явно не запрошено).
+
+    Переносится вместе с группой (все решения — пользователя 2026-09-28):
+      - сама TableGroup и все её TableGroupMember;
+      - ещё не решённые TableJoinRequest (если кто-то как раз просился за
+        старый номер, когда админ уже пересел, — заявка становится заявкой
+        на новый номер, а не отменяется);
+      - живой стол каждого участника в GuestStatus — ОБЯЗАТЕЛЬНО, не
+        опционально: require_guest (см. auth.py) подменяет table_no из JWT
+        на GuestStatus.table_no, только если строка GuestStatus вообще
+        существует, поэтому без явного guest_status_service.set_table
+        гость, у которого такой строки никогда не было, продолжил бы
+        считать себя (и получать право заказывать) за старым номером до
+        конца жизни своего токена;
+      - ВСЕ заказы участников (и сыгранные, и ещё нет — решение пользователя
+        "полностью всё за эту сессию"), у которых сейчас стоит старый номер
+        стола. Этого фильтра по table_no достаточно, чтобы не задеть заказы
+        тех же гостей с их прошлых, других столов (у тех уже записан другой
+        номер) — Order.table_no снимается один раз при создании заказа и
+        дальше сам по себе не меняется, так что "текущий старый номер" и
+        есть однозначный признак "заказ именно этой рассадки". Доска
+        "Заказы по столам" и живая очередь ничего дополнительно не хранят —
+        обе читают Order.table_no вживую, поэтому обновятся сами.
+    """
+    if old_table_no == new_table_no:
+        return MoveResult(outcome="same_table")
+
+    group = get_group(club_id, old_table_no)
+    if group is None:
+        return MoveResult(outcome="not_found")
+
+    if get_group(club_id, new_table_no) is not None:
+        return MoveResult(outcome="destination_occupied")
+
+    member_guest_ids = [
+        m.guest_id
+        for m in TableGroupMember.query.filter_by(club_id=club_id, table_no=old_table_no).all()
+    ]
+
+    group.table_no = new_table_no
+    TableGroupMember.query.filter_by(club_id=club_id, table_no=old_table_no).update(
+        {"table_no": new_table_no}, synchronize_session=False
+    )
+    TableJoinRequest.query.filter_by(
+        club_id=club_id, table_no=old_table_no, status=STATUS_TABLE_JOIN_PENDING
+    ).update({"table_no": new_table_no}, synchronize_session=False)
+    Order.query.filter(
+        Order.club_id == club_id,
+        Order.table_no == old_table_no,
+        Order.telegram_user_id.in_(member_guest_ids),
+    ).update({"table_no": new_table_no}, synchronize_session=False)
+    db.session.commit()
+
+    # Отдельно от bulk-апдейтов выше — set_table сам создаёт строку
+    # GuestStatus, если её ещё не было, и коммитит за себя (см. её
+    # докстринг); делаем это после основного коммита, чтобы гонка здесь
+    # (маловероятная — тот же club_id) не оставила перенос заказов и группы
+    # наполовину сделанным.
+    for guest_id in member_guest_ids:
+        guest_status_service.set_table(club_id, guest_id, new_table_no)
+
+    return MoveResult(outcome="ok", group=group, member_guest_ids=member_guest_ids)
