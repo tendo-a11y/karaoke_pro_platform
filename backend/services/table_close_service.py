@@ -24,6 +24,7 @@ from datetime import datetime, timedelta, timezone
 
 from extensions import db
 from models import (
+    GuestAccount,
     Order,
     Service,
     STATUS_COMPLETED,
@@ -34,6 +35,8 @@ from models import (
     TableGroup,
     TableGroupMember,
     TableJoinRequest,
+    Transaction,
+    TX_TYPE_ORDER_PAYMENT,
 )
 from services import table_group_service
 from services.vdj_service import close_table_orders
@@ -109,6 +112,26 @@ def _build_receipt(club_id: int, table_no: int, since) -> dict:
     попадают в отдельную категорию "Без категории" с ценой 0, а не
     отбрасываются — иначе "количество песен" в чеке разошлось бы с тем, что
     гость видел в "Моих заказах".
+
+    ДОБАВЛЕНО (запрос пользователя 2026-09-28, "VIP и обычный гость за одним
+    столом"): VIP платит за свою песню СРАЗУ при "Готово" — списание с его
+    баланса происходит в момент завершения (billing_service.
+    charge_at_completion), задолго до закрытия стола. Раньше чек на закрытии
+    просто складывал стоимость ВСЕХ сыгранных песен стола в один "total" —
+    для стола с одними обычными гостями это верно (никто ещё не платил), но
+    для стола, где сидели и VIP, и обычные гости, получалось, что VIP как бы
+    просили оплатить его песни ЕЩЁ РАЗ прямо на столе, поверх уже списанного
+    с баланса. Теперь чек разбит по каждому гостю ("guests": сколько песен,
+    на какую сумму, оплачено ли уже) и считает ДВЕ суммы:
+      - "total" — честная сумма чека за весь стол, всех гостей, для отчёта;
+      - "payable_total" — сколько реально нужно собрать на месте (наличными/
+        картой) — то, что ещё не списано автоматически.
+    "Оплачено" определяется не по guest_type/VIP-статусу самому по себе (VIP
+    мог не иметь VIP-счёта в клубе, услуга могла быть бесплатной — см. все
+    ветки skipped_reason в charge_at_completion, тогда фактического списания
+    не было бы, хотя гость и VIP), а по реальному наличию строки Transaction
+    с TX_TYPE_ORDER_PAYMENT для этого заказа — она появляется ТОЛЬКО когда
+    charge_at_completion реально списал деньги, это и есть источник истины.
     """
     orders = (
         Order.query
@@ -126,8 +149,30 @@ def _build_receipt(club_id: int, table_no: int, since) -> dict:
     if service_ids:
         services_by_id = {s.id: s for s in Service.query.filter(Service.id.in_(service_ids)).all()}
 
+    order_ids = [o.id for o in orders]
+    paid_order_ids = set()
+    if order_ids:
+        paid_order_ids = {
+            row[0] for row in
+            db.session.query(Transaction.order_id)
+            .filter(Transaction.order_id.in_(order_ids), Transaction.type == TX_TYPE_ORDER_PAYMENT)
+            .all()
+        }
+
+    guest_ids = {o.telegram_user_id for o in orders}
+    accounts_by_guest = {}
+    if guest_ids:
+        accounts_by_guest = {
+            a.telegram_user_id: a
+            for a in GuestAccount.query.filter(
+                GuestAccount.club_id == club_id, GuestAccount.telegram_user_id.in_(guest_ids),
+            ).all()
+        }
+
     categories = {}
+    guests = {}
     total = 0.0
+    payable_total = 0.0
     for order in orders:
         service = services_by_id.get(order.service_id) if order.service_id else None
         name = service.name if service is not None else "Без категории"
@@ -137,11 +182,31 @@ def _build_receipt(club_id: int, table_no: int, since) -> dict:
         bucket["sum"] += price
         total += price
 
+        paid = order.id in paid_order_ids
+        if not paid:
+            payable_total += price
+
+        account = accounts_by_guest.get(order.telegram_user_id)
+        guest_bucket = guests.setdefault(order.telegram_user_id, {
+            "guest_id": str(order.telegram_user_id),
+            "display_name": account.display_name if account else None,
+            "guest_type": order.guest_type,
+            "count": 0,
+            "sum": 0.0,
+            "paid": True,
+        })
+        guest_bucket["count"] += 1
+        guest_bucket["sum"] += price
+        if not paid:
+            guest_bucket["paid"] = False
+
     return {
         "table_no": table_no,
         "song_count": len(orders),
         "categories": list(categories.values()),
+        "guests": list(guests.values()),
         "total": total,
+        "payable_total": payable_total,
     }
 
 
