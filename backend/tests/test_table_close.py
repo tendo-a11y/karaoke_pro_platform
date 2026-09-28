@@ -27,6 +27,8 @@ from models import (
     TableCloseRequest,
     TableGroup,
     TableGroupMember,
+    Transaction,
+    TX_TYPE_ORDER_PAYMENT,
 )
 
 
@@ -195,6 +197,81 @@ def test_approve_closes_table_builds_receipt_and_rejects_unplayed_orders(client,
     # админом — именно это чинит корневой баг "зависшего" стола.
     new_session = _session(client, club.club_id, table_no=23)
     assert new_session["table_group_status"] == "admin"
+
+
+# --- VIP и обычный гость за одним столом: чек по гостям, без двойной оплаты ---
+
+def test_receipt_splits_by_guest_and_excludes_already_paid(client, db, club, kj):
+    """
+    Запрос пользователя 2026-09-28 ("VIP и не вип за одним столом. У випа
+    оплата происходит с баланса, а простой гость должен оплатить за столом,
+    но чек выдаётся общей суммой на стол"): VIP платит за свою песню сразу
+    при "Готово" (см. billing_service.charge_at_completion, здесь имитируем
+    её результат — реальную строку Transaction, а не просто guest_type) —
+    его доля не должна ещё раз попадать в сумму "к оплате" на столе.
+    """
+    admin_session = _session(client, club.club_id, table_no=30)
+    admin_guest_id = int(admin_session["guest_id"])
+
+    joiner = client.post("/api/guest/session", json={"club_id": club.club_id}).get_json()["data"]
+    sub = f"mock-sub-{uuid.uuid4().hex[:12]}"
+    joiner = client.post(
+        "/api/guest/profile/link-google",
+        json={"table_no": 30, "google_credential": {"sub": sub}},
+        headers=_headers(joiner["token"]),
+    ).get_json()["data"]
+    joiner_guest_id = int(joiner["guest_id"])
+
+    pending = client.get(
+        "/api/guest/table-group", headers=_headers(admin_session["token"]),
+    ).get_json()["data"]["pending_requests"]
+    client.post(
+        f"/api/guest/table-group/join-requests/{pending[0]['id']}/approve",
+        headers=_headers(admin_session["token"]),
+    )
+
+    with client.application.app_context():
+        service = Service(club_id=club.club_id, name="Обычная песня", price=Decimal("15.00"), is_free=False)
+        db.session.add(service)
+        db.session.commit()
+        service_id = service.id
+
+        # Админ стола — VIP, его песня уже реально оплачена: строка
+        # Transaction есть, как её создаёт charge_at_completion при
+        # настоящем нажатии "Готово".
+        vip_order = Order(
+            telegram_user_id=admin_guest_id, club_id=club.club_id, table_no=30, guest_type="vip",
+            song_title="VIP-песня", service_id=service_id, status=STATUS_COMPLETED,
+        )
+        db.session.add(vip_order)
+        db.session.commit()
+        db.session.add(Transaction(
+            club_id=club.club_id, telegram_user_id=admin_guest_id, order_id=vip_order.id,
+            amount=Decimal("15.00"), type=TX_TYPE_ORDER_PAYMENT,
+            description="Оплата заказа (тест)", idempotency_key=f"completion:{vip_order.id}",
+        ))
+        db.session.commit()
+
+        # Второй гость — обычный, за его песню ещё никто не платил.
+        _completed_order(db, club.club_id, 30, joiner_guest_id, service_id=service_id, song_title="Обычная")
+
+    resp = client.put(
+        f"/api/kj/table-groups/{club.club_id}/30/close", headers=kj["headers"], json={},
+    )
+    assert resp.status_code == 200
+    receipt = resp.get_json()["data"]["request"]["receipt"]
+
+    assert receipt["song_count"] == 2
+    assert receipt["total"] == 30.0
+    # Только доля обычного гостя — VIP уже списан, второй раз просить не надо.
+    assert receipt["payable_total"] == 15.0
+
+    guests_by_id = {g["guest_id"]: g for g in receipt["guests"]}
+    assert guests_by_id[str(admin_guest_id)]["paid"] is True
+    assert guests_by_id[str(admin_guest_id)]["sum"] == 15.0
+    assert guests_by_id[str(admin_guest_id)]["guest_type"] == "vip"
+    assert guests_by_id[str(joiner_guest_id)]["paid"] is False
+    assert guests_by_id[str(joiner_guest_id)]["sum"] == 15.0
 
 
 def test_approve_second_time_is_already_decided(client, db, club, kj):
