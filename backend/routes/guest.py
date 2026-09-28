@@ -5,7 +5,7 @@ from flask import Blueprint, current_app, g, request
 from auth import issue_guest_token, require_guest
 from errors import api_error, api_ok
 from extensions import db
-from models import STATUS_ERROR, STATUS_ORDER_CHANGE_PENDING, STATUS_REJECTED, ChatMessage, Club, Order, OrderChangeRequest, Service
+from models import STATUS_COMPLETED, STATUS_ERROR, STATUS_ORDER_CHANGE_PENDING, STATUS_REJECTED, ChatMessage, Club, Order, OrderChangeRequest, Service
 from services import ai_search_service, guest_account_service, guest_status_service, song_service, table_board_service, table_close_service, table_group_service, vdj_service, vip_service
 from services.google_auth_service import GoogleAuthError, verify_google_credential
 from sockets import emit_chat_message, emit_order_created, emit_vip_request_created
@@ -770,11 +770,15 @@ def list_my_orders():
     из смысла запроса, а не наоборот.
 
     Отклонённые (rejected) и с ошибкой (error) заказы сюда намеренно не
-    попадают (решение пользователя, живой тест 2026-09): гостю в его
-    собственном списке они не нужны и только захламляют историю — он видит
-    там только то, что ещё в очереди/играется, и то, что уже спето. У KJ в
+    попадают вообще (решение пользователя, живой тест 2026-09): гостю в его
+    собственном списке они не нужны и только захламляют историю. У KJ в
     его собственной панели эти заказы по-прежнему видны как обычно, этот
     фильтр касается только эндпоинта гостя.
+
+    Уже сыгранные (completed) заказы видны под ?days=N ("История" — там им и
+    место), но исключены из ?scope=session ("Мои заказы", см. ниже) —
+    подробности решения см. в комментарии у фильтра STATUS_COMPLETED внутри
+    ветки scope == "session".
 
     waiting_position (доп. ТЗ "KJ Pro", запрос пользователя 2026-09-18) —
     номер места (с 1) в невидимом для KJ ожидании, если заказ превышает
@@ -795,6 +799,21 @@ def list_my_orders():
     )
     scope = request.args.get("scope")
     if scope == "session":
+        # ИЗМЕНЕНО (запрос пользователя 2026-09-28, живой баг "в панели KJ
+        # нет заказов, а в панели гостя снова висит заказ" — разбор до
+        # конца: гость видел в "Мои заказы" уже сыгранную (STATUS_COMPLETED)
+        # песню и не понимал, почему она до сих пор здесь, ведь KJ уже
+        # нажал "Готово"). Раньше (2026-09-24) completed-заказы сессии
+        # нарочно оставляли здесь же, чтобы гость сразу видел подтверждение
+        # "песню спели", не переключая вкладку. На практике это выглядело
+        # как зависший заказ — вкладка "Мои заказы" визуально не отличает
+        # "уже сыграно" от "ещё не разобрано". Пользователь явно
+        # сформулировал ожидаемое поведение: "Готово" -> уйти в историю,
+        # "Убрать" -> просто удалиться. Последнее уже работает (rejected
+        # исключены фильтром выше); теперь так же исключаем и completed —
+        # они остаются только во вкладке "История" (?days=N, ветка ниже),
+        # где как раз и есть место уже сыгранному.
+        query = query.filter(Order.status != STATUS_COMPLETED)
         # session_started_at может быть None только если в токене почему-то
         # нет iat (в токенах, выпущенных issue_guest_token, он есть всегда) —
         # тогда ведём себя как без фильтра вовсе, а не роняем запрос 500-й.
