@@ -134,15 +134,21 @@ def test_remove_vip_client_forbidden_for_other_club(client, db, other_club, kj):
     assert resp.status_code == 403
 
 
-def test_remove_vip_client_refuses_when_balance_not_zero(client, db, club, kj):
+def test_remove_vip_client_allowed_when_balance_not_zero(client, db, club, kj):
+    """ИЗМЕНЕНО (2026-09-29, прямое решение пользователя: "задача разрешить
+    перевод в простые даже при положительном балансе") — раньше здесь
+    сервер отказывал (409 VIP_BALANCE_NOT_ZERO), пока баланс не обнулят
+    вручную. Теперь перевод в простые разрешён при любом балансе, остаток
+    на счету просто перестаёт отслеживаться вместе с удалением строки
+    VipClient (см. docstring vip_service.remove_vip_client)."""
     vip = _make_vip(db, club.club_id, telegram_user_id=555, balance="12.50")
     resp = client.delete(f"/api/kj/vip-clients/{vip.id}", headers=_headers(kj["token"]))
-    assert resp.status_code == 409
-    assert resp.get_json()["error"] == "VIP_BALANCE_NOT_ZERO"
+    assert resp.status_code == 200
+    assert resp.get_json()["data"]["removed"] is True
 
     still_listed = client.get(f"/api/kj/vip-clients/{club.club_id}", headers=_headers(kj["token"]))
     ids = {row["id"] for row in still_listed.get_json()["data"]}
-    assert vip.id in ids
+    assert vip.id not in ids
 
 
 def test_remove_vip_client_ok_when_balance_zero(client, db, club, kj):
