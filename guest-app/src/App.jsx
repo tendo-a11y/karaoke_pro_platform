@@ -1002,7 +1002,7 @@ function TableGroupPanel({ token, guestId, hasTable, status, onGroupChanged }) {
               disabled={busyKey === "leave"}
               onClick={() => runAction("leave", () => api.leaveTableGroup(token))}
             >
-              🚪 Покинуть стол
+              🚪 Встать со стола
             </button>
           )}
 
