@@ -760,6 +760,25 @@ function VipPanel({ token, clubId, socket }) {
     }
   }
 
+  // ДОБАВЛЕНО (2026-09-29, запрос пользователя "нужна кнопка обнулить
+  // баланс или сбросить баланс") — раньше обнулить баланс можно было,
+  // только вписав 0 в поле "Сумма" и нажав "Установить"; теперь то же
+  // самое действие одним нажатием, без поля ввода. Использует тот же
+  // серверный вызов setVipBalance(...,0), что и "Установить" = 0 — то же
+  // самое действие, просто без ручного набора нуля.
+  async function handleZeroBalance(vipClientId) {
+    setBusyKey(`zero-${vipClientId}`);
+    setActionError(null);
+    try {
+      await api.setVipBalance(token, vipClientId, 0);
+      await reload();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
   async function handleUpdateCashback(vipClientId) {
     const value = Number(cashbackDrafts[vipClientId]);
     if (!Number.isFinite(value) || value < 0 || value > 100) return;
@@ -801,10 +820,11 @@ function VipPanel({ token, clubId, socket }) {
   // ДОБАВЛЕНО (2026-09-23, запрос пользователя "нет кнопки удалить. это
   // означает перевести его в простые") — см. docstring
   // vip_service.remove_vip_client про то, почему это удаление строки
-  // VipClient, а не отдельный флаг, и почему сервер откажет, если на
-  // счету ещё остались деньги (VIP_BALANCE_NOT_ZERO) — тогда ошибка
-  // покажется в actionError, и её видно прямо тут, объясняющей, что делать
-  // (обнулить баланс кнопкой "🔄 Установить" выше).
+  // VipClient, а не отдельный флаг. ИЗМЕНЕНО (2026-09-29, решение
+  // пользователя): перевод в простые теперь разрешён и с ненулевым
+  // балансом — старая проверка VIP_BALANCE_NOT_ZERO (требовавшая сначала
+  // обнулить баланс) убрана на сервере, поэтому упоминание "обнулите перед
+  // понижением" ниже больше не актуально как обязательное условие.
   async function handleRemove(vipClientId) {
     setBusyKey(`remove-${vipClientId}`);
     setActionError(null);
@@ -877,6 +897,9 @@ function VipPanel({ token, clubId, socket }) {
                 </button>
                 <button type="button" className="btn-link" disabled={busyKey === `amt-${c.id}`} onClick={() => handleSetBalance(c.id)}>
                   🔄 Установить
+                </button>
+                <button type="button" className="btn-link" disabled={busyKey === `zero-${c.id}`} onClick={() => handleZeroBalance(c.id)}>
+                  0️⃣ Обнулить баланс
                 </button>
               </div>
               <div className="vip-row__actions">
@@ -1497,12 +1520,14 @@ function GuestCard({ token, clubId, guestId, onBack, onChanged }) {
     }
   }
 
-  // ДОБАВЛЕНО (2026-09-19, запрос пользователя "закрыть стол... убрать со
-  // стола и заблокировать, это всё внутри карточки"): один клик вместо
-  // двух отдельных ("Снять со стола" + "Заблокировать" ниже, они остаются
-  // на месте как есть) — плюс, чего эти две кнопки сами по себе не делали,
-  // отклоняет всё ещё непроигранное с этого стола, чтобы места на табло
-  // "Заказы" реально освободились (см. guest_status_service.close_table).
+  // ИЗМЕНЕНО (2026-09-29, жалоба пользователя: нажал "Закрыть стол",
+  // ожидая только освободить стол, а гостя заодно молча заблокировало —
+  // "Заблокировать и Закрыть Стол. Это две отдельные кнопки"): раньше
+  // (с 2026-09-19) это был один клик, который убирал гостя со стола И
+  // блокировал его сразу. Теперь это только освобождает стол и отклоняет
+  // ещё непроигранное с него (см. guest_status_service.close_table) —
+  // блокировка сюда больше не входит, "🚫 Заблокировать" ниже полностью
+  // отдельная кнопка, как и было до 2026-09-19.
   async function handleCloseTable() {
     setBusy(true);
     setActionError(null);
@@ -1564,7 +1589,7 @@ function GuestCard({ token, clubId, guestId, onBack, onChanged }) {
                 Снять со стола
               </button>
             )}
-            {!guest.is_blocked && (
+            {guest.table_no != null && (
               <button type="button" className="btn btn--complete" disabled={busy} onClick={handleCloseTable}>
                 🚪 Закрыть стол
               </button>
@@ -2116,11 +2141,22 @@ function OrdersBoard({ token, clubId, socket, onOpenGuest, onOpenTable }) {
     <div className="orders-board">
       {actionError && <div className="banner banner--error">{actionError}</div>}
       <div className="orders-board__grid">
-        {board.map((table) => (
+        {board.map((table) => {
+          // ДОБАВЛЕНО (запрос пользователя 2026-09-29: "поменяем цвет
+          // описания стола, если он хоть кем-то занят") — раньше заголовок
+          // "Стол N" был одного цвета всегда, занятость было видно только
+          // по надписям в самих местах ("Свободен"/название песни) ниже.
+          // "Занят хоть кем-то" = хотя бы одно место не пустое (slot !=
+          // null — пустое место рендерится как null, см. OrdersBoardSlot).
+          const occupied = table.slots.some((slot) => slot != null);
+          return (
           <div className="table-card" key={table.table_no}>
             <button
               type="button"
-              className="table-card__title table-card__title--clickable"
+              className={
+                "table-card__title table-card__title--clickable" +
+                (occupied ? " table-card__title--occupied" : "")
+              }
               onClick={() => onOpenTable(table.table_no)}
             >
               Стол {table.table_no}
@@ -2143,7 +2179,8 @@ function OrdersBoard({ token, clubId, socket, onOpenGuest, onOpenTable }) {
               ))}
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
