@@ -150,6 +150,25 @@ h2 { font-size: 16px; color: var(--muted); text-transform: uppercase; letter-spa
 
 .table-card__title { font-weight: 600; color: var(--accent); }
 
+/* Карточка стола (запрос пользователя 2026-09-28): заголовок карточки
+   стало кликабельной кнопкой, проваливающейся в TableGroupCard — сброс
+   обычных стилей <button>, сам вид заголовка (.table-card__title) не
+   меняется, только добавляется курсор и лёгкая подсветка при наведении/
+   фокусе как явная подсказка, что элемент интерактивный. */
+.table-card__title--clickable {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.table-card__title--clickable:hover,
+.table-card__title--clickable:focus-visible {
+  text-decoration: underline;
+}
+
 .table-card__slots { display: flex; flex-direction: column; gap: 8px; }
 
 .table-slot {
@@ -559,3 +578,38 @@ OrderChangeRequestsPanel), а не терялась среди обычных к
 }
 .song-search__results li { border-bottom: 1px solid var(--border); }
 .song-search__results li:last-child { border-bottom: none; }
+
+/* Карточка стола целиком (запрос пользователя 2026-09-28): состав компании
+   за столом + закрытие/перенос стола, см. TableGroupCard в App.jsx —
+   открывается вместо доски "Заказы по столам" кликом по заголовку
+   table-card__title, поэтому оформлена как отдельный самостоятельный экран
+   тем же приёмом, что и карточка гостя (.app-main > GuestCard). */
+.table-group-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.table-group-card__actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.table-group-card__move {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.table-group-card__move select,
+.table-group-card__move input {
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: inherit;
+  font: inherit;
+}
