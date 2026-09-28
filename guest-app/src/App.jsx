@@ -2,35 +2,29 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, GOOGLE_CLIENT_ID, api, loadStoredSession, storeSession } from "./api";
 import "./App.css";
 
-// ДОБАВЛЕНО (2026-09-19, запрос пользователя): раньше "pending" звучал как
-// "Ожидает подтверждения KJ" — гостю казалось, что нужно чьё-то отдельное
-// разрешение. По факту это просто место в общей очереди клуба (см.
-// order.queue_position, backend/services/table_board_service.py::
-// get_club_queue_positions), поэтому статус-функция ниже подставляет номер
-// вместо этого текста, когда он есть — это словарь остаётся только как
-// запасной вариант (queue_position ещё не пришёл, либо статус вне очереди).
-const STATUS_LABELS = {
-  pending: "🎶 В очереди",
-  processing: "⚙️ Обрабатывается",
-  queued: "🎶 В очереди",
-  playing: "▶️ Играет",
-  completed: "✅ Спето",
-  rejected: "❌ Отклонено",
-  error: "⚠️ Ошибка, обратитесь к KJ",
-};
-
-// Статусы, для которых заказ ещё не сыгран и место в общей очереди клуба
-// (queue_position) имеет смысл показывать — 1:1 ACTIVE_TABLE_STATUSES на
-// бэкенде (table_board_service.py), кроме "playing" — это старое значение
-// статуса из другого, более раннего пути заказов, у которого своего
-// queue_position не считается.
+// ИЗМЕНЕНО (запрос пользователя 2026-09-28: "Мои заказы — это заказы,
+// которые ждут своей очереди занять место в карточке стола. НЕ надо нигде
+// никаких СПЕТО. Это тупость. Если гость песню не пел то не будет Спето. А
+// если даже и пел он знает что он спел песню и ему не надо это писать").
+// Раньше здесь был словарь текстовых статусов на каждый order.status (в т.ч.
+// "✅ Спето" для уже сыгранных, "🎶 В очереди" и т.п.) — решение пользователя
+// сейчас: никакого текстового статуса нигде не показывать, только номер
+// места в очереди, когда он есть. Вкладка и так говорит гостю всё нужное
+// ("Мои заказы" — ещё не сыграно, "История" — уже было), лишний текст не
+// нужен; для уже сыгранных (completed) статус вообще не рендерится (см.
+// OrderRow ниже) — гость и так знает, что сам спел свою песню.
+//
+// QUEUE_POSITION_STATUSES — 1:1 ACTIVE_TABLE_STATUSES на бэкенде
+// (table_board_service.py), кроме "playing" — старое значение статуса из
+// другого, более раннего пути заказов, у которого своего queue_position не
+// считается.
 const QUEUE_POSITION_STATUSES = ["pending", "processing", "queued", "error"];
 
 function orderStatusLabel(order) {
   if (QUEUE_POSITION_STATUSES.includes(order.status) && order.queue_position != null) {
-    return `🎶 В очереди — место ${order.queue_position}`;
+    return `#${order.queue_position}`;
   }
-  return STATUS_LABELS[order.status] || order.status;
+  return null;
 }
 
 // Опрос вместо WebSocket — сознательное ограничение первого шага: у
@@ -125,7 +119,7 @@ function OrderRow({
     <li className={`order-row status-${order.status}`}>
       <div className="order-row__song">🎵 {order.song_title}</div>
       {order.artist && <div className="order-row__artist">🎤 {order.artist}</div>}
-      <div className="order-row__status">{label}</div>
+      {label && <div className="order-row__status">{label}</div>}
       {order.error_message && <div className="order-row__error">{order.error_message}</div>}
       <div className="order-row__actions">
         {onFavorite && (
