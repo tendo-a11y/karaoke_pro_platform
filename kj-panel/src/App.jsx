@@ -1588,6 +1588,197 @@ function GuestCard({ token, clubId, guestId, onBack, onChanged }) {
   );
 }
 
+// Карточка стола (запрос пользователя 2026-09-28) — открывается кликом по
+// заголовку карточки стола на доске "Заказы по столам" (см. OrdersBoard
+// ниже), в отличие от клика по отдельному месту (уводит сразу в карточку
+// ОДНОГО гостя, см. onOpenGuest у OrdersBoardSlot). Здесь — полный состав
+// компании за столом (TableGroupMember, а не только те, у кого сейчас
+// активный заказ), с той же GuestCard внутри при клике на участника (тот
+// же паттерн вложенности, что и в GuestsPanel ниже — свой собственный
+// selectedGuestId, back просто гасит его), плюс два действия сразу на весь
+// стол: закрыть (тем же груповым сервисом, что и подтверждение заявки
+// гостя, backend/services/table_close_service.py::close_table_directly —
+// просто KJ подтверждает от своего имени сразу, без заявки) и перенести на
+// новый номер (переезжают участники, их заказы за эту сессию и живая
+// очередь сама подхватит новый номер — см. докстринг table_group_service.
+// move_table на бэкенде).
+function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged }) {
+  const [group, setGroup] = useState(null);
+  const [loadError, setLoadError] = useState(null);
+  const [selectedGuestId, setSelectedGuestId] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState(null);
+  const [hideReceipt, setHideReceipt] = useState(false);
+  const [moveOpen, setMoveOpen] = useState(false);
+  const [moveTarget, setMoveTarget] = useState("");
+  const [freeTables, setFreeTables] = useState(null);
+
+  async function reload() {
+    try {
+      const data = await api.getTableGroup(token, clubId, tableNo);
+      setGroup(data);
+      setLoadError(null);
+    } catch (err) {
+      setGroup(null);
+      setLoadError(err instanceof ApiError && err.code === "TABLE_EMPTY" ? "empty" : (err instanceof ApiError ? err.message : String(err)));
+    }
+  }
+
+  useEffect(() => {
+    reload();
+    setSelectedGuestId(null);
+    setMoveOpen(false);
+    setActionError(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tableNo]);
+
+  async function handleOpenMove() {
+    setMoveOpen(true);
+    setMoveTarget("");
+    setActionError(null);
+    try {
+      const data = await api.listTableGroups(token, clubId);
+      if (data.table_count) {
+        const occupied = new Set(data.occupied_table_nos);
+        setFreeTables(
+          Array.from({ length: data.table_count }, (_, i) => i + 1).filter((n) => n !== tableNo && !occupied.has(n)),
+        );
+      } else {
+        setFreeTables(null);
+      }
+    } catch {
+      // Форма переноса просто покажет обычное числовое поле вместо списка —
+      // сам перенос всё равно перепроверит занятость на бэкенде.
+      setFreeTables(null);
+    }
+  }
+
+  async function handleClose() {
+    setBusy(true);
+    setActionError(null);
+    try {
+      await api.closeTableGroup(token, clubId, tableNo, hideReceipt);
+      onBack();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleMove(event) {
+    event.preventDefault();
+    const newTableNo = Number(moveTarget);
+    if (!Number.isInteger(newTableNo) || newTableNo < 1) {
+      setActionError("Укажите корректный номер стола");
+      return;
+    }
+    setBusy(true);
+    setActionError(null);
+    try {
+      await api.moveTableGroup(token, clubId, tableNo, newTableNo);
+      onTableNoChanged(newTableNo);
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (selectedGuestId != null) {
+    return (
+      <div className="table-group-card">
+        <GuestCard
+          token={token}
+          clubId={clubId}
+          guestId={selectedGuestId}
+          onBack={() => setSelectedGuestId(null)}
+          onChanged={reload}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="table-group-card">
+      <button type="button" className="btn-link" onClick={onBack}>← К доске</button>
+      <h2>Стол {tableNo}</h2>
+
+      {loadError === "empty" && <p className="empty-hint">За этим столом сейчас никого нет.</p>}
+      {loadError && loadError !== "empty" && <div className="banner banner--error">{loadError}</div>}
+      {!group && !loadError && <p className="empty-hint">Загрузка…</p>}
+
+      {group && (
+        <>
+          <ul className="vip-list">
+            {group.members.map((member) => (
+              <li key={member.guest_id} className="vip-row vip-row--client">
+                <div>
+                  {member.display_name || `Гость #${member.guest_id}`}{" "}
+                  {member.is_admin && <span className="guest-type-badge">админ стола</span>}
+                  {member.is_blocked && <span className="guest-type-badge guest-type-badge--blocked">🚫 Заблокирован</span>}
+                  <br />
+                  <span className="empty-hint">
+                    ID {member.guest_id} · за вечер {member.orders_evening} · за неделю {member.orders_week} · за месяц {member.orders_month}
+                  </span>
+                </div>
+                <div className="vip-row__actions">
+                  <button type="button" className="btn-link" onClick={() => setSelectedGuestId(member.guest_id)}>
+                    Открыть карточку →
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+
+          {actionError && <div className="banner banner--error">{actionError}</div>}
+
+          <div className="table-group-card__actions">
+            <label className="table-close-hide-receipt">
+              <input type="checkbox" checked={hideReceipt} onChange={(e) => setHideReceipt(e.target.checked)} />
+              Не показывать чек
+            </label>
+            <button type="button" className="btn btn--reject" disabled={busy} onClick={handleClose}>
+              🔒 Закрыть стол
+            </button>
+            {!moveOpen && (
+              <button type="button" className="btn-link" disabled={busy} onClick={handleOpenMove}>
+                Переместить стол
+              </button>
+            )}
+          </div>
+
+          {moveOpen && (
+            <form className="table-group-card__move" onSubmit={handleMove}>
+              {freeTables ? (
+                <select value={moveTarget} onChange={(e) => setMoveTarget(e.target.value)} required>
+                  <option value="" disabled>Новый номер стола…</option>
+                  {freeTables.map((n) => (
+                    <option key={n} value={n}>{n}</option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="number"
+                  min="1"
+                  placeholder="Новый номер стола"
+                  value={moveTarget}
+                  onChange={(e) => setMoveTarget(e.target.value)}
+                  required
+                />
+              )}
+              <button type="submit" className="btn btn--accept" disabled={busy}>Перенести</button>
+              <button type="button" className="btn-link" disabled={busy} onClick={() => setMoveOpen(false)}>
+                Отмена
+              </button>
+            </form>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 function GuestsPanel({ token, clubId }) {
   const [typeFilter, setTypeFilter] = useState("");
   const [guests, setGuests] = useState(null);
@@ -1787,7 +1978,7 @@ function OrdersBoardSlot({ slot, categories, busy, onAccept, onReject, onComplet
   );
 }
 
-function OrdersBoard({ token, clubId, socket, onOpenGuest }) {
+function OrdersBoard({ token, clubId, socket, onOpenGuest, onOpenTable }) {
   const [board, setBoard] = useState(null);
   const [categories, setCategories] = useState([]);
   const [loadError, setLoadError] = useState(null);
@@ -1830,12 +2021,20 @@ function OrdersBoard({ token, clubId, socket, onOpenGuest }) {
     socket.on("order_confirmed", reload);
     socket.on("order_rejected", reload);
     socket.on("queue_updated", reload);
+    // ДОБАВЛЕНО (карточка стола, перенос стола 2026-09-28): перенос меняет
+    // table_no сразу у пачки заказов через bulk UPDATE на сервере (см.
+    // table_group_service.move_table), минуя обычные order_updated/
+    // order_rejected по одному заказу — без этого слушателя открытая доска
+    // "Заказы по столам" продолжала бы показывать заказы под старым номером
+    // стола до следующего ручного действия.
+    socket.on("table_group_moved", reload);
     return () => {
       socket.off("order_created", reload);
       socket.off("order_updated", reload);
       socket.off("order_confirmed", reload);
       socket.off("order_rejected", reload);
       socket.off("queue_updated", reload);
+      socket.off("table_group_moved", reload);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [socket]);
@@ -1919,7 +2118,13 @@ function OrdersBoard({ token, clubId, socket, onOpenGuest }) {
       <div className="orders-board__grid">
         {board.map((table) => (
           <div className="table-card" key={table.table_no}>
-            <div className="table-card__title">Стол {table.table_no}</div>
+            <button
+              type="button"
+              className="table-card__title table-card__title--clickable"
+              onClick={() => onOpenTable(table.table_no)}
+            >
+              Стол {table.table_no}
+            </button>
             <div className="table-card__slots">
               {table.slots.map((slot, index) => (
                 <OrdersBoardSlot
@@ -2117,6 +2322,11 @@ export default function App() {
   // GuestCard, что и вкладка "Гости" (см. GuestsPanel::selectedGuestId
   // выше) — здесь свой собственный стейт, потому что это разные экраны.
   const [boardGuestId, setBoardGuestId] = useState(null);
+  // Запрос пользователя 2026-09-28: клик по самой карточке стола (не по
+  // месту гостя) проваливается в полную карточку стола — состав компании,
+  // закрытие/перенос стола (см. TableGroupCard выше) — отдельный от
+  // boardGuestId стейт, т.к. это разные экраны и открываются независимо.
+  const [boardTableNo, setBoardTableNo] = useState(null);
   // Реф нужен эффекту ниже (disconnect в cleanup без пересоздания подписок),
   // а socketInstance в state — чтобы VipPanel мог реагировать на появление
   // сокета как на обычный проп (читать socketRef.current прямо в JSX во
@@ -2326,6 +2536,16 @@ export default function App() {
             onBack={() => setBoardGuestId(null)}
           />
         </div>
+      ) : boardTableNo != null ? (
+        <div className="app-main">
+          <TableGroupCard
+            token={token}
+            clubId={me.club_id}
+            tableNo={boardTableNo}
+            onBack={() => setBoardTableNo(null)}
+            onTableNoChanged={setBoardTableNo}
+          />
+        </div>
       ) : (
         <main className="app-main">
           <OrderChangeRequestsPanel token={token} clubId={me.club_id} socket={socketInstance} />
@@ -2338,6 +2558,7 @@ export default function App() {
               clubId={me.club_id}
               socket={socketInstance}
               onOpenGuest={setBoardGuestId}
+              onOpenTable={setBoardTableNo}
             />
           </section>
 
