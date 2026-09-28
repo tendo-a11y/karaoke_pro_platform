@@ -153,7 +153,14 @@ def test_close_table_orders_noop_when_nothing_active(app, db, club):
         assert close_table_orders(club.club_id, 99) == []
 
 
-# --- guest_status_service.close_table: снять со стола + заблокировать + отклонить ---
+# --- guest_status_service.close_table: снять со стола + отклонить ---
+#
+# ИЗМЕНЕНО (2026-09-29, жалоба пользователя: нажал "Закрыть стол" и вместо
+# этого гостя заодно молча заблокировало — "Заблокировать и Закрыть Стол.
+# Это две отдельные кнопки"): раньше это действие ещё и блокировало гостя
+# (is_blocked=True) — теперь только снимает со стола и отклоняет
+# непроигранное, блокировка полностью отдельное действие (см.
+# guest_status_service.block/unblock, своя кнопка "🚫 Заблокировать").
 
 def test_guest_status_close_table_full_flow(app, db, club, kj):
     with app.app_context():
@@ -162,7 +169,7 @@ def test_guest_status_close_table_full_flow(app, db, club, kj):
 
         result = guest_status_service.close_table(club.club_id, 555, kj["operator"])
 
-        assert result["status"].is_blocked is True
+        assert result["status"].is_blocked is False
         assert result["status"].table_no is None
         assert {o.id for o in result["closed_orders"]} == {order_id}
 
@@ -178,7 +185,7 @@ def test_close_table_route(app, db, club, kj):
     resp = app.test_client().post("/api/kj/guests/555/close-table", headers=kj["headers"])
     assert resp.status_code == 200
     data = resp.get_json()["data"]
-    assert data["status"]["is_blocked"] is True
+    assert data["status"]["is_blocked"] is False
     assert data["closed_order_ids"] == [order_id]
 
     with app.app_context():
