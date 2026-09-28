@@ -336,20 +336,23 @@ def remove_vip_client(club_id: int, vip_client_id: int) -> RemoveVipClientResult
     гость на следующем же опросе списка гостей окажется "client"/"no_table"
     сам собой, без отдельного флага-переключателя.
 
-    Если на счету ещё остались деньги — отказываем (не превращаем их
-    молча в ничьи): KJ должен сам осознанно обнулить баланс кнопкой
-    "🔄 Установить" = 0 перед понижением, а не терять его как побочный
-    эффект удаления. Записи Transaction (история операций) не трогаются —
-    они ссылаются на club_id+telegram_user_id, а не на VipClient.id (см.
-    докстринг Transaction), так что история гостя никуда не девается.
+    ИЗМЕНЕНО (2026-09-29, прямое решение пользователя: "задача разрешить
+    перевод в простые даже при положительном балансе" — раньше здесь была
+    проверка balance_not_zero, требовавшая сначала вручную обнулить баланс
+    кнопкой "Установить" = 0). Проверку убрали — перевод в простые теперь
+    разрешён при любом балансе. Остаток на счету при этом переводе никуда
+    не переносится и не выплачивается — он просто перестаёт отслеживаться
+    вместе с удалением этой строки VipClient (это осознанный выбор
+    пользователя, а не побочный эффект). Записи Transaction (история
+    операций) не трогаются — они ссылаются на club_id+telegram_user_id, а
+    не на VipClient.id (см. докстринг Transaction), так что история гостя
+    никуда не девается.
     """
     vip_client = db.session.get(VipClient, vip_client_id)
     if vip_client is None:
         return RemoveVipClientResult(outcome="not_found")
     if vip_client.club_id != club_id:
         return RemoveVipClientResult(outcome="forbidden")
-    if vip_client.balance:
-        return RemoveVipClientResult(outcome="balance_not_zero")
 
     db.session.delete(vip_client)
     db.session.commit()
