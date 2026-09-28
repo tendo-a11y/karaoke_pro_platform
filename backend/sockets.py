@@ -337,3 +337,19 @@ def emit_table_close_request_decided(close_request):
     socketio.emit(
         "table_close_request_decided", close_request.to_dict(), room=_club_room(close_request.club_id)
     )
+
+
+def emit_table_group_moved(club_id: int, old_table_no: int, new_table_no: int):
+    """
+    Перенос группового стола на новый номер (запрос пользователя 2026-09-28,
+    карточка стола в KJ Panel, см. services/table_group_service.py::
+    move_table) — меняет table_no сразу у пачки заказов через bulk UPDATE,
+    минуя обычные emit_order_updated/emit_order_rejected по одному заказу,
+    поэтому открытым панелям нужен отдельный сигнал перезагрузить доску
+    "Заказы по столам" (см. OrdersBoard в kj-panel/src/App.jsx).
+    """
+    socketio.emit(
+        "table_group_moved",
+        {"club_id": club_id, "old_table_no": old_table_no, "new_table_no": new_table_no},
+        room=_club_room(club_id),
+    )
