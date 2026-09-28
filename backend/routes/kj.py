@@ -5,8 +5,8 @@ from flask import Blueprint, current_app, g, jsonify, request
 from auth import issue_kj_google_token, require_kj
 from errors import api_error, api_ok
 from extensions import db
-from models import ChatMessage, Club, KJOperator, Order, VipClient, VipRequest
-from services import category_service, guest_directory_service, guest_status_service, song_service, table_close_service, vip_service
+from models import ChatMessage, Club, KJOperator, Order, TableGroupMember, VipClient, VipRequest
+from services import category_service, guest_directory_service, guest_status_service, song_service, table_close_service, table_group_service, vip_service
 from services.guest_directory_service import GUEST_TYPES, GuestDirectoryError
 from services.category_service import CategoryServiceError
 from services.google_auth_service import GoogleAuthError, verify_google_credential
@@ -29,7 +29,7 @@ from services.vdj_service import (
     update_order_category,
     update_order_table,
 )
-from sockets import emit_chat_message
+from sockets import emit_chat_message, emit_table_group_moved
 from vdj import bridge_status
 
 bp = Blueprint("kj", __name__, url_prefix="/api/kj")
@@ -1124,6 +1124,143 @@ def reject_table_close_request_route(request_id):
     if result.outcome == "already_decided":
         return api_error(409, "ALREADY_DECIDED", "Заявка уже обработана")
     return api_ok(result.request.to_dict())
+
+
+# --- Карточка стола в KJ Panel (запрос пользователя 2026-09-28): полный
+# состав компании за столом (не только те, у кого сейчас активный заказ, как
+# на доске "Заказы по столам", см. table_board_service), закрытие стола сразу
+# действием KJ без ожидания заявки гостя (table_close_service.
+# close_table_directly) и перенос стола на новый номер целиком (table_group_
+# service.move_table).
+
+@bp.get("/table-groups/<int:club_id>")
+@require_kj
+def list_table_groups(club_id):
+    """
+    Номера сейчас занятых столов + Club.table_count — KJ Panel считает по
+    ним, какие номера свободны, чтобы предложить их для переноса стола
+    (см. карточку стола ниже). Сам перенос (move_table) список из
+    интерфейса не использует и перепроверяет занятость по БД заново —
+    это чисто подсказка для выпадающего списка, а не источник истины.
+    """
+    denied = _ensure_own_club(club_id)
+    if denied:
+        return denied
+    club = db.session.get(Club, club_id)
+    return api_ok({
+        "table_count": club.table_count if club else None,
+        "occupied_table_nos": sorted(table_group_service.list_occupied_table_nos(club_id)),
+    })
+
+
+@bp.get("/table-groups/<int:club_id>/<int:table_no>")
+@require_kj
+def get_table_group(club_id, table_no):
+    """
+    Карточка стола — полный список гостей за столом (TableGroupMember), в
+    отличие от доски "Заказы по столам", которая показывает только места с
+    активными заказами. Каждый участник — тем же форматом, что и в самой
+    карточке гостя (guest_directory_service.get_guest_detail), без списка
+    избранного — он не нужен на этом экране, только когда KJ провалится в
+    карточку конкретного гостя кликом.
+    """
+    denied = _ensure_own_club(club_id)
+    if denied:
+        return denied
+    group = table_group_service.get_group(club_id, table_no)
+    if group is None:
+        return api_error(404, "TABLE_EMPTY", "За этим столом сейчас никого нет")
+
+    members = (
+        TableGroupMember.query
+        .filter_by(club_id=club_id, table_no=table_no)
+        .order_by(TableGroupMember.joined_at.asc())
+        .all()
+    )
+    roster = []
+    for member in members:
+        try:
+            detail = guest_directory_service.get_guest_detail(club_id, member.guest_id)
+        except GuestDirectoryError:
+            # Строка членства есть, а собрать карточку гостя не вышло —
+            # не должно происходить в штатной работе (членство появляется
+            # вместе с первым выбором стола, см. docstring table_group_
+            # service.ensure_session_group_state), но карточку стола из-за
+            # одного гостя всё равно не роняем.
+            detail = {
+                "guest_id": str(member.guest_id), "display_name": None, "email": None,
+                "guest_type": "client", "table_no": table_no, "is_blocked": False,
+                "orders_evening": 0, "orders_week": 0, "orders_month": 0,
+                "vip_balance": None, "vip_cashback_percent": None,
+                "last_song_title": None, "last_artist": None, "last_activity_at": None,
+            }
+        detail.pop("favorites", None)
+        detail["is_admin"] = member.guest_id == group.admin_guest_id
+        roster.append(detail)
+
+    return api_ok({
+        "table_no": table_no,
+        "created_at": group.created_at.isoformat() if group.created_at else None,
+        "admin_guest_id": str(group.admin_guest_id),
+        "members": roster,
+    })
+
+
+@bp.put("/table-groups/<int:club_id>/<int:table_no>/close")
+@require_kj
+def close_table_group_route(club_id, table_no):
+    """Закрыть стол сразу с его карточки, без заявки гостя — см. docstring
+    table_close_service.close_table_directly. Тело как и у approve заявки:
+    {"hide_receipt": bool}, необязательно, по умолчанию False."""
+    denied = _ensure_own_club(club_id)
+    if denied:
+        return denied
+    payload = request.get_json(silent=True) or {}
+    hide_receipt = bool(payload.get("hide_receipt", False))
+
+    result = table_close_service.close_table_directly(club_id, table_no, g.kj, hide_receipt)
+    if result.outcome == "not_found":
+        return api_error(404, "TABLE_EMPTY", "За этим столом сейчас никого нет")
+    return api_ok({
+        "request": result.request.to_dict(),
+        "closed_order_ids": [order.id for order in result.closed_orders],
+    })
+
+
+@bp.put("/table-groups/<int:club_id>/<int:table_no>/move")
+@require_kj
+def move_table_group_route(club_id, table_no):
+    """
+    Перенести стол на новый номер целиком — см. docstring table_group_
+    service.move_table. Тело: {"new_table_no": int}. KJ Panel сама не даёт
+    выбрать занятый стол назначения (см. list_table_groups выше), поэтому
+    "занято" здесь — по сути только защита от гонки, а не ожидаемый путь.
+    """
+    denied = _ensure_own_club(club_id)
+    if denied:
+        return denied
+    payload = request.get_json(silent=True) or {}
+    new_table_no = payload.get("new_table_no")
+    if not isinstance(new_table_no, int) or isinstance(new_table_no, bool) or new_table_no < 1:
+        return api_error(400, "VALIDATION_ERROR", "new_table_no должен быть положительным числом")
+
+    club = db.session.get(Club, club_id)
+    if club and club.table_count and new_table_no > club.table_count:
+        return api_error(400, "VALIDATION_ERROR", f"В клубе только {club.table_count} столов")
+
+    result = table_group_service.move_table(club_id, table_no, new_table_no)
+    if result.outcome == "not_found":
+        return api_error(404, "TABLE_EMPTY", "За этим столом сейчас никого нет")
+    if result.outcome == "same_table":
+        return api_error(400, "VALIDATION_ERROR", "Новый номер совпадает с текущим")
+    if result.outcome == "destination_occupied":
+        return api_error(409, "TABLE_OCCUPIED", "Стол назначения уже занят другой компанией")
+
+    emit_table_group_moved(club_id, table_no, new_table_no)
+    return api_ok({
+        "table_no": new_table_no,
+        "member_guest_ids": [str(guest_id) for guest_id in result.member_guest_ids],
+    })
 
 
 # --- Статус моста VirtualDJ (запрос пользователя 2026-09: "переключатель"
