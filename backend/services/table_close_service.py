@@ -209,6 +209,73 @@ def approve_request(request_id: int, kj, hide_receipt: bool) -> DecisionResult:
     return DecisionResult(outcome="ok", request=req, closed_orders=closed_orders)
 
 
+def close_table_directly(club_id: int, table_no: int, kj, hide_receipt: bool) -> DecisionResult:
+    """
+    Закрытие стола сразу действием KJ из карточки стола в KJ Panel (запрос
+    пользователя 2026-09-28) — без предварительной заявки гостя. Та же
+    самая механика, что и approve_request выше (чек по ещё живым данным,
+    автоотклонение непроигранного, удаление TableGroup/участников/заявок):
+    KJ просто подтверждает закрытие от своего имени сразу, минуя шаг
+    "гость сначала попросил".
+
+    TableCloseRequest здесь всё равно создаётся — сразу в статусе approved,
+    а не пропускается вовсе — чтобы уже существующий поллинг чека у гостя
+    (pending_receipt_for_guest, см. routes/guest.py::me) сработал одинаково
+    для обоих путей закрытия, не зная о разнице между ними.
+
+    Если у этого стола на момент прямого закрытия уже висела НЕ решённая
+    заявка гостя (guest успел попросить закрыть, а KJ в это же время закрыл
+    с карточки стола) — она устарела, помечаем её отклонённой, чтобы не
+    зависала в списке "Заявки на закрытие стола" как будто ничего не
+    произошло.
+    """
+    group = table_group_service.get_group(club_id, table_no)
+    if group is None:
+        return DecisionResult(outcome="not_found")
+
+    # Читаем admin_guest_id ДО удаления группы ниже — bulk TableGroup.query
+    # .delete() истекает (expire) уже загруженный объект group в сессии, и
+    # обращение к его атрибутам после удаления попыталось бы перечитать уже
+    # не существующую строку (ObjectDeletedError).
+    admin_guest_id = group.admin_guest_id
+    member_guest_ids = [
+        str(m.guest_id)
+        for m in TableGroupMember.query.filter_by(club_id=club_id, table_no=table_no).all()
+    ]
+    receipt = _build_receipt(club_id, table_no, group.created_at)
+    closed_orders = close_table_orders(club_id, table_no)
+
+    TableJoinRequest.query.filter_by(club_id=club_id, table_no=table_no).delete()
+    TableGroupMember.query.filter_by(club_id=club_id, table_no=table_no).delete()
+    TableGroup.query.filter_by(club_id=club_id, table_no=table_no).delete()
+
+    req = TableCloseRequest(
+        club_id=club_id,
+        table_no=table_no,
+        requested_by_guest_id=admin_guest_id,
+        status=STATUS_TABLE_CLOSE_APPROVED,
+        hide_receipt=hide_receipt,
+        member_guest_ids=member_guest_ids,
+        receipt_json=receipt,
+        decided_at=_utcnow(),
+        decided_by=kj.id,
+    )
+    db.session.add(req)
+
+    stale = get_pending_for_table(club_id, table_no)
+    if stale is not None:
+        stale.status = STATUS_TABLE_CLOSE_REJECTED
+        stale.decided_at = _utcnow()
+        stale.decided_by = kj.id
+
+    db.session.commit()
+    emit_table_close_request_decided(req)
+    if stale is not None:
+        emit_table_close_request_decided(stale)
+
+    return DecisionResult(outcome="ok", request=req, closed_orders=closed_orders)
+
+
 def reject_request(request_id: int, kj) -> DecisionResult:
     req = db.session.get(TableCloseRequest, request_id)
     if req is None:
