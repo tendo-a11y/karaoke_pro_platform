@@ -115,6 +115,14 @@ body { margin: 0; background: var(--bg); color: var(--text); }
 
 h2 { font-size: 16px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
 
+/* ДОБАВЛЕНО (запрос пользователя 2026-09-29: "кнопка. Закрыть все столы.
+   просто закрывает вечер когда все ушли с караоке.") — шапка над сеткой
+   карточек столов с одной кнопкой конца вечера, см. OrdersBoard в
+   kj-panel/src/App.jsx. */
+.orders-board__header { display: flex; justify-content: flex-end; margin-bottom: 12px; }
+.orders-board__header .btn { flex: 0 0 auto; padding: 10px 16px; }
+.btn--danger { background: var(--panel-alt); color: var(--danger); border: 1px solid var(--danger); }
+
 /* Доп. ТЗ "KJ Pro", запрос пользователя 2026-09-18: сетка карточек столов
    на экране "Заказы" — см. OrdersBoard/OrdersBoardSlot, kj-panel/src/App.jsx.
    Заменила собой старый список заявок (.orders-grid/.order-card, до
