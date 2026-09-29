@@ -192,6 +192,24 @@ def test_replace_rejects_unknown_service(client, db, club):
     assert OrderChangeRequest.query.count() == 0
 
 
+def test_replace_rejects_kj_only_service(client, db, club):
+    """ДОБАВЛЕНО (2026-09-29, решение пользователя: категорию "Bonus"
+    может применить только KJ) — гость не должен получить её и через заявку
+    на замену песни, а не только через обычный заказ (см. test_vip.py::
+    test_guest_cannot_order_with_kj_only_service)."""
+    service = Service(club_id=club.club_id, name="Bonus", price=0, is_free=True, kj_only=True)
+    db.session.add(service)
+    db.session.commit()
+
+    session = _guest_session(client, club.club_id)
+    order = _create_order(client, session["token"])
+
+    resp = _replace(client, session["token"], order["id"], service_id=service.id)
+    assert resp.status_code == 404
+    assert resp.get_json()["error"] == "SERVICE_NOT_FOUND"
+    assert OrderChangeRequest.query.count() == 0
+
+
 def test_replace_rejects_service_id_wrong_type(client, db, club):
     session = _guest_session(client, club.club_id)
     order = _create_order(client, session["token"])
