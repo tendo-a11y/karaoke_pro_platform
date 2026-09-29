@@ -194,6 +194,25 @@ def test_services_listed_for_club(client, db, club):
     assert "Приоритет" in names
 
 
+def test_kj_only_service_not_listed_for_guest(client, db, club):
+    """ДОБАВЛЕНО (2026-09-29, решение пользователя: категорию "Bonus"
+    может применить только KJ, гость не должен её даже видеть в списке
+    категорий при заказе) — сама категория "Bonus" не участвует здесь
+    (заводится лениво только через /api/kj/categories, см.
+    test_categories.py), проверяем общий признак kj_only на произвольной
+    категории."""
+    hidden = Service(club_id=club.club_id, name="Bonus", price=Decimal("0"), is_free=True, kj_only=True)
+    visible = Service(club_id=club.club_id, name="Обычная", price=Decimal("35.00"), is_free=False)
+    db.session.add_all([hidden, visible])
+    db.session.commit()
+
+    session = _guest_session(client, club.club_id)
+    resp = client.get("/api/guest/services", headers=_headers(session["token"]))
+    names = [s["name"] for s in resp.get_json()["data"]]
+    assert "Обычная" in names
+    assert "Bonus" not in names
+
+
 def test_order_with_service_id_and_cashback_at_completion(client, db, club, kj):
     service = Service(club_id=club.club_id, name="Приоритет", price=Decimal("10.00"), is_free=False)
     db.session.add(service)
@@ -240,6 +259,46 @@ def test_order_with_service_id_and_cashback_at_completion(client, db, club, kj):
 
     me = client.get("/api/guest/me", headers=_headers(token)).get_json()["data"]
     assert me["vip"]["balance"] == 41.0
+
+
+def test_guest_cannot_order_with_kj_only_service(client, db, club):
+    """ДОБАВЛЕНО (2026-09-29, решение пользователя) — даже если гость
+    обойдёт список категорий и передаст id напрямую, заказ с категорией
+    kj_only=True не создаётся: для гостя это то же самое, что несуществующая
+    услуга."""
+    service = Service(club_id=club.club_id, name="Bonus", price=Decimal("0"), is_free=True, kj_only=True)
+    db.session.add(service)
+    db.session.commit()
+
+    session = _guest_session(client, club.club_id)
+    token = _link_google(client, session["token"]).get_json()["data"]["token"]
+
+    resp = client.post(
+        "/api/guest/order",
+        json={"song_title": "Песня", "service_id": service.id},
+        headers=_headers(token),
+    )
+    assert resp.status_code == 404
+    assert resp.get_json()["error"] == "SERVICE_NOT_FOUND"
+    assert Order.query.count() == 0
+
+
+def test_guest_cannot_favorite_kj_only_service(client, db, club):
+    """То же самое (2026-09-29), но для добавления в избранное — иначе
+    гость мог бы сохранить "Bonus" в избранное и заказать её оттуда в обход
+    проверки в create_order выше."""
+    service = Service(club_id=club.club_id, name="Bonus", price=Decimal("0"), is_free=True, kj_only=True)
+    db.session.add(service)
+    db.session.commit()
+
+    session = _guest_session(client, club.club_id)
+    resp = client.post(
+        "/api/guest/favorites",
+        json={"song_title": "Песня", "service_id": service.id},
+        headers=_headers(session["token"]),
+    )
+    assert resp.status_code == 404
+    assert resp.get_json()["error"] == "SERVICE_NOT_FOUND"
 
 
 def test_favorite_add_list_delete(client, db, club):
