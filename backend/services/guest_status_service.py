@@ -42,6 +42,31 @@ def set_table(club_id: int, guest_id: int, table_no: int | None) -> GuestStatus:
     return status
 
 
+def clear_all_tables(club_id: int) -> None:
+    """
+    "Закрыть все столы" (запрос пользователя 2026-09-29: закрытие стола —
+    это конец вечера, а не просто освобождение мест; у каждого гостя должен
+    заново спроситься стол в следующий раз, точно как в самый первый визит)
+    — сбрасывает table_no сразу у ВСЕХ гостей клуба, та же самая живая
+    правда, что и set_table(..., None) поштучно у одного гостя (см. выше,
+    "KJ снял со стола"), только массово.
+
+    Гость при этом не выходит из Google и не теряет имя/VIP/историю/
+    избранное — это всё живёт в GuestAccount, отдельно от GuestStatus, и
+    никак здесь не трогается. При следующем действии гостю просто заново
+    покажут экран "выберите стол и войдите через Google" (services/
+    table_close_service.py::close_all_tables) — тот же самый Google-аккаунт
+    сам вернёт всё старое (guest_account_service.link_google).
+
+    Тех, у кого ещё вообще нет строки GuestStatus (ни разу не проходили
+    через link_google), тут нечего сбрасывать — у них и так ещё нет
+    постоянного профиля, значит экран выбора стола показывается им и без
+    этого (см. App.jsx::activated).
+    """
+    GuestStatus.query.filter_by(club_id=club_id).update({"table_no": None})
+    db.session.commit()
+
+
 def block(club_id: int, guest_id: int, kj) -> GuestStatus:
     status = _get_or_create(club_id, guest_id)
     status.is_blocked = True
