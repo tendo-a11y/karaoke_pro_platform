@@ -236,7 +236,13 @@ def create_order():
         if not isinstance(service_id, int):
             return api_error(400, "VALIDATION_ERROR", "service_id должен быть числом")
         service = db.session.get(Service, service_id)
-        if service is None or service.club_id != g.club_id:
+        # kj_only (решение пользователя 2026-09-29: категорию "Bonus" может
+        # применить только KJ) — для гостя такая категория как бы не
+        # существует вообще, поэтому та же ошибка, что и для несуществующей
+        # услуги, а не отдельный код: список категорий (list_services ниже)
+        # её и так не показывает, это только защита на случай, если id всё
+        # же передали напрямую в обход формы.
+        if service is None or service.club_id != g.club_id or service.kj_only:
             return api_error(404, "SERVICE_NOT_FOUND", "Услуга не найдена")
 
     active_count = vip_service.count_active_orders(g.club_id, g.guest_id)
@@ -281,8 +287,13 @@ def create_order():
 def list_services():
     """Тарифы клуба (старое: services/venue_services, аудит п.12) — гость
     видит одинаковый прайс независимо от роли; VIP просто может расплатиться
-    балансом при завершении песни (billing_service), не-VIP — вне бота."""
-    services = Service.query.filter_by(club_id=g.club_id).order_by(Service.id.asc()).all()
+    балансом при завершении песни (billing_service), не-VIP — вне бота.
+
+    kj_only=True (категория "Bonus", решение пользователя 2026-09-29) сюда
+    не попадает вообще — такую категорию гость не должен ни видеть в форме
+    заказа, ни выбрать. Ставить её можно только самому KJ, отдельно на уже
+    принятом заказе (см. routes/kj.py::update_order_category_route)."""
+    services = Service.query.filter_by(club_id=g.club_id, kj_only=False).order_by(Service.id.asc()).all()
     return api_ok([s.to_dict() for s in services])
 
 
@@ -559,7 +570,10 @@ def add_favorite():
         if not isinstance(service_id, int):
             return api_error(400, "VALIDATION_ERROR", "service_id должен быть числом")
         service = db.session.get(Service, service_id)
-        if service is None or service.club_id != g.club_id:
+        # kj_only — см. create_order выше: если бы это разрешить, гость мог
+        # бы сохранить "Bonus" в избранное и потом заказать её через
+        # reorder_favorite в обход проверки в create_order.
+        if service is None or service.club_id != g.club_id or service.kj_only:
             return api_error(404, "SERVICE_NOT_FOUND", "Услуга не найдена")
 
     favorite = vip_service.add_favorite(g.club_id, g.guest_id, song_title, artist, service_id)
