@@ -1227,6 +1227,26 @@ def close_table_group_route(club_id, table_no):
     })
 
 
+@bp.put("/table-groups/<int:club_id>/close-all")
+@require_kj
+def close_all_table_groups_route(club_id):
+    """"Закрыть все столы" (запрос пользователя 2026-09-29: "просто закрывает
+    вечер, когда все ушли с караоке") — см. docstring table_close_service.
+    close_all_tables. Тело как и у close одного стола: {"hide_receipt":
+    bool}, необязательно, по умолчанию False — применяется одинаково ко
+    всем столам сразу, отдельно на каждый стол выбрать нельзя."""
+    denied = _ensure_own_club(club_id)
+    if denied:
+        return denied
+    payload = request.get_json(silent=True) or {}
+    hide_receipt = bool(payload.get("hide_receipt", False))
+
+    result = table_close_service.close_all_tables(club_id, g.kj, hide_receipt)
+    return api_ok({
+        "closed_table_nos": result.closed_table_nos,
+    })
+
+
 @bp.put("/table-groups/<int:club_id>/<int:table_no>/move")
 @require_kj
 def move_table_group_route(club_id, table_no):
