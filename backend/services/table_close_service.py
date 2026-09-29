@@ -38,7 +38,7 @@ from models import (
     Transaction,
     TX_TYPE_ORDER_PAYMENT,
 )
-from services import table_group_service
+from services import guest_status_service, table_group_service
 from services.vdj_service import close_table_orders
 from sockets import emit_table_close_request_created, emit_table_close_request_decided
 
@@ -350,34 +350,51 @@ class CloseAllResult:
         self.decisions = decisions  # список DecisionResult, по одному на стол
 
 
-def close_all_tables(club_id: int, kj, hide_receipt: bool) -> CloseAllResult:
+def close_all_tables(club_id: int, kj) -> CloseAllResult:
     """
     "Закрыть все столы" (запрос пользователя 2026-09-29: "кнопка. Закрыть
     все столы. просто закрывает вечер когда все ушли с караоке.") — конец
     вечера одним нажатием, чтобы не закрывать каждый занятый стол по
-    отдельности через карточку стола. Ровно то же самое действие, что и
-    close_table_directly выше (чек по ещё живым данным, автоотклонение
-    непроигранного, удаление TableGroup/участников/заявок), просто сразу
-    для каждого стола, где прямо сейчас кто-то есть.
+    отдельности через карточку стола.
 
-    Список "кто сейчас занят" берём из table_group_service.
-    list_occupied_table_nos — это тот же самый источник истины, что уже
-    использует KJ Panel в списке столов при переносе (см. routes/kj.py::
-    list_table_groups), а не отдельная догадка о занятости.
+    БЕЗ ЧЕКА, всегда (уточнение пользователя 2026-09-29: "столы, на которые
+    требуются чеки, я закрываю отдельно [обычной кнопкой закрытия одного
+    стола]. Потом отдельной кнопкой я закрываю столы. Всё." — то есть к
+    моменту нажатия этой кнопки чеки уже выданы кому нужно вручную,
+    остаётся просто зачистить оставшиеся столы) — hide_receipt здесь не
+    параметр снаружи, а всегда True, в отличие от close_table_directly
+    (карточка одного стола), где KJ сам решает, показывать чек или нет.
+
+    Помимо самого закрытия (автоотклонение непроигранного, удаление
+    TableGroup/участников/заявок — та же механика, что и close_table_directly
+    выше), это ещё и конец вечера для КАЖДОГО гостя клуба: guest_status_
+    service.clear_all_tables сбрасывает у всех "закреплённый стол", чтобы в
+    следующий раз каждый заново увидел экран "выберите стол и войдите через
+    Google" — но с тем же Google-аккаунтом, так что имя/VIP/история/
+    избранное возвращаются сами (решение пользователя 2026-09-29, вариант
+    "1"). Это касается ВСЕХ гостей клуба, а не только тех, кто сидел за
+    только что закрытыми столами — "закрыть все столы" здесь означает
+    "клуб закрывается на сегодня", а не только "эти конкретные столы опустели".
+
+    Список "кто сейчас занят" (какие столы вообще нужно закрыть) берём из
+    table_group_service.list_occupied_table_nos — тот же самый источник
+    истины, что уже использует KJ Panel в списке столов при переносе (см.
+    routes/kj.py::list_table_groups), а не отдельная догадка о занятости.
 
     Идёт по столам по одному (а не одним bulk-запросом к БД) — каждый стол
-    может успеть сыграть разное число песен и должен получить свой
-    собственный чек, а close_table_directly уже содержит всю эту логику
-    проверенной и протестированной; здесь её незачем дублировать.
+    может успеть сыграть разное число песен, а close_table_directly уже
+    содержит всю эту логику проверенной и протестированной; здесь её
+    незачем дублировать.
     """
     table_nos = sorted(table_group_service.list_occupied_table_nos(club_id))
     decisions = []
     closed_table_nos = []
     for table_no in table_nos:
-        result = close_table_directly(club_id, table_no, kj, hide_receipt)
+        result = close_table_directly(club_id, table_no, kj, hide_receipt=True)
         decisions.append(result)
         if result.outcome == "ok":
             closed_table_nos.append(table_no)
+    guest_status_service.clear_all_tables(club_id)
     return CloseAllResult(closed_table_nos=closed_table_nos, decisions=decisions)
 
 
