@@ -341,6 +341,46 @@ def close_table_directly(club_id: int, table_no: int, kj, hide_receipt: bool) ->
     return DecisionResult(outcome="ok", request=req, closed_orders=closed_orders)
 
 
+class CloseAllResult:
+    """Итог "Закрыть все столы" — одно outcome="ok" всегда (пустой список
+    столов — тоже нормальный, не ошибочный исход, см. докстринг ниже)."""
+
+    def __init__(self, closed_table_nos, decisions):
+        self.closed_table_nos = closed_table_nos
+        self.decisions = decisions  # список DecisionResult, по одному на стол
+
+
+def close_all_tables(club_id: int, kj, hide_receipt: bool) -> CloseAllResult:
+    """
+    "Закрыть все столы" (запрос пользователя 2026-09-29: "кнопка. Закрыть
+    все столы. просто закрывает вечер когда все ушли с караоке.") — конец
+    вечера одним нажатием, чтобы не закрывать каждый занятый стол по
+    отдельности через карточку стола. Ровно то же самое действие, что и
+    close_table_directly выше (чек по ещё живым данным, автоотклонение
+    непроигранного, удаление TableGroup/участников/заявок), просто сразу
+    для каждого стола, где прямо сейчас кто-то есть.
+
+    Список "кто сейчас занят" берём из table_group_service.
+    list_occupied_table_nos — это тот же самый источник истины, что уже
+    использует KJ Panel в списке столов при переносе (см. routes/kj.py::
+    list_table_groups), а не отдельная догадка о занятости.
+
+    Идёт по столам по одному (а не одним bulk-запросом к БД) — каждый стол
+    может успеть сыграть разное число песен и должен получить свой
+    собственный чек, а close_table_directly уже содержит всю эту логику
+    проверенной и протестированной; здесь её незачем дублировать.
+    """
+    table_nos = sorted(table_group_service.list_occupied_table_nos(club_id))
+    decisions = []
+    closed_table_nos = []
+    for table_no in table_nos:
+        result = close_table_directly(club_id, table_no, kj, hide_receipt)
+        decisions.append(result)
+        if result.outcome == "ok":
+            closed_table_nos.append(table_no)
+    return CloseAllResult(closed_table_nos=closed_table_nos, decisions=decisions)
+
+
 def reject_request(request_id: int, kj) -> DecisionResult:
     req = db.session.get(TableCloseRequest, request_id)
     if req is None:
