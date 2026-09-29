@@ -367,6 +367,18 @@ class Service(db.Model):
     description = db.Column(db.Text, nullable=True)
     price = db.Column(db.Numeric(10, 2), nullable=False, default=0)
     is_free = db.Column(db.Boolean, nullable=False, default=False)
+    # ДОБАВЛЕНО (2026-09-29, решение пользователя: категория "Bonus" должна
+    # быть доступна только роли 2 (KJ) — гости не должны её видеть в списке
+    # категорий и не должны иметь возможность заказать с ней песню, даже
+    # напрямую указав её id в запросе). Общий флаг, а не привязка по имени
+    # "BONUS": один раз выставленный на категории, он не слетает, даже если
+    # KJ потом переименует эту категорию (см. миграцию
+    # a47725a2b8ae_add_services_kj_only.py — она проставляет его на уже
+    # существующих категориях с именем "BONUS" задним числом). KJ по-прежнему
+    # может назначить такую категорию заказу сам (routes/kj.py — там
+    # ограничений нет и не было) — под запрет попадает только выбор категории
+    # самим гостем.
+    kj_only = db.Column(db.Boolean, nullable=False, default=False)
 
     club = db.relationship("Club")
 
@@ -378,6 +390,7 @@ class Service(db.Model):
             "description": self.description,
             "price": float(self.price) if self.price is not None else None,
             "is_free": self.is_free,
+            "kj_only": self.kj_only,
         }
 
 
