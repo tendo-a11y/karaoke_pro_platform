@@ -251,10 +251,11 @@ def approve_request(request_id: int, kj, hide_receipt: bool) -> DecisionResult:
         emit_table_close_request_decided(req)
         return DecisionResult(outcome="ok", request=req)
 
-    member_guest_ids = [
-        str(m.guest_id)
+    member_guest_id_ints = [
+        m.guest_id
         for m in TableGroupMember.query.filter_by(club_id=req.club_id, table_no=req.table_no).all()
     ]
+    member_guest_ids = [str(gid) for gid in member_guest_id_ints]
     receipt = _build_receipt(req.club_id, req.table_no, group.created_at)
     closed_orders = close_table_orders(req.club_id, req.table_no)
 
@@ -270,6 +271,24 @@ def approve_request(request_id: int, kj, hide_receipt: bool) -> DecisionResult:
     req.decided_by = kj.id
     db.session.commit()
     emit_table_close_request_decided(req)
+
+    # ДОБАВЛЕНО (2026-09-29, жалоба пользователя: карточка стола "ни в одной
+    # из карточек ничего нет" — при починке (см. миграцию 92cb15093592)
+    # всплыл отдельный, самостоятельный баг рядом: эта функция удаляет
+    # TableGroup/TableGroupMember (живую "компанию" за столом), но раньше
+    # никогда не трогала GuestStatus.table_no — а это отдельный, свой
+    # "текущий живой стол" гостя, который показывает его собственная
+    # карточка гостя (guest_directory_service.get_guest_detail) и общий
+    # список гостей. Из-за этого после закрытия стола гость мог продолжать
+    # числиться "за столом N" в своей карточке, пока не зайдёт заново через
+    # Google (routes/guest.py::link_google — единственное место, которое
+    # само перезаписывает GuestStatus.table_no при обычном входе). Обнуляем
+    # его здесь явно, тем же способом, что и guest_status_service.close_table
+    # для одного гостя — каждому, кто реально сидел за этим столом
+    # (member_guest_id_ints собран ДО удаления TableGroupMember выше, пока
+    # список ещё доступен).
+    for guest_id in member_guest_id_ints:
+        guest_status_service.set_table(req.club_id, guest_id, None)
 
     return DecisionResult(outcome="ok", request=req, closed_orders=closed_orders)
 
@@ -303,10 +322,11 @@ def close_table_directly(club_id: int, table_no: int, kj, hide_receipt: bool) ->
     # обращение к его атрибутам после удаления попыталось бы перечитать уже
     # не существующую строку (ObjectDeletedError).
     admin_guest_id = group.admin_guest_id
-    member_guest_ids = [
-        str(m.guest_id)
+    member_guest_id_ints = [
+        m.guest_id
         for m in TableGroupMember.query.filter_by(club_id=club_id, table_no=table_no).all()
     ]
+    member_guest_ids = [str(gid) for gid in member_guest_id_ints]
     receipt = _build_receipt(club_id, table_no, group.created_at)
     closed_orders = close_table_orders(club_id, table_no)
 
@@ -337,6 +357,13 @@ def close_table_directly(club_id: int, table_no: int, kj, hide_receipt: bool) ->
     emit_table_close_request_decided(req)
     if stale is not None:
         emit_table_close_request_decided(stale)
+
+    # ДОБАВЛЕНО (2026-09-29) — см. подробный комментарий в approve_request
+    # выше про тот же самый пробел: без этого GuestStatus.table_no (живой
+    # стол гостя, который видит его собственная карточка) оставался бы
+    # указывать на уже закрытый стол до следующего входа гостя через Google.
+    for guest_id in member_guest_id_ints:
+        guest_status_service.set_table(club_id, guest_id, None)
 
     return DecisionResult(outcome="ok", request=req, closed_orders=closed_orders)
 
