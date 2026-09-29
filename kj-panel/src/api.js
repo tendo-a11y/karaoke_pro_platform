@@ -218,9 +218,13 @@ export const api = {
   // просто закрывает вечер когда все ушли с караоке.") — то же самое
   // закрытие, что и closeTableGroup выше, но сразу для всех занятых столов
   // клуба одним нажатием (backend/routes/kj.py::close_all_table_groups_route).
-  closeAllTableGroups: (token, clubId, hideReceipt) =>
+  // Без hideReceipt — в отличие от закрытия одного стола, эта кнопка НИКОГДА
+  // не показывает чек (уточнение пользователя: чеки по нужным столам KJ уже
+  // выдал вручную ДО нажатия этой кнопки, см. докстринг table_close_service.
+  // close_all_tables), тела запроса вообще нет.
+  closeAllTableGroups: (token, clubId) =>
     request(`/api/kj/table-groups/${clubId}/close-all`, {
-      method: "PUT", token, body: { hide_receipt: hideReceipt },
+      method: "PUT", token,
     }),
 };
 
