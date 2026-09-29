@@ -18,6 +18,7 @@ from decimal import Decimal
 
 from extensions import db as _db
 from models import (
+    GuestStatus,
     STATUS_COMPLETED,
     STATUS_QUEUED,
     STATUS_REJECTED,
@@ -199,6 +200,48 @@ def test_approve_closes_table_builds_receipt_and_rejects_unplayed_orders(client,
     assert new_session["table_group_status"] == "admin"
 
 
+# --- Подтверждение заявки гостя тоже освобождает живой стол гостя (GuestStatus) ---
+
+def test_approve_clears_guest_status_table_for_every_member(client, db, club, kj):
+    """
+    ДОБАВЛЕНО (2026-09-29, отдельная находка при починке карточки стола) —
+    та же проверка, что и test_table_card.py::
+    test_kj_close_directly_clears_guest_status_table, но для пути "гость сам
+    попросил закрыть, KJ подтвердил" (approve_request), а не прямого
+    закрытия с карточки (close_table_directly). Раньше оба пути удаляли
+    TableGroup/TableGroupMember, но не трогали GuestStatus.table_no —
+    гость после закрытия продолжал бы числиться "за столом N" в своей
+    собственной карточке и в /api/guest/me до следующего входа через Google.
+    """
+    admin_session = _session(client, club.club_id, table_no=29)
+    member_session = _session(client, club.club_id, table_no=29)
+    request_id = client.get(
+        "/api/guest/table-group", headers=_headers(admin_session["token"]),
+    ).get_json()["data"]["pending_requests"][0]["id"]
+    client.post(
+        f"/api/guest/table-group/join-requests/{request_id}/approve", headers=_headers(admin_session["token"]),
+    )
+
+    req = client.post(
+        "/api/guest/table-group/request-close", headers=_headers(admin_session["token"]),
+    ).get_json()["data"]
+    resp = client.put(f"/api/kj/table-close-requests/{req['id']}/approve", json={}, headers=kj["headers"])
+    assert resp.status_code == 200
+
+    with client.application.app_context():
+        admin_status = GuestStatus.query.filter_by(
+            club_id=club.club_id, telegram_user_id=int(admin_session["guest_id"]),
+        ).first()
+        member_status = GuestStatus.query.filter_by(
+            club_id=club.club_id, telegram_user_id=int(member_session["guest_id"]),
+        ).first()
+        assert admin_status.table_no is None
+        assert member_status.table_no is None
+
+    assert _me(client, admin_session["token"])["table_no"] is None
+    assert _me(client, member_session["token"])["table_no"] is None
+
+
 # --- VIP и обычный гость за одним столом: чек по гостям, без двойной оплаты ---
 
 def test_receipt_splits_by_guest_and_excludes_already_paid(client, db, club, kj):
@@ -350,8 +393,16 @@ def test_visible_receipt_delivered_to_guest_via_me(client, db, club, kj):
     me = _me(client, admin_session["token"])
     assert me["table_close_receipt"] is not None
     assert me["table_close_receipt"]["table_no"] == 27
-    # Групповой стол при этом уже удалён — статус закономерно "not_joined".
-    assert me["table_group_status"] == "not_joined"
+    # ИЗМЕНЕНО (2026-09-29, см. approve_request в table_close_service.py):
+    # закрытие стола теперь явно обнуляет и GuestStatus.table_no гостя, не
+    # только TableGroup — раньше он оставался "за столом 27" в /me до
+    # следующего входа через Google, хотя стол уже закрыт. Раз живого стола
+    # больше нет вообще (g.table_no is None), считать статус группы для
+    # него уже не имеет смысла — table_group_status тоже None, а не
+    # "not_joined" (которое подразумевало бы "стол ещё есть, но я не в
+    # его группе").
+    assert me["table_no"] is None
+    assert me["table_group_status"] is None
 
 
 # --- Список ожидающих заявок в KJ Panel — только своего клуба, только pending ---
