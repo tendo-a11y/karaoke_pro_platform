@@ -2127,6 +2127,27 @@ function OrdersBoard({ token, clubId, socket, onOpenGuest, onOpenTable }) {
     }
   }
 
+  // ДОБАВЛЕНО (запрос пользователя 2026-09-29, "кнопка. Закрыть все столы.
+  // просто закрывает вечер когда все ушли с караоке.") — конец вечера одним
+  // нажатием вместо закрытия каждого занятого стола по отдельности с его
+  // карточки (см. TableGroupCard::handleClose). Тот же самый api-вызов
+  // closeTableGroup для каждого стола сразу, см. backend/services/
+  // table_close_service.py::close_all_tables.
+  const [closingAll, setClosingAll] = useState(false);
+
+  async function handleCloseAllTables() {
+    setClosingAll(true);
+    setActionError(null);
+    try {
+      await api.closeAllTableGroups(token, clubId, false);
+      await reload();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setClosingAll(false);
+    }
+  }
+
   if (loadError) {
     return <div className="banner banner--error">{loadError}</div>;
   }
@@ -2139,6 +2160,16 @@ function OrdersBoard({ token, clubId, socket, onOpenGuest, onOpenTable }) {
 
   return (
     <div className="orders-board">
+      <div className="orders-board__header">
+        <button
+          type="button"
+          className="btn btn--danger"
+          disabled={closingAll}
+          onClick={handleCloseAllTables}
+        >
+          🌙 {closingAll ? "Закрываем…" : "Закрыть все столы"}
+        </button>
+      </div>
       {actionError && <div className="banner banner--error">{actionError}</div>}
       <div className="orders-board__grid">
         {board.map((table) => {
