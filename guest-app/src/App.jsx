@@ -1959,6 +1959,16 @@ export default function App() {
                 replaceBusy={replaceBusyOrderId === o.id}
                 onCancel={handleCancelOrder}
                 cancelBusy={cancelBusyOrderId === o.id}
+                // ДОБАВЛЕНО (2026-09-29, жалоба пользователя "нет
+                // возможности добавить песню в избранное из Мои заказы и из
+                // истории"): кнопка "➕ В избранное" в OrderRow уже была
+                // готова (как и handleAddFavorite ниже) — не хватало только
+                // этих двух свойств, чтобы она показалась в обоих списках
+                // (эта секция рендерит и "Мои заказы", и "Историю" —
+                // переключение между ними меняет только сам список orders).
+                // Показывается у каждой песни без исключений.
+                onFavorite={handleAddFavorite}
+                favoriteBusy={favoriteBusyOrderId === o.id}
               />
             ))}
           </ul>
