@@ -176,8 +176,17 @@ def test_kj_close_directly_resolves_stale_guest_request(client, db, kj, club):
 
 
 # --- "Закрыть все столы" (запрос пользователя 2026-09-29: "просто закрывает
-# вечер, когда все ушли с караоке") — то же самое закрытие, что и у одного
-# стола (close_table_directly), только сразу для всех занятых столов клуба.
+# вечер, когда все ушли с караоке") — та же механика закрытия, что и у
+# одного стола (close_table_directly), для всех занятых столов клуба сразу,
+# но с двумя отличиями, которые здесь и проверяются (уточнения пользователя
+# 2026-09-29):
+#   - БЕЗ чека — "столы, на которые требуются чеки, я закрываю отдельно
+#     [обычной кнопкой одного стола]. Потом отдельной кнопкой я закрываю
+#     столы" — эта кнопка чек не показывает никогда;
+#   - у КАЖДОГО гостя клуба (не только тех, кто сидел за только что
+#     закрытыми столами) сбрасывается стол — "клуб закрывается", гость
+#     заново увидит экран выбора стола при следующем визите, но тем же
+#     Google-аккаунтом, так что имя/VIP/история не теряются (вариант "1").
 
 def test_close_all_tables_closes_every_occupied_table(client, db, kj, club):
     admin_60 = _session(client, club.club_id, table_no=60)
@@ -194,15 +203,42 @@ def test_close_all_tables_closes_every_occupied_table(client, db, kj, club):
         assert TableGroup.query.filter_by(club_id=1, table_no=60).first() is None
         assert TableGroup.query.filter_by(club_id=1, table_no=61).first() is None
 
+    # Без чека — в отличие от закрытия одного стола (test_table_close.py и
+    # соседние тесты этого файла), где table_close_receipt приходит гостю.
     me_60 = _me(client, admin_60["token"])
-    assert me_60["table_close_receipt"] is not None
+    assert me_60["table_close_receipt"] is None
     me_61 = _me(client, admin_61["token"])
-    assert me_61["table_close_receipt"]["receipt"]["song_count"] == 1
+    assert me_61["table_close_receipt"] is None
+
+    # Стол сброшен у обоих — токен всё ещё помнит старый номер, но живая
+    # проверка (GuestStatus, см. auth.py::require_guest) главнее токена.
+    assert me_60["table_no"] is None
+    assert me_61["table_no"] is None
+
+
+def test_close_all_tables_resets_every_guest_even_without_live_table_group(client, db, kj, club):
+    """"Закрыть все столы" = конец вечера для ВСЕХ гостей клуба, а не только
+    тех, кто сидел за только что закрытыми столами (решение пользователя
+    2026-09-29) — гость, чей стол уже опустел раньше (например, KJ снял его
+    со стола карточкой гостя) и у которого сейчас вообще нет TableGroup, всё
+    равно должен заново увидеть выбор стола."""
+    lone_admin = _session(client, club.club_id, table_no=70)
+
+    with client.application.app_context():
+        TableGroup.query.filter_by(club_id=1, table_no=70).delete()
+        _db.session.commit()
+
+    resp = client.put("/api/kj/table-groups/1/close-all", headers=kj["headers"], json={})
+    assert resp.status_code == 200
+    assert resp.get_json()["data"]["closed_table_nos"] == []
+
+    me = _me(client, lone_admin["token"])
+    assert me["table_no"] is None
 
 
 def test_close_all_tables_does_not_touch_other_club(client, db, kj, other_club):
-    """Закрытие всех столов клуба kj не должно трогать стол в другом клубе —
-    та же изоляция по club_id, что и everywhere else."""
+    """Закрытие всех столов клуба kj не должно трогать стол или гостя в
+    другом клубе — та же изоляция по club_id, что и everywhere else."""
     other_session = _session(client, other_club.club_id, table_no=62)
 
     resp = client.put("/api/kj/table-groups/1/close-all", headers=kj["headers"], json={})
@@ -211,6 +247,9 @@ def test_close_all_tables_does_not_touch_other_club(client, db, kj, other_club):
 
     with client.application.app_context():
         assert TableGroup.query.filter_by(club_id=other_club.club_id, table_no=62).first() is not None
+
+    other_me = _me(client, other_session["token"])
+    assert other_me["table_no"] == 62
 
 
 def test_close_all_tables_with_nothing_occupied_is_ok(client, db, kj, club):
