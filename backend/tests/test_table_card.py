@@ -175,6 +175,55 @@ def test_kj_close_directly_resolves_stale_guest_request(client, db, kj, club):
     assert all(r["id"] != request_id for r in pending_list)
 
 
+# --- "Закрыть все столы" (запрос пользователя 2026-09-29: "просто закрывает
+# вечер, когда все ушли с караоке") — то же самое закрытие, что и у одного
+# стола (close_table_directly), только сразу для всех занятых столов клуба.
+
+def test_close_all_tables_closes_every_occupied_table(client, db, kj, club):
+    admin_60 = _session(client, club.club_id, table_no=60)
+    admin_61 = _session(client, club.club_id, table_no=61)
+    _order(db, club.club_id, 60, int(admin_60["guest_id"]), STATUS_QUEUED, "Ещё не сыграна")
+    _order(db, club.club_id, 61, int(admin_61["guest_id"]), STATUS_COMPLETED, "Сыграна")
+
+    resp = client.put("/api/kj/table-groups/1/close-all", headers=kj["headers"], json={})
+    assert resp.status_code == 200
+    data = resp.get_json()["data"]
+    assert set(data["closed_table_nos"]) == {60, 61}
+
+    with client.application.app_context():
+        assert TableGroup.query.filter_by(club_id=1, table_no=60).first() is None
+        assert TableGroup.query.filter_by(club_id=1, table_no=61).first() is None
+
+    me_60 = _me(client, admin_60["token"])
+    assert me_60["table_close_receipt"] is not None
+    me_61 = _me(client, admin_61["token"])
+    assert me_61["table_close_receipt"]["receipt"]["song_count"] == 1
+
+
+def test_close_all_tables_does_not_touch_other_club(client, db, kj, other_club):
+    """Закрытие всех столов клуба kj не должно трогать стол в другом клубе —
+    та же изоляция по club_id, что и everywhere else."""
+    other_session = _session(client, other_club.club_id, table_no=62)
+
+    resp = client.put("/api/kj/table-groups/1/close-all", headers=kj["headers"], json={})
+    assert resp.status_code == 200
+    assert resp.get_json()["data"]["closed_table_nos"] == []
+
+    with client.application.app_context():
+        assert TableGroup.query.filter_by(club_id=other_club.club_id, table_no=62).first() is not None
+
+
+def test_close_all_tables_with_nothing_occupied_is_ok(client, db, kj, club):
+    resp = client.put("/api/kj/table-groups/1/close-all", headers=kj["headers"], json={})
+    assert resp.status_code == 200
+    assert resp.get_json()["data"]["closed_table_nos"] == []
+
+
+def test_close_all_tables_forbidden_for_other_club_url(client, db, other_club, kj):
+    resp = client.put(f"/api/kj/table-groups/{other_club.club_id}/close-all", headers=kj["headers"], json={})
+    assert resp.status_code == 403
+
+
 # --- Перенос стола ---
 
 def test_move_table_moves_group_members_and_orders(client, db, kj, club):
