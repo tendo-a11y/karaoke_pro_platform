@@ -21,8 +21,19 @@ def test_requires_auth(client, db, club):
 def test_list_seeds_defaults_when_empty(client, db, club, kj):
     resp = client.get(f"/api/kj/categories/{club.club_id}", headers=_headers(kj["token"]))
     assert resp.status_code == 200
-    names = [c["name"] for c in resp.get_json()["data"]]
+    data = resp.get_json()["data"]
+    names = [c["name"] for c in data]
     assert names == ["KARAOKE", "KARAOKE BACK", "INTERNET", "KJ VOCAL", "CRAZY", "BONUS"]
+
+    # ДОБАВЛЕНО (2026-09-29, решение пользователя): "Bonus" по умолчанию
+    # помечена как доступная только KJ — гость не должен её видеть/выбрать
+    # (см. test_vip.py::test_kj_only_service_not_listed_for_guest и
+    # test_guest_cannot_order_with_kj_only_service). Остальные категории
+    # этим флагом не тронуты.
+    bonus = next(c for c in data if c["name"] == "BONUS")
+    assert bonus["kj_only"] is True
+    others = [c for c in data if c["name"] != "BONUS"]
+    assert all(c["kj_only"] is False for c in others)
 
     # Второй вызов не должен задваивать записи.
     resp2 = client.get(f"/api/kj/categories/{club.club_id}", headers=_headers(kj["token"]))
