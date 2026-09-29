@@ -135,6 +135,43 @@ def test_kj_closes_table_directly_without_guest_request(client, db, kj, club):
     assert me["table_close_receipt"]["receipt"]["song_count"] == 1
 
 
+def test_kj_close_directly_clears_guest_status_table(client, db, kj, club):
+    """
+    ДОБАВЛЕНО (2026-09-29, отдельная находка при починке карточки стола):
+    закрытие стола прямо с карточки должно освобождать не только
+    TableGroup/TableGroupMember, но и GuestStatus.table_no у каждого, кто
+    там сидел — иначе гость после закрытия продолжал бы числиться "за
+    столом N" в своей собственной карточке (guest_directory_service.
+    get_guest_detail) и в /api/guest/me, пока не зайдёт заново через
+    Google. Проверяем и на админе, и на обычном участнике (не только на
+    том, чей id использован для requested_by_guest_id).
+    """
+    admin_session = _session(client, club.club_id, table_no=54)
+    member_session = _session(client, club.club_id, table_no=54)
+    request_id = client.get(
+        "/api/guest/table-group", headers=_headers(admin_session["token"]),
+    ).get_json()["data"]["pending_requests"][0]["id"]
+    client.post(
+        f"/api/guest/table-group/join-requests/{request_id}/approve", headers=_headers(admin_session["token"]),
+    )
+
+    resp = client.put("/api/kj/table-groups/1/54/close", headers=kj["headers"], json={})
+    assert resp.status_code == 200
+
+    with client.application.app_context():
+        admin_status = GuestStatus.query.filter_by(
+            club_id=club.club_id, telegram_user_id=int(admin_session["guest_id"]),
+        ).first()
+        member_status = GuestStatus.query.filter_by(
+            club_id=club.club_id, telegram_user_id=int(member_session["guest_id"]),
+        ).first()
+        assert admin_status.table_no is None
+        assert member_status.table_no is None
+
+    assert _me(client, admin_session["token"])["table_no"] is None
+    assert _me(client, member_session["token"])["table_no"] is None
+
+
 def test_kj_close_directly_hide_receipt(client, db, kj, club):
     admin_session = _session(client, club.club_id, table_no=51)
     guest_id = int(admin_session["guest_id"])
