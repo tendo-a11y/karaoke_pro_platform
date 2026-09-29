@@ -2139,7 +2139,7 @@ function OrdersBoard({ token, clubId, socket, onOpenGuest, onOpenTable }) {
     setClosingAll(true);
     setActionError(null);
     try {
-      await api.closeAllTableGroups(token, clubId, false);
+      await api.closeAllTableGroups(token, clubId);
       await reload();
     } catch (err) {
       setActionError(err instanceof ApiError ? err.message : String(err));
