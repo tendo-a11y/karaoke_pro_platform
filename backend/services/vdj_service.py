@@ -477,7 +477,10 @@ def request_order_replace(order_id: int, guest_id: int, club_id: int, song_title
 
     if service_id is not None:
         service = db.session.get(Service, service_id)
-        if service is None or service.club_id != club_id:
+        # kj_only (решение пользователя 2026-09-29: категорию "Bonus" может
+        # применить только KJ) — гость не должен получить её и через заявку
+        # на замену песни, а не только через обычный create_order.
+        if service is None or service.club_id != club_id or service.kj_only:
             return None, "service_not_found"
 
     existing = get_pending_change_request(order_id)
