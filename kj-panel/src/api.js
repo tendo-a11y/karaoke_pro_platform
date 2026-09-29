@@ -214,6 +214,14 @@ export const api = {
     request(`/api/kj/table-groups/${clubId}/${tableNo}/move`, {
       method: "PUT", token, body: { new_table_no: newTableNo },
     }),
+  // ДОБАВЛЕНО (запрос пользователя 2026-09-29, "кнопка. Закрыть все столы.
+  // просто закрывает вечер когда все ушли с караоке.") — то же самое
+  // закрытие, что и closeTableGroup выше, но сразу для всех занятых столов
+  // клуба одним нажатием (backend/routes/kj.py::close_all_table_groups_route).
+  closeAllTableGroups: (token, clubId, hideReceipt) =>
+    request(`/api/kj/table-groups/${clubId}/close-all`, {
+      method: "PUT", token, body: { hide_receipt: hideReceipt },
+    }),
 };
 
 export { ApiError, BACKEND_URL };
