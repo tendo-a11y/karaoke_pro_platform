@@ -1232,16 +1232,15 @@ def close_table_group_route(club_id, table_no):
 def close_all_table_groups_route(club_id):
     """"Закрыть все столы" (запрос пользователя 2026-09-29: "просто закрывает
     вечер, когда все ушли с караоке") — см. docstring table_close_service.
-    close_all_tables. Тело как и у close одного стола: {"hide_receipt":
-    bool}, необязательно, по умолчанию False — применяется одинаково ко
-    всем столам сразу, отдельно на каждый стол выбрать нельзя."""
+    close_all_tables. Без тела и без чека (уточнение пользователя: "столы,
+    на которые требуются чеки, я закрываю отдельно. Потом отдельной кнопкой
+    я закрываю столы") — в отличие от закрытия одного стола, здесь нет
+    выбора "показать чек или нет", чек не показывается никогда."""
     denied = _ensure_own_club(club_id)
     if denied:
         return denied
-    payload = request.get_json(silent=True) or {}
-    hide_receipt = bool(payload.get("hide_receipt", False))
 
-    result = table_close_service.close_all_tables(club_id, g.kj, hide_receipt)
+    result = table_close_service.close_all_tables(club_id, g.kj)
     return api_ok({
         "closed_table_nos": result.closed_table_nos,
     })
