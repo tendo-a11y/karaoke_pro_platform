@@ -12,7 +12,6 @@ from services.category_service import CategoryServiceError
 from services.google_auth_service import GoogleAuthError, verify_google_credential
 from services.table_board_service import (
     QUEUE_MODE_CHOICES,
-    QUEUE_MODE_SEQUENTIAL,
     get_orders_board,
     get_queue_mode,
     get_queue_start_table,
@@ -169,12 +168,12 @@ _OUTCOME_HTTP = {
 @require_kj
 def confirm(order_id):
     # ДОБАВЛЕНО (запрос пользователя: KJ не должен принимать заказы, пока
-    # не выбрано, с какого стола начинается очередь) — актуально только для
-    # кругового ("последовательный") режима показа очереди, см. докстринг
-    # QUEUE_MODE_SEQUENTIAL в services/table_board_service.py: в ручном
-    # режиме это поле ни на что не влияет, блокировать там нечего.
+    # не выбрано, с какого стола начинается очередь) — проверяется всегда,
+    # независимо от режима показа очереди (QUEUE_MODE_SEQUENTIAL в
+    # services/table_board_service.py — это только про отображение порядка
+    # на карточках, а это отдельная и обязательная для любого режима проверка).
     club = db.session.get(Club, g.kj.club_id)
-    if club is not None and get_queue_mode(club) == QUEUE_MODE_SEQUENTIAL and not club.queue_start_table:
+    if club is not None and not club.queue_start_table:
         return api_error(
             400,
             "QUEUE_START_TABLE_REQUIRED",
