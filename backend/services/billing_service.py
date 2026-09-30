@@ -31,11 +31,14 @@ fallback от KJ (§14). Поэтому:
 """
 from decimal import Decimal
 
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 
 from extensions import db
 from models import (
     Order,
+    STATUS_COMPLETED,
+    STATUS_REJECTED,
     Service,
     VipClient,
     Transaction,
@@ -176,3 +179,117 @@ def charge_at_completion(order: Order) -> ChargeResult:
         )
 
     return ChargeResult(charged=True, charge_amount=charge_amount, cashback_amount=cashback_amount)
+
+
+def _get_vip_client(club_id, guest_id):
+    """
+    Общий поиск VIP-счёта гостя в клубе — то же самое, что уже делает
+    charge_at_completion() выше, вынесено отдельно, потому что теперь этот
+    же поиск нужен ДО создания заказа (проверка баланса, см.
+    check_vip_balance ниже), а не только в момент списания.
+    """
+    return (
+        VipClient.query
+        .filter_by(club_id=club_id, telegram_user_id=guest_id)
+        .first()
+    )
+
+
+def _committed_unpaid_total(club_id, guest_id):
+    """
+    Сумма стоимости уже заказанных, но ещё не списанных песен этого гостя
+    (запрос пользователя 2026-09-30): раньше деньги у VIP списывались по
+    кнопке "Готово" сразу за каждую сыгранную песню, поэтому баланс всегда
+    был "живым" — сколько на счету, столько и можно тратить. Теперь
+    списание одной суммой при закрытии стола (см. table_close_service.py),
+    поэтому в течение вечера на счету может лежать сумма, которая уже
+    фактически "занята" ранее заказанными, но ещё не оплаченными песнями.
+    Эта функция считает именно эту "занятую" сумму — по всем заказам гостя
+    в этом клубе, которые ещё не отменены (STATUS_REJECTED) и ещё не
+    списаны (STATUS_COMPLETED — после списания billing уже создаёт
+    Transaction, повторно эту сумму учитывать не нужно). Бесплатные услуги
+    (Service.is_free) в сумму не входят — за них и так ничего не спишется
+    (см. charge_at_completion выше).
+    """
+    total = (
+        db.session.query(func.coalesce(func.sum(Service.price), 0))
+        .join(Order, Order.service_id == Service.id)
+        .filter(
+            Order.club_id == club_id,
+            Order.telegram_user_id == guest_id,
+            Order.status.notin_([STATUS_REJECTED, STATUS_COMPLETED]),
+            Service.is_free.is_(False),
+        )
+        .scalar()
+    )
+    return Decimal(total or 0)
+
+
+class BalanceCheckResult:
+    """
+    Итог проверки баланса VIP перед созданием нового заказа (запрос
+    пользователя 2026-09-30: "если баланс отрицательный то не позволять
+    заказать песню"). blocked=True — заказ создавать нельзя, гостю нужно
+    показать "Пополните баланс".
+    """
+
+    def __init__(self, blocked=False, balance=None, committed_unpaid=None, effective_balance=None):
+        self.blocked = blocked
+        self.balance = balance
+        self.committed_unpaid = committed_unpaid
+        self.effective_balance = effective_balance
+
+
+def check_vip_balance(club_id, guest_id, guest_type, service):
+    """
+    Проверяет, можно ли VIP-гостю заказать ЕЩЁ одну песню, учитывая не
+    только текущий баланс на счету, но и уже заказанные, но ещё не
+    списанные песни (см. _committed_unpaid_total выше) — иначе VIP мог бы
+    "переобилить" видимый баланс: он ведь не уменьшается по ходу вечера,
+    пока не закрыли стол.
+
+    Не блокирует (blocked=False), если:
+      - гость не VIP (guest_type != "vip") — у обычных гостей нет счёта и
+        этой проверки для них не предусмотрено (ТЗ касается только VIP);
+      - у гостя нет VIP-счёта в этом клубе;
+      - услуга бесплатная (service is None или service.is_free) — за
+        бесплатную песню ничего не спишется, блокировать нечего.
+    Иначе: эффективный баланс = текущий баланс минус уже "занятая" сумма
+    минус стоимость этой новой песни; если результат отрицательный —
+    blocked=True.
+    """
+    if guest_type != "vip":
+        return BalanceCheckResult(blocked=False)
+
+    vip = _get_vip_client(club_id, guest_id)
+    if vip is None:
+        return BalanceCheckResult(blocked=False)
+
+    if service is None or service.is_free:
+        return BalanceCheckResult(blocked=False, balance=vip.balance)
+
+    committed_unpaid = _committed_unpaid_total(club_id, guest_id)
+    effective_balance = vip.balance - committed_unpaid - service.price
+
+    return BalanceCheckResult(
+        blocked=effective_balance < 0,
+        balance=vip.balance,
+        committed_unpaid=committed_unpaid,
+        effective_balance=effective_balance,
+    )
+
+
+def is_vip_balance_blocked(club_id, guest_id):
+    """
+    Быстрая проверка "уже в минусе" без учёта конкретной новой песни — для
+    проактивного показа "Пополните баланс" в Guest App (в ручке /me), пока
+    гость ещё не пытался ничего заказать. Использует ту же логику, что и
+    check_vip_balance, но без стоимости новой песни: смотрим, ушёл ли
+    гость в минус уже заказанными, но не оплаченными песнями.
+    """
+    vip = _get_vip_client(club_id, guest_id)
+    if vip is None:
+        return False
+
+    committed_unpaid = _committed_unpaid_total(club_id, guest_id)
+    return (vip.balance - committed_unpaid) < 0
