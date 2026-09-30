@@ -406,7 +406,7 @@ def remove_favorite(club_id: int, guest_id: int, favorite_id: int) -> FavoriteAc
 
 
 def reorder_favorite(club_id: int, guest_id: int, table_no, guest_type: str, favorite_id: int,
-                      max_active: int) -> FavoriteActionResult:
+                      max_active: int, service_id: int) -> FavoriteActionResult:
     """
     Старое: handlers/client.py::fav_reorder / handlers/vip.py::fav_reorder
     (п.3-4). Лимит активных песен проверяется как и в старом коде — ДО
@@ -417,6 +417,14 @@ def reorder_favorite(club_id: int, guest_id: int, table_no, guest_type: str, fav
     поэтому "хватит ли баланса сейчас" больше не тот вопрос, который нужно
     задавать в момент заказа — баланс проверяется/списывается позже, в
     момент реального завершения песни.
+
+    ИЗМЕНЕНО (запрос пользователя): категория (service_id) раньше бралась
+    из того, что было сохранено в самой записи избранного (favorite.
+    service_id), гость её заново не выбирал — в отличие от обычного заказа
+    и замены песни (решение пользователя 2026-09-23: категория выбирается
+    каждый раз заново). Теперь service_id — обязательный параметр отсюда,
+    провалидированный в routes/guest.py::reorder_favorite, а не поле
+    избранного.
     """
     favorite = db.session.get(Favorite, favorite_id)
     if favorite is None:
@@ -434,7 +442,7 @@ def reorder_favorite(club_id: int, guest_id: int, table_no, guest_type: str, fav
         guest_type=guest_type,
         song_title=favorite.song_title,
         artist=favorite.artist,
-        service_id=favorite.service_id,
+        service_id=service_id,
         source="guest",
         channel="webapp",
     )
