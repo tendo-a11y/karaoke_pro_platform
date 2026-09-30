@@ -24,6 +24,7 @@ from datetime import datetime, timedelta, timezone
 
 from extensions import db
 from models import (
+    Club,
     GuestAccount,
     Order,
     Service,
@@ -422,6 +423,18 @@ def close_all_tables(club_id: int, kj) -> CloseAllResult:
         if result.outcome == "ok":
             closed_table_nos.append(table_no)
     guest_status_service.clear_all_tables(club_id)
+
+    # ДОБАВЛЕНО (запрос пользователя: "Начало очереди" должно каждый раз
+    # запрашиваться заново, а не оставаться от прошлого вечера) — "Закрыть
+    # все столы" и есть тот самый конец вечера, поэтому именно здесь стол
+    # начала очереди сбрасывается обратно в "не задано" (см. models.py::
+    # Club.queue_start_table, backend/routes/kj.py::confirm — принять заказ
+    # нельзя, пока это поле не выбрано заново).
+    club = db.session.get(Club, club_id)
+    if club is not None:
+        club.queue_start_table = None
+        db.session.commit()
+
     return CloseAllResult(closed_table_nos=closed_table_nos, decisions=decisions)
 
 
