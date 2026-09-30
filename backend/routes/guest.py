@@ -611,7 +611,17 @@ def reorder_favorite(favorite_id):
 
     ТЗ п.45: тот же гейт "без стола заказ недоступен" и "без Google заказ
     недоступен", что и в create_order.
+
+    ДОБАВЛЕНО (запрос пользователя: категория при заказе из избранного
+    должна выбираться заново каждый раз, а не браться автоматически из
+    того, что было сохранено в самой записи избранного) — та же
+    обязательная проверка service_id, что и в create_order (решение
+    пользователя 2026-09-23 про основную форму заказа и форму замены
+    песни — теперь и здесь).
     """
+    payload = request.get_json(silent=True) or {}
+    service_id = payload.get("service_id")
+
     if g.table_no is None:
         return api_error(409, "TABLE_REQUIRED", "Чтобы заказать песню, сначала выберите стол")
 
@@ -624,12 +634,18 @@ def reorder_favorite(favorite_id):
             "У вас нет доступа к заказам за этим столом — нужно быть одобренным участником группы",
         )
 
+    if service_id is None or isinstance(service_id, bool) or not isinstance(service_id, int):
+        return api_error(400, "VALIDATION_ERROR", "service_id обязателен")
+    service = db.session.get(Service, service_id)
+    if service is None or service.club_id != g.club_id or service.kj_only:
+        return api_error(404, "SERVICE_NOT_FOUND", "Услуга не найдена")
+
     guest_type, _vip = _guest_type_and_vip(g.club_id, g.guest_id)
     guest_type = guest_type or ("no_table" if g.table_no is None else "client")
     max_active = current_app.config["MAX_ACTIVE_SONGS_PER_GUEST"]
 
     result = vip_service.reorder_favorite(
-        g.club_id, g.guest_id, g.table_no, guest_type, favorite_id, max_active,
+        g.club_id, g.guest_id, g.table_no, guest_type, favorite_id, max_active, service_id,
     )
     if result.outcome == "not_found":
         return api_error(404, "FAVORITE_NOT_FOUND", "Не найдено")
