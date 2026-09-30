@@ -1238,17 +1238,6 @@ function TableSettingsPanel({ token, clubId }) {
   const [queueMode, setQueueMode] = useState("manual");
   const [queueModeBusy, setQueueModeBusy] = useState(false);
   const [queueModeError, setQueueModeError] = useState(null);
-  // ДОБАВЛЕНО (2026-09-25, баг: заказ стола 3 обогнал в очереди уже
-  // стоявшие заказы стола 16, потому что круговой обход всегда стартовал с
-  // 1-го стола) — "Начало очереди": KJ вручную указывает, с какого стола
-  // реально начался круг сегодня (см. backend/routes/kj.py::
-  // update_table_settings, models.py::Club.queue_start_table). Отдельное
-  // поле с своей кнопкой сохранения — по аналогии с тумблером режима выше,
-  // не смешиваем с формой table_count/songs_per_table ниже.
-  const [queueStartTableDraft, setQueueStartTableDraft] = useState("1");
-  const [queueStartTableBusy, setQueueStartTableBusy] = useState(false);
-  const [queueStartTableError, setQueueStartTableError] = useState(null);
-  const [queueStartTableSaved, setQueueStartTableSaved] = useState(false);
   const [loadError, setLoadError] = useState(null);
   const [actionError, setActionError] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -1260,7 +1249,6 @@ function TableSettingsPanel({ token, clubId }) {
       setTableCountDraft(data.table_count == null ? "" : String(data.table_count));
       setSongsPerTableDraft(data.songs_per_table == null ? "" : String(data.songs_per_table));
       setQueueMode(data.queue_mode || "manual");
-      setQueueStartTableDraft(String(data.queue_start_table || 1));
       setLoadError(null);
     } catch (err) {
       setLoadError(err instanceof ApiError ? err.message : String(err));
@@ -1286,28 +1274,6 @@ function TableSettingsPanel({ token, clubId }) {
       setQueueModeError(err instanceof ApiError ? err.message : String(err));
     } finally {
       setQueueModeBusy(false);
-    }
-  }
-
-  async function handleSaveQueueStartTable(event) {
-    event.preventDefault();
-    const trimmed = queueStartTableDraft.trim();
-    const value = Number(trimmed);
-    if (!Number.isInteger(value) || value < 1) {
-      setQueueStartTableError("Введите номер стола — целое число не меньше 1");
-      return;
-    }
-    setQueueStartTableBusy(true);
-    setQueueStartTableError(null);
-    setQueueStartTableSaved(false);
-    try {
-      const data = await api.updateTableSettings(token, clubId, { queue_start_table: value });
-      setQueueStartTableDraft(String(data.queue_start_table || 1));
-      setQueueStartTableSaved(true);
-    } catch (err) {
-      setQueueStartTableError(err instanceof ApiError ? err.message : String(err));
-    } finally {
-      setQueueStartTableBusy(false);
     }
   }
 
@@ -1373,35 +1339,6 @@ function TableSettingsPanel({ token, clubId }) {
             </button>
           ))}
         </div>
-        {queueMode === "sequential" && (
-          <div className="queue-start-table-block">
-            <p className="empty-hint">
-              С какого стола реально начался вечер — круг идёт по возрастанию от этого стола до последнего, затем
-              продолжает с 1-го и до этого стола. Столы с меньшим номером не будут обгонять уже стоящие в очереди,
-              пока круг не дойдёт до них.
-            </p>
-            {queueStartTableError && <div className="banner banner--error">{queueStartTableError}</div>}
-            <form className="table-settings-form" onSubmit={handleSaveQueueStartTable}>
-              <label className="table-settings-field">
-                <span>Начало очереди (номер стола)</span>
-                <input
-                  type="number"
-                  min="1"
-                  value={queueStartTableDraft}
-                  onChange={(e) => {
-                    setQueueStartTableDraft(e.target.value);
-                    setQueueStartTableSaved(false);
-                  }}
-                  disabled={queueStartTableBusy}
-                />
-              </label>
-              <button type="submit" className="btn btn--accent" disabled={queueStartTableBusy}>
-                {queueStartTableBusy ? "Сохраняем…" : "Сохранить"}
-              </button>
-            </form>
-            {queueStartTableSaved && <p className="empty-hint">Сохранено.</p>}
-          </div>
-        )}
       </section>
       <section>
         <h2>Настройки столов</h2>
@@ -2010,6 +1947,54 @@ function OrdersBoard({ token, clubId, socket, onOpenGuest, onOpenTable }) {
   const [actionError, setActionError] = useState(null);
   const [busyOrderId, setBusyOrderId] = useState(null);
 
+  // ДОБАВЛЕНО (запрос пользователя: поле выбора стола начала очереди —
+  // рядом с закрытием столов, в той же строке) — то же самое поле "Начало
+  // очереди", что и на вкладке "Столы" (см. TableSettingsPanel выше),
+  // продублировано здесь, чтобы KJ мог задать его прямо с экрана заказов.
+  // Показывается только в круговом ("последовательный") режиме — как и там.
+  const [queueMode, setQueueMode] = useState("manual");
+  const [queueStartTableDraft, setQueueStartTableDraft] = useState("1");
+  const [queueStartTableBusy, setQueueStartTableBusy] = useState(false);
+  const [queueStartTableError, setQueueStartTableError] = useState(null);
+  const [queueStartTableSaved, setQueueStartTableSaved] = useState(false);
+
+  async function loadQueueSettings() {
+    try {
+      const data = await api.getTableSettings(token, clubId);
+      setQueueMode(data.queue_mode || "manual");
+      setQueueStartTableDraft(String(data.queue_start_table || 1));
+    } catch {
+      // Не критично для этого экрана — просто не покажем поле.
+    }
+  }
+
+  useEffect(() => {
+    loadQueueSettings();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, clubId]);
+
+  async function handleSaveQueueStartTable(event) {
+    event.preventDefault();
+    const trimmed = queueStartTableDraft.trim();
+    const value = Number(trimmed);
+    if (!Number.isInteger(value) || value < 1) {
+      setQueueStartTableError("Введите номер стола — целое число не меньше 1");
+      return;
+    }
+    setQueueStartTableBusy(true);
+    setQueueStartTableError(null);
+    setQueueStartTableSaved(false);
+    try {
+      const data = await api.updateTableSettings(token, clubId, { queue_start_table: value });
+      setQueueStartTableDraft(String(data.queue_start_table || 1));
+      setQueueStartTableSaved(true);
+    } catch (err) {
+      setQueueStartTableError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setQueueStartTableBusy(false);
+    }
+  }
+
   async function reload() {
     try {
       const data = await api.getOrdersBoard(token, clubId);
@@ -2134,6 +2119,19 @@ function OrdersBoard({ token, clubId, socket, onOpenGuest, onOpenTable }) {
   // closeTableGroup для каждого стола сразу, см. backend/services/
   // table_close_service.py::close_all_tables.
   const [closingAll, setClosingAll] = useState(false);
+  // ДОБАВЛЕНО (запрос пользователя: закрытие всех столов через двойное
+  // подтверждение, чтобы случайно не закрыть все одним нажатием) — первое
+  // нажатие только "взводит" кнопку на несколько секунд, реально закрывает
+  // столы только повторное нажатие. Не нажали второй раз — кнопка сама
+  // возвращается в обычный вид.
+  const [closeAllArmed, setCloseAllArmed] = useState(false);
+  const closeAllArmedTimeoutRef = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      if (closeAllArmedTimeoutRef.current) clearTimeout(closeAllArmedTimeoutRef.current);
+    };
+  }, []);
 
   async function handleCloseAllTables() {
     setClosingAll(true);
@@ -2146,6 +2144,17 @@ function OrdersBoard({ token, clubId, socket, onOpenGuest, onOpenTable }) {
     } finally {
       setClosingAll(false);
     }
+  }
+
+  function handleCloseAllClick() {
+    if (!closeAllArmed) {
+      setCloseAllArmed(true);
+      closeAllArmedTimeoutRef.current = setTimeout(() => setCloseAllArmed(false), 4000);
+      return;
+    }
+    clearTimeout(closeAllArmedTimeoutRef.current);
+    setCloseAllArmed(false);
+    handleCloseAllTables();
   }
 
   if (loadError) {
@@ -2161,13 +2170,35 @@ function OrdersBoard({ token, clubId, socket, onOpenGuest, onOpenTable }) {
   return (
     <div className="orders-board">
       <div className="orders-board__header">
+        {queueMode === "sequential" && (
+          <form className="table-settings-form orders-board__queue-start" onSubmit={handleSaveQueueStartTable}>
+            <label className="table-settings-field">
+              <span>Начало очереди (стол)</span>
+              <input
+                type="number"
+                min="1"
+                value={queueStartTableDraft}
+                onChange={(e) => {
+                  setQueueStartTableDraft(e.target.value);
+                  setQueueStartTableSaved(false);
+                }}
+                disabled={queueStartTableBusy}
+              />
+            </label>
+            <button type="submit" className="btn btn--accent" disabled={queueStartTableBusy}>
+              {queueStartTableBusy ? "Сохраняем…" : "Сохранить"}
+            </button>
+            {queueStartTableSaved && <span className="empty-hint">Сохранено.</span>}
+            {queueStartTableError && <span className="banner banner--error">{queueStartTableError}</span>}
+          </form>
+        )}
         <button
           type="button"
           className="btn btn--danger"
           disabled={closingAll}
-          onClick={handleCloseAllTables}
+          onClick={handleCloseAllClick}
         >
-          🌙 {closingAll ? "Закрываем…" : "Закрыть все столы"}
+          🌙 {closingAll ? "Закрываем…" : closeAllArmed ? "Точно? Нажмите ещё раз" : "Закрыть все столы"}
         </button>
       </div>
       {actionError && <div className="banner banner--error">{actionError}</div>}
