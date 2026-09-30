@@ -327,10 +327,11 @@ function VipHistoryPanel({ token }) {
   );
 }
 
-function FavoritesPanel({ token, onOrdered, orderingDisabled }) {
+function FavoritesPanel({ token, services, onOrdered, orderingDisabled }) {
   const [favorites, setFavorites] = useState([]);
   const [error, setError] = useState(null);
   const [busyId, setBusyId] = useState(null);
+  const [serviceSelections, setServiceSelections] = useState({});
 
   const refresh = useCallback(async () => {
     try {
@@ -354,10 +355,17 @@ function FavoritesPanel({ token, onOrdered, orderingDisabled }) {
   }, [refresh]);
 
   async function handleReorder(favoriteId) {
+    const serviceId = serviceSelections[favoriteId];
+    if (!serviceId) return;
     setBusyId(favoriteId);
     setError(null);
     try {
-      await api.reorderFavorite(token, favoriteId);
+      await api.reorderFavorite(token, favoriteId, Number(serviceId));
+      setServiceSelections((prev) => {
+        const next = { ...prev };
+        delete next[favoriteId];
+        return next;
+      });
       await onOrdered();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : String(err));
@@ -390,10 +398,27 @@ function FavoritesPanel({ token, onOrdered, orderingDisabled }) {
             <li key={f.id} className="order-row">
               <div className="order-row__song">🎵 {f.song_title}</div>
               {f.artist && <div className="order-row__artist">🎤 {f.artist}</div>}
+              {services.length > 0 && (
+                <select
+                  value={serviceSelections[f.id] || ""}
+                  onChange={(e) =>
+                    setServiceSelections((prev) => ({ ...prev, [f.id]: e.target.value }))
+                  }
+                  disabled={busyId === f.id || orderingDisabled}
+                  required
+                >
+                  <option value="" disabled>Выберите категорию…</option>
+                  {services.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}{s.is_free ? " (бесплатно)" : ` — ${s.price}`}
+                    </option>
+                  ))}
+                </select>
+              )}
               <div className="favorite-actions">
                 <button
                   type="button"
-                  disabled={busyId === f.id || orderingDisabled}
+                  disabled={busyId === f.id || orderingDisabled || !serviceSelections[f.id]}
                   onClick={() => handleReorder(f.id)}
                   title={orderingDisabled ? "Недоступно, пока вы не одобренный участник группового стола" : undefined}
                 >
@@ -1975,7 +2000,7 @@ export default function App() {
         )}
       </section>
 
-      <FavoritesPanel token={session.token} onOrdered={refreshOrders} orderingDisabled={!canOrder} />
+      <FavoritesPanel token={session.token} services={services} onOrdered={refreshOrders} orderingDisabled={!canOrder} />
 
       <section className="panel">
         <h2>Живая очередь</h2>
