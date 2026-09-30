@@ -1628,6 +1628,29 @@ function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged }) {
     }
   }
 
+  // ДОБАВЛЕНО (запрос пользователя 2026-09-30, кнопка "Вернуть" на карточке
+  // стола): песню, уже отмеченную сыгранной (mark_played — кнопка "Готово"
+  // на карточке заказа, или в будущем автоматически по истории VirtualDJ),
+  // можно передумать и вернуть обратно в любой момент, пока стол ещё не
+  // закрыт — например, если мост или сам KJ ошибся с песней. Это тот же
+  // самый PUT /order/<id>/reject, что и "🗑 Убрать" на доске заказов — он
+  // теперь принимает и уже сыгранные (STATUS_PLAYING) заказы (см. докстринг
+  // reject_order в backend/services/vdj_service.py). Деньги нигде не
+  // трогаются: весь расчёт происходит одной суммой при закрытии стола, а
+  // отклонённый заказ в этот расчёт просто не попадает.
+  async function handleRevertPlayed(orderId) {
+    setBusy(true);
+    setActionError(null);
+    try {
+      await api.rejectOrder(token, orderId);
+      await reload();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function handleMove(event) {
     event.preventDefault();
     const newTableNo = Number(moveTarget);
@@ -1692,6 +1715,38 @@ function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged }) {
               </li>
             ))}
           </ul>
+
+          {/* ДОБАВЛЕНО (запрос пользователя 2026-09-30): песни этой сессии
+          стола, уже отмеченные сыгранными, но ещё не списанные — списание
+          происходит одной суммой только при закрытии стола. "Вернуть"
+          убирает песню из будущего чека, если она попала сюда по ошибке. */}
+          {group.played_orders && group.played_orders.length > 0 && (
+            <div className="table-group-card__played">
+              <h3>Сыгранные песни этого стола</h3>
+              <ul className="vip-list">
+                {group.played_orders.map((order) => (
+                  <li key={order.id} className="vip-row vip-row--client">
+                    <div>
+                      🎵 {order.song_title}
+                      {order.artist && <span> — {order.artist}</span>}
+                      <br />
+                      <span className="empty-hint">Гость #{order.telegram_user_id}</span>
+                    </div>
+                    <div className="vip-row__actions">
+                      <button
+                        type="button"
+                        className="btn btn--reject"
+                        disabled={busy}
+                        onClick={() => handleRevertPlayed(order.id)}
+                      >
+                        ↩ Вернуть
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {actionError && <div className="banner banner--error">{actionError}</div>}
 
@@ -1844,7 +1899,7 @@ function OrdersBoardSlot({ slot, categories, busy, onAccept, onReject, onComplet
   // Запрос пользователя 2026-09-18: подтверждение заказа больше не ставит
   // песню в VirtualDJ само (KJ ставит сам, вручную) — "queued" здесь значит
   // "KJ принял заказ", а не "песня реально в очереди VirtualDJ". Место
-  // освобождается только явной кнопкой "Готово" (см. complete_order() в
+  // освобождается только явной кнопкой "Готово" (см. mark_played() в
   // backend/services/vdj_service.py), а не само по себе.
   const isQueued = slot.status === "queued";
   const categoryName = categories.find((c) => c.id === slot.service_id)?.name;
@@ -1862,15 +1917,14 @@ function OrdersBoardSlot({ slot, categories, busy, onAccept, onReject, onComplet
   // экран отвечает уже за позиции в самой очереди VirtualDJ (после
   // "Готово" или чужие, добавленные мимо приложения).
   const canEditCategory = isQueued && categories.length > 0;
-  // ДОБАВЛЕНО (2026-09-19, запрос пользователя "оплата происходит только у
-  // випа, если человек не вип то у него и не должна появляться кнопка
-  // готово"): "Готово" теперь и списывает деньги по тарифу (см.
-  // complete_order/charge_at_completion на бэкенде) — для обычных гостей
-  // списывать нечего, а значит и кнопке тут делать нечего. Их заказы со
-  // стола убираются не по одной песне, а разом кнопкой "Закрыть стол" из
-  // карточки гостя (см. GuestCard.handleCloseTable), когда компания ушла.
-  const isVip = slot.guest_type === "vip";
-  const canComplete = isQueued && isVip;
+  // ИЗМЕНЕНО (запрос пользователя 2026-09-30, полная отмена кнопки
+  // "Готово" в старом виде — она списывала деньги и потому была только у
+  // VIP): теперь кнопка "Готово" ничего не списывает, только убирает
+  // карточку с экрана (mark_played на бэкенде, освобождает место так же,
+  // как раньше это делало списание). Деньги (и с VIP, и с обычных гостей)
+  // считаются одной суммой при закрытии стола — поэтому кнопка теперь
+  // нужна у ЛЮБОГО заказа, а не только у VIP.
+  const canComplete = isQueued;
   return (
     <div className={`table-slot table-slot--${needsDecision ? "pending" : "queued"}`}>
       <button type="button" className="table-slot__body" onClick={() => onOpenGuest(slot.guest_id)}>
@@ -1918,7 +1972,7 @@ function OrdersBoardSlot({ slot, categories, busy, onAccept, onReject, onComplet
       {/* ДОБАВЛЕНО (2026-09-20, жалоба пользователя "нет возможности удалить"
       — то же самое, что и в Guest App "Мои заказы"): раньше у уже принятого
       (queued) заказа не было способа убрать его по отдельности — только
-      "Готово" для VIP (списывает деньги, не подходит для отмены) или разом
+      "Готово" (просто убирает карточку, деньги не трогает) или разом
       "Закрыть стол" со всей карточки гостя. Кнопка ниже вызывает тот же
       PUT /order/<id>/reject, что и "❌ Отклонить" выше для pending —
       backend (vdj_service.reject_order) теперь явно разрешает это и для
@@ -2083,7 +2137,7 @@ function OrdersBoard({ token, clubId, socket, onOpenGuest, onOpenTable }) {
     setBusyOrderId(orderId);
     setActionError(null);
     try {
-      await api.completeOrder(token, orderId);
+      await api.markPlayed(token, orderId);
       await reload();
     } catch (err) {
       setActionError(err instanceof ApiError ? err.message : String(err));
