@@ -1096,3 +1096,48 @@ class GuestStatus(db.Model):
             "blocked_at": self.blocked_at.isoformat() if self.blocked_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
+
+
+STATUS_VIP_TOPUP_PENDING = "pending"
+STATUS_VIP_TOPUP_RESOLVED = "resolved"
+
+
+class VipTopupRequest(db.Model):
+    """
+    Запрос VIP-гостя к KJ "хочу пополнить баланс" (запрос пользователя
+    2026-09-30) — сам перевод денег этот запрос не делает: KJ, получив его,
+    берёт у гостя наличные/карту лично и вводит сумму через уже
+    существующие кнопки VIP-клиента в KJ Panel (см. routes/kj.py::
+    topup_vip_balance, services/vip_service.py::topup_balance — тот же
+    самый способ, каким KJ и раньше пополнял баланс "гость попросил устно
+    в баре"). Эта заявка — только уведомление, чтобы гостю не приходилось
+    подходить/кричать через зал: одна незакрытая заявка на гостя в клубе
+    (повторное нажатие, пока прошлая не обработана, возвращает ту же самую,
+    без дублей — тот же паттерн, что и TableCloseRequest.request_close).
+    """
+
+    __tablename__ = "vip_topup_requests"
+
+    id = db.Column(db.Integer, primary_key=True)
+    club_id = db.Column(db.Integer, db.ForeignKey("clubs.club_id"), nullable=False, index=True)
+    telegram_user_id = db.Column(db.BigInteger, nullable=False, index=True)
+    status = db.Column(db.String(20), nullable=False, default=STATUS_VIP_TOPUP_PENDING, index=True)
+    created_at = db.Column(db.DateTime(timezone=True), default=utcnow, nullable=False)
+    decided_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    decided_by = db.Column(db.Integer, db.ForeignKey("kj_operators.id"), nullable=True)
+
+    club = db.relationship("Club")
+
+    __table_args__ = (
+        db.Index("ix_vip_topup_requests_lookup", "club_id", "status"),
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "club_id": self.club_id,
+            "guest_id": str(self.telegram_user_id),
+            "status": self.status,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "decided_at": self.decided_at.isoformat() if self.decided_at else None,
+        }
