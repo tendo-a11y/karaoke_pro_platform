@@ -20,10 +20,10 @@ from services.vdj_service import (
     add_manual_song,
     approve_order_change_request,
     claim_vdj_queue_item,
-    complete_order,
     confirm_order,
     get_kj_queue_view,
     list_pending_change_requests,
+    mark_played,
     reject_order,
     reject_order_change_request,
     update_order_category,
@@ -212,38 +212,23 @@ def reject(order_id):
     return api_error(500, "INTERNAL_ERROR", "Неизвестный результат обработки заказа")
 
 
-@bp.put("/order/<int:order_id>/complete")
+@bp.put("/order/<int:order_id>/mark-played")
 @require_kj
-def complete(order_id):
+def mark_played_route(order_id):
     """
-    Запрос пользователя 2026-09-18: KJ сам ставит принятую песню в
-    VirtualDJ и сам же отмечает, когда она отыграна — эта кнопка ("Готово"
-    на занятой карточке стола, см. OrdersBoardSlot в kj-panel/src/App.jsx)
-    и есть единственный способ освободить место на карточке для следующего
-    ожидающего заказа того же стола (см. docstring complete_order() в
-    services/vdj_service.py про то, почему это больше не делает сама
-    реконсиляция с живой очередью VirtualDJ).
-
-    2026-09-19: эта же кнопка теперь и списывает оплату по тарифу
-    (charge_at_completion, вызывается внутри complete_order) — фронтенд
-    показывает её только для VIP-заказов (см. slot.guest_type в
-    OrdersBoardSlot), но сам списание безопасно ничего не делает и для
-    остальных, так что здесь дополнительная проверка не нужна. В ответ
-    добавляем краткую сводку по списанию — на будущее, для возможного
-    отображения суммы в KJ Panel.
+    ЗАМЕНЯЕТ старую ручку /order/<id>/complete (запрос пользователя
+    2026-09-30 — см. подробности в docstring mark_played() в
+    services/vdj_service.py). Кнопка "Готово" теперь есть у ЛЮБОЙ карточки
+    в очереди (и VIP, и обычной, см. kj-panel/src/App.jsx), а не только у
+    VIP — раньше фронтенд показывал её только для VIP-заказов, потому что
+    только они что-то списывали. Теперь она ничего не списывает — только
+    убирает карточку с экрана. Деньги (и с VIP, и с обычных гостей)
+    считаются одной суммой при закрытии стола.
     """
-    order, outcome, charge = complete_order(order_id, g.kj)
+    order, outcome = mark_played(order_id, g.kj)
 
-    if outcome == "completed":
-        payload = order.to_dict()
-        if charge is not None:
-            payload["charge"] = {
-                "charged": charge.charged,
-                "charge_amount": float(charge.charge_amount) if charge.charge_amount is not None else None,
-                "cashback_amount": float(charge.cashback_amount) if charge.cashback_amount is not None else None,
-                "skipped_reason": charge.skipped_reason,
-            }
-        return api_ok(payload)
+    if outcome == "played":
+        return api_ok(order.to_dict())
 
     if outcome in _OUTCOME_HTTP:
         status_code, error_code, message = _OUTCOME_HTTP[outcome]
