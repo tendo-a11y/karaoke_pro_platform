@@ -85,9 +85,12 @@ export const api = {
   // Запрос пользователя 2026-09-18: подтверждение заказа больше не ставит
   // песню в VirtualDJ само (KJ делает это вручную) — кнопка "Готово" на
   // занятой карточке стола освобождает место явным образом, см.
-  // routes/kj.py::complete / services/vdj_service.py::complete_order.
-  completeOrder: (token, orderId) =>
-    request(`/api/kj/order/${orderId}/complete`, { method: "PUT", token }),
+  // routes/kj.py::mark_played_route / services/vdj_service.py::mark_played.
+  // ИЗМЕНЕНО (запрос пользователя 2026-09-30): раньше называлась completeOrder
+  // и списывала деньги — теперь только убирает карточку с экрана, деньги
+  // считаются одной суммой при закрытии стола.
+  markPlayed: (token, orderId) =>
+    request(`/api/kj/order/${orderId}/mark-played`, { method: "PUT", token }),
   getQueue: (token, clubId) => request(`/api/kj/queue/${clubId}`, { token }),
   addManualOrder: (token, { songTitle, artist, tableNo }) =>
     request(`/api/kj/order/manual`, {
