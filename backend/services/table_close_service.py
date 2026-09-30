@@ -19,6 +19,19 @@ KJ подтверждает/отклоняет (approve_request/reject_request).
      close_table_orders);
   3. удаляем TableGroup/TableGroupMember/TableJoinRequest — это и есть
      собственно "освобождение стола" для следующей компании.
+
+ОБНОВЛЕНО (запрос пользователя 2026-09-30, полная отмена кнопки "Готово"):
+шаг 2 раньше означал "автоматически снимаем ещё непроигранные заказы
+стола" (close_table_orders -> STATUS_REJECTED) — то есть в чек попадали
+ТОЛЬКО заказы, которые кто-то явно пометил сыгранными. Теперь наоборот:
+ЛЮБОЙ заказ этой сессии стола, который не был отклонён кнопкой "Удалить"
+(STATUS_REJECTED), при закрытии стола засчитывается как сыгранный — см.
+complete_table_orders ниже и правило дословно от пользователя в её
+докстринге. Кнопки "Готово" в KJ Panel больше нет вообще — деньги с VIP
+списываются этим же шагом одной суммой при закрытии стола, а не по
+каждой песне отдельно (services/billing_service.py::charge_at_completion
+— та же самая функция, просто вызывается теперь отсюда для всех заказов
+стола сразу в момент закрытия, а не по одному за раз по кнопке "Готово").
 """
 from datetime import datetime, timedelta, timezone
 
@@ -29,6 +42,7 @@ from models import (
     Order,
     Service,
     STATUS_COMPLETED,
+    STATUS_REJECTED,
     STATUS_TABLE_CLOSE_APPROVED,
     STATUS_TABLE_CLOSE_PENDING,
     STATUS_TABLE_CLOSE_REJECTED,
@@ -39,8 +53,7 @@ from models import (
     Transaction,
     TX_TYPE_ORDER_PAYMENT,
 )
-from services import guest_status_service, table_group_service
-from services.vdj_service import close_table_orders
+from services import billing_service, guest_status_service, table_group_service
 from sockets import emit_table_close_request_created, emit_table_close_request_decided
 
 
@@ -211,6 +224,54 @@ def _build_receipt(club_id: int, table_no: int, since) -> dict:
     }
 
 
+def complete_table_orders(club_id: int, table_no: int, since) -> list[Order]:
+    """
+    ЗАМЕНЯЕТ старый close_table_orders (массовое STATUS_REJECTED) в потоке
+    закрытия стола С ЧЕКОМ (запрос пользователя 2026-09-30, полная отмена
+    кнопки "Готово" — см. models.py и billing_service.py). close_table_orders
+    сам по себе остаётся и продолжает использоваться там, где чек не нужен
+    (guest_status_service.close_table — закрытие карточки гостя без чека).
+
+    Правило дословно от пользователя: "если кнопка Удалить на песне не
+    была нажата и при этом идёт закрытие стола, то считаются в чек все не
+    удалённые песни". То есть ЛЮБОЙ заказ этой сессии стола (created_at >=
+    since, тот же смысл since, что и в _build_receipt выше — только эта
+    сессия, а не весь предыдущий оборот стола), который не в STATUS_REJECTED
+    (кнопка "Удалить" не нажималась), при закрытии стола становится
+    STATUS_COMPLETED — независимо от того, был ли он вообще принят KJ,
+    стоял в очереди или уже играл. Уже STATUS_COMPLETED заказы (не должно
+    быть новых после отмены "Готово", но на всякий случай — старые данные)
+    пропускаем, чтобы не пытаться списать деньги повторно.
+
+    Сперва переводим статусы и коммитим, и только ПОСЛЕ ЭТОГО вызываем
+    billing_service.charge_at_completion по каждому заказу — списание VIP
+    ищет заказ по актуальному статусу/данным в БД и создаёт свою отдельную
+    транзакцию с защитой от двойной обработки (idempotency_key), так что
+    порядок "сначала все статусы, потом все списания" не даёт разным
+    заказам одного гостя мешать друг другу, а сбой на одном заказе не
+    оставляет остальные непомеченными сыгранными.
+    """
+    orders = (
+        Order.query
+        .filter(
+            Order.club_id == club_id,
+            Order.table_no == table_no,
+            Order.status != STATUS_REJECTED,
+            Order.status != STATUS_COMPLETED,
+            Order.created_at >= since,
+        )
+        .all()
+    )
+    for order in orders:
+        order.status = STATUS_COMPLETED
+    db.session.commit()
+
+    for order in orders:
+        billing_service.charge_at_completion(order)
+
+    return orders
+
+
 class DecisionResult:
     """outcome: "not_found" | "forbidden" | "already_decided" | "ok"."""
 
@@ -257,8 +318,8 @@ def approve_request(request_id: int, kj, hide_receipt: bool) -> DecisionResult:
         for m in TableGroupMember.query.filter_by(club_id=req.club_id, table_no=req.table_no).all()
     ]
     member_guest_ids = [str(gid) for gid in member_guest_id_ints]
+    closed_orders = complete_table_orders(req.club_id, req.table_no, group.created_at)
     receipt = _build_receipt(req.club_id, req.table_no, group.created_at)
-    closed_orders = close_table_orders(req.club_id, req.table_no)
 
     TableJoinRequest.query.filter_by(club_id=req.club_id, table_no=req.table_no).delete()
     TableGroupMember.query.filter_by(club_id=req.club_id, table_no=req.table_no).delete()
@@ -328,8 +389,8 @@ def close_table_directly(club_id: int, table_no: int, kj, hide_receipt: bool) ->
         for m in TableGroupMember.query.filter_by(club_id=club_id, table_no=table_no).all()
     ]
     member_guest_ids = [str(gid) for gid in member_guest_id_ints]
+    closed_orders = complete_table_orders(club_id, table_no, group.created_at)
     receipt = _build_receipt(club_id, table_no, group.created_at)
-    closed_orders = close_table_orders(club_id, table_no)
 
     TableJoinRequest.query.filter_by(club_id=club_id, table_no=table_no).delete()
     TableGroupMember.query.filter_by(club_id=club_id, table_no=table_no).delete()
