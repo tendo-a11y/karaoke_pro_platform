@@ -138,8 +138,12 @@ export const api = {
     }),
   deleteFavorite: (token, favoriteId) =>
     request(`/api/guest/favorites/${favoriteId}`, { method: "DELETE", token }),
-  reorderFavorite: (token, favoriteId) =>
-    request(`/api/guest/favorites/${favoriteId}/reorder`, { method: "POST", token }),
+  reorderFavorite: (token, favoriteId, serviceId) =>
+    request(`/api/guest/favorites/${favoriteId}/reorder`, {
+      method: "POST",
+      token,
+      body: { service_id: serviceId },
+    }),
   getTableGroup: (token) => request("/api/guest/table-group", { token }),
   requestTableGroupJoin: (token) => request("/api/guest/table-group/request-join", { method: "POST", token }),
   approveJoinRequest: (token, requestId) =>
