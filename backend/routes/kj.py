@@ -5,7 +5,7 @@ from flask import Blueprint, current_app, g, jsonify, request
 from auth import issue_kj_google_token, require_kj
 from errors import api_error, api_ok
 from extensions import db
-from models import ChatMessage, Club, KJOperator, Order, TableGroupMember, VipClient, VipRequest
+from models import ChatMessage, Club, KJOperator, Order, STATUS_PLAYING, TableGroupMember, VipClient, VipRequest
 from services import category_service, guest_directory_service, guest_status_service, song_service, table_close_service, table_group_service, vip_service
 from services.guest_directory_service import GUEST_TYPES, GuestDirectoryError
 from services.category_service import CategoryServiceError
@@ -1196,11 +1196,31 @@ def get_table_group(club_id, table_no):
         detail["is_admin"] = member.guest_id == group.admin_guest_id
         roster.append(detail)
 
+    # ДОБАВЛЕНО (запрос пользователя 2026-09-30, кнопка "Вернуть" на
+    # карточке стола): песни этой сессии стола, уже отмеченные сыгранными
+    # (mark_played(), вручную или в будущем автоматически по истории
+    # VirtualDJ), но ещё не списанные — списание происходит только одной
+    # суммой при закрытии стола (table_close_service.complete_table_orders).
+    # KJ видит их здесь и может передумать по любой из них ДО закрытия —
+    # см. PUT /order/<id>/reject выше, он теперь принимает и STATUS_PLAYING.
+    played_orders = (
+        Order.query
+        .filter(
+            Order.club_id == club_id,
+            Order.table_no == table_no,
+            Order.status == STATUS_PLAYING,
+            Order.created_at >= group.created_at,
+        )
+        .order_by(Order.playing_at.asc())
+        .all()
+    )
+
     return api_ok({
         "table_no": table_no,
         "created_at": group.created_at.isoformat() if group.created_at else None,
         "admin_guest_id": str(group.admin_guest_id),
         "members": roster,
+        "played_orders": [o.to_dict() for o in played_orders],
     })
 
 
