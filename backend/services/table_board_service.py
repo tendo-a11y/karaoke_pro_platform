@@ -266,7 +266,7 @@ def partition_table_orders(club_id: int, table_no: int, capacity: int):
 def _slot_dict(order: Order, queue_positions: dict | None = None) -> dict:
     data = {
         "order_id": order.id,
-        "guest_id": order.telegram_user_id,
+        "guest_id": str(order.telegram_user_id),
         "song_title": order.song_title,
         "artist": order.artist,
         "service_id": order.service_id,
