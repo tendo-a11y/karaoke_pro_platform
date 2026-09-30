@@ -4,12 +4,12 @@ from extensions import db
 from models import (
     ORDER_CHANGE_KIND_CANCEL,
     ORDER_CHANGE_KIND_REPLACE,
-    STATUS_COMPLETED,
     STATUS_ERROR,
     STATUS_ORDER_CHANGE_APPROVED,
     STATUS_ORDER_CHANGE_PENDING,
     STATUS_ORDER_CHANGE_REJECTED,
     STATUS_PENDING,
+    STATUS_PLAYING,
     STATUS_PROCESSING,
     STATUS_QUEUED,
     STATUS_REJECTED,
@@ -17,7 +17,6 @@ from models import (
     OrderChangeRequest,
     Service,
 )
-from services.billing_service import charge_at_completion
 from services.notify import notify_guest
 from sockets import (
     emit_order_change_request_created,
@@ -57,7 +56,7 @@ def confirm_order(order_id: int, kj):
     заказа освобождается уже не автоматически через реконсиляцию с живой
     очередью VirtualDJ (get_kj_queue_view() теперь сознательно игнорирует
     STATUS_QUEUED-заказы без vdj_item_id — см. её докстринг ниже), а явным
-    действием KJ — кнопкой "Готово" (см. complete_order() ниже), когда
+    действием KJ — кнопкой "Готово" (см. mark_played() ниже), когда
     песня реально отыграна.
 
     Возвращает (order, outcome), где outcome — один из:
@@ -133,10 +132,17 @@ def reject_order(order_id: int, kj):
     и у гостя, и у KJ не было способа убрать ОДИН уже принятый заказ по
     отдельности, только отклонить его, пока он ещё pending, или закрыть
     сразу весь стол): теперь можно отклонить и STATUS_QUEUED — тот же смысл,
-    что и кнопка "🗑 Убрать" на карточке места KJ Panel ниже. Деньги здесь
-    не списываются и не возвращаются: charge_at_completion срабатывает
-    только в complete_order() при нажатии "Готово" — отклонённый (в том
-    числе уже принятый, но так и не сыгранный) заказ до неё не доходит.
+    что и кнопка "🗑 Убрать" на карточке места KJ Panel ниже.
+
+    ДОБАВЛЕНО (запрос пользователя 2026-09-30, кнопка "Вернуть" на карточке
+    стола): теперь можно отклонить и STATUS_PLAYING — песню, которую уже
+    отметили сыгранной (mark_played() выше, вручную или в будущем
+    автоматически по истории VirtualDJ), но до закрытия стола решили не
+    засчитывать (ошибочно распознали не ту песню и т.п.). Деньги нигде
+    здесь не списываются и не возвращаются: весь расчёт происходит одной
+    суммой при закрытии стола (services/table_close_service.py::
+    complete_table_orders) — отклонённый заказ (в любой момент, до какого
+    бы статуса он ни дошёл) в этот расчёт просто не попадает.
     """
     order = db.session.get(Order, order_id)
     if order is None:
@@ -147,7 +153,7 @@ def reject_order(order_id: int, kj):
 
     updated_rows = (
         db.session.query(Order)
-        .filter(Order.id == order_id, Order.status.in_([STATUS_PENDING, STATUS_QUEUED, STATUS_ERROR]))
+        .filter(Order.id == order_id, Order.status.in_([STATUS_PENDING, STATUS_QUEUED, STATUS_ERROR, STATUS_PLAYING]))
         .update({"status": STATUS_REJECTED, "rejected_at": _utcnow()}, synchronize_session=False)
     )
     db.session.commit()
@@ -239,58 +245,53 @@ def request_order_cancel(order_id: int, guest_id: int, club_id: int):
     return change_request, "requested"
 
 
-def complete_order(order_id: int, kj):
+def mark_played(order_id: int, kj):
     """
-    Запрос пользователя 2026-09-18: раз подтверждение заказа (confirm_order
-    выше) больше не заводит его в реальную очередь VirtualDJ — KJ сам решает,
-    когда фактически поставить песню в плеер — прежней автоматической
-    реконсиляции для таких заказов тоже больше нет и быть не может: у них
-    нет vdj_item_id, по которому раньше get_kj_queue_view() отслеживала
-    "песня пропала из живой очереди => доиграла => освобождаем место".
+    ЗАМЕНЯЕТ старую complete_order() (запрос пользователя 2026-09-30:
+    "никаких Готово не надо, это убрать вообще" — а затем в том же
+    разговоре уточнение: кнопка на карточке заказа всё равно нужна, просто
+    она больше не должна трогать деньги). Раньше кнопка "Готово" была
+    только у VIP-заказов и сразу же списывала деньги (billing_service.
+    charge_at_completion). Теперь кнопка доступна у ЛЮБОГО заказа (и VIP, и
+    обычного) и делает только одно — переводит заказ в STATUS_PLAYING,
+    освобождая место на карточке стола (services/table_board_service.py::
+    ACTIVE_TABLE_STATUSES этот статус сознательно не включает, как раньше
+    не включал и STATUS_COMPLETED). Деньги здесь нигде не списываются — весь
+    расчёт (и с VIP, и с обычных гостей) происходит одной суммой при
+    закрытии стола (services/table_close_service.py::complete_table_orders
+    сама вызывает billing_service.charge_at_completion по всем ещё не
+    отклонённым заказам разом).
 
-    Вместо этого место на карточке стола (services/table_board_service.py,
-    ACTIVE_TABLE_STATUSES — STATUS_COMPLETED туда сознательно не входит)
-    освобождается явным действием KJ: кнопка "Готово" на занятой карточке
-    переводит заказ STATUS_QUEUED -> STATUS_COMPLETED. STATUS_COMPLETED и
-    completed_at существовали в модели заранее (см. models.py), но нигде не
-    проставлялись — это первое место, где они реально используются.
-    completion_source="manual" — второе предусмотренное в модели значение
-    ("automatic" зарезервировано под будущее сопоставление с историей
-    воспроизведения VirtualDJ, здесь не реализуется).
+    STATUS_PLAYING и playing_at существовали в модели заранее (задел под
+    автоматическое распознавание сыгранной песни по истории VirtualDJ, ТЗ
+    §37-38, пока не реализовано) — это первое место, где они реально
+    используются. completion_source="manual" — как и раньше в старой
+    complete_order, "automatic" зарезервировано под будущий мост.
 
-    ИСПРАВЛЕНО (2026-09-19, жалоба пользователя "Готово что означает" ->
-    "означает что можно снимать оплату по тарифу"): списание денег
-    (services/billing_service.py::charge_at_completion) было написано и
-    покрыто тестами, но нигде не вызывалось из самой кнопки "Готово" — по
-    факту деньги никогда не списывались. Теперь вызывается прямо здесь,
-    сразу после того как заказ реально помечен завершённым. Сама функция
-    списания уже содержит все нужные проверки (см. её докстринг) и
-    списывает только у VIP-гостей с ненулевой платной услугой — для
-    обычных (не-VIP) заказов она безопасный no-op, поэтому отдельно
-    проверять guest_type здесь не нужно.
-    ChargeResult из неё не влияет на исход/outcome этой функции — списание
-    не должно блокировать сам факт завершения заказа, даже если что-то
-    пошло не так с деньгами (тот же принцип, что и раньше: complete_order
-    сама по себе НЕ проверяла деньги вообще).
+    "Вернуть" (передумать до закрытия стола, запрос пользователя
+    2026-09-30 — например, мост или сам KJ ошибся): песню, уже отмеченную
+    сыгранной, можно вернуть обратно кнопкой на карточке САМОГО СТОЛА — см.
+    reject_order() ниже, она теперь принимает в том числе и STATUS_PLAYING.
+    По сути это то же самое "убрать эту песню из будущего чека", что и
+    обычное отклонение, просто с другого места экрана.
 
-    Возвращает (order, outcome, charge), где outcome — один из:
-        "not_found", "forbidden", "conflict", "completed"
-    charge — ChargeResult при outcome == "completed", иначе None.
+    Возвращает (order, outcome), где outcome — один из:
+        "not_found", "forbidden", "conflict", "played"
     """
     order = db.session.get(Order, order_id)
     if order is None:
-        return None, "not_found", None
+        return None, "not_found"
 
     if order.club_id != kj.club_id:
-        return None, "forbidden", None
+        return None, "forbidden"
 
     updated_rows = (
         db.session.query(Order)
         .filter(Order.id == order_id, Order.status == STATUS_QUEUED)
         .update(
             {
-                "status": STATUS_COMPLETED,
-                "completed_at": _utcnow(),
+                "status": STATUS_PLAYING,
+                "playing_at": _utcnow(),
                 "completion_source": "manual",
             },
             synchronize_session=False,
@@ -300,14 +301,12 @@ def complete_order(order_id: int, kj):
 
     if updated_rows == 0:
         db.session.refresh(order)
-        return order, "conflict", None
+        return order, "conflict"
 
     db.session.refresh(order)
     emit_order_updated(order)
 
-    charge = charge_at_completion(order)
-
-    return order, "completed", charge
+    return order, "played"
 
 
 def close_table_orders(club_id: int, table_no: int):
@@ -794,7 +793,7 @@ def get_kj_queue_view(club_id: int) -> list[dict]:
     2026-09-18, запрос пользователя: confirm_order() больше не передаёт
     песню в VirtualDJ сама — такой STATUS_QUEUED-заказ рождается сразу без
     vdj_item_id (он остаётся пустым навсегда, пока KJ явно не нажмёт
-    "Готово", см. complete_order()). Без явного исключения такие заказы
+    "Готово", см. mark_played()). Без явного исключения такие заказы
     выше просто никогда бы не нашли себе пару в live_queue (не с чем
     сравнивать) и на следующей же строчке ниже были бы молча объявлены
     "потерянными" и отклонены — притом что песню никто никуда не терял, KJ
