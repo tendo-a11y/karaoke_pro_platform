@@ -1951,8 +1951,8 @@ function OrdersBoard({ token, clubId, socket, onOpenGuest, onOpenTable }) {
   // рядом с закрытием столов, в той же строке) — то же самое поле "Начало
   // очереди", что и на вкладке "Столы" (см. TableSettingsPanel выше),
   // продублировано здесь, чтобы KJ мог задать его прямо с экрана заказов.
-  // Показывается только в круговом ("последовательный") режиме — как и там.
-  const [queueMode, setQueueMode] = useState("manual");
+  // Показывается всегда: с 2026-09-30 принять заказ нельзя, пока это поле
+  // не задано, независимо от режима очереди (см. backend/routes/kj.py::confirm).
   const [queueStartTableDraft, setQueueStartTableDraft] = useState("1");
   const [queueStartTableBusy, setQueueStartTableBusy] = useState(false);
   const [queueStartTableError, setQueueStartTableError] = useState(null);
@@ -1961,7 +1961,6 @@ function OrdersBoard({ token, clubId, socket, onOpenGuest, onOpenTable }) {
   async function loadQueueSettings() {
     try {
       const data = await api.getTableSettings(token, clubId);
-      setQueueMode(data.queue_mode || "manual");
       setQueueStartTableDraft(String(data.queue_start_table || 1));
     } catch {
       // Не критично для этого экрана — просто не покажем поле.
@@ -2170,28 +2169,26 @@ function OrdersBoard({ token, clubId, socket, onOpenGuest, onOpenTable }) {
   return (
     <div className="orders-board">
       <div className="orders-board__header">
-        {queueMode === "sequential" && (
-          <form className="table-settings-form orders-board__queue-start" onSubmit={handleSaveQueueStartTable}>
-            <label className="table-settings-field">
-              <span>Начало очереди (стол)</span>
-              <input
-                type="number"
-                min="1"
-                value={queueStartTableDraft}
-                onChange={(e) => {
-                  setQueueStartTableDraft(e.target.value);
-                  setQueueStartTableSaved(false);
-                }}
-                disabled={queueStartTableBusy}
-              />
-            </label>
-            <button type="submit" className="btn btn--accent" disabled={queueStartTableBusy}>
-              {queueStartTableBusy ? "Сохраняем…" : "Сохранить"}
-            </button>
-            {queueStartTableSaved && <span className="empty-hint">Сохранено.</span>}
-            {queueStartTableError && <span className="banner banner--error">{queueStartTableError}</span>}
-          </form>
-        )}
+        <form className="table-settings-form orders-board__queue-start" onSubmit={handleSaveQueueStartTable}>
+          <label className="table-settings-field">
+            <span>Начало очереди (стол)</span>
+            <input
+              type="number"
+              min="1"
+              value={queueStartTableDraft}
+              onChange={(e) => {
+                setQueueStartTableDraft(e.target.value);
+                setQueueStartTableSaved(false);
+              }}
+              disabled={queueStartTableBusy}
+            />
+          </label>
+          <button type="submit" className="btn btn--accent" disabled={queueStartTableBusy}>
+            {queueStartTableBusy ? "Сохраняем…" : "Сохранить"}
+          </button>
+          {queueStartTableSaved && <span className="empty-hint">Сохранено.</span>}
+          {queueStartTableError && <span className="banner banner--error">{queueStartTableError}</span>}
+        </form>
         <button
           type="button"
           className="btn btn--danger"
