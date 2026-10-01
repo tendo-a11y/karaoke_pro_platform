@@ -964,6 +964,10 @@ function VipPanel({ token, clubId }) {
   const [busyKey, setBusyKey] = useState(null);
   const [amountDrafts, setAmountDrafts] = useState({});
   const [cashbackDrafts, setCashbackDrafts] = useState({});
+  // Фото клиента (запрос пользователя 2026-10-01, "возможность должна
+  // быть, но по желанию") — guestId того ряда, для которого сейчас идёт
+  // загрузка, просто чтобы показать "Загружаем…" только на нужной кнопке.
+  const [photoBusyId, setPhotoBusyId] = useState(null);
 
   async function reload() {
     try {
@@ -1103,6 +1107,38 @@ function VipPanel({ token, clubId }) {
     }
   }
 
+  async function handleUploadPhoto(guestId, file) {
+    setPhotoBusyId(guestId);
+    setActionError(null);
+    try {
+      const resized = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(reader.error || new Error("Не удалось прочитать файл"));
+        reader.onload = () => {
+          const img = new Image();
+          img.onerror = () => reject(new Error("Не удалось прочитать изображение"));
+          img.onload = () => {
+            const maxSide = 300;
+            const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+            const canvas = document.createElement("canvas");
+            canvas.width = Math.round(img.width * scale);
+            canvas.height = Math.round(img.height * scale);
+            canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+            resolve(canvas.toDataURL("image/jpeg", 0.8));
+          };
+          img.src = reader.result;
+        };
+        reader.readAsDataURL(file);
+      });
+      await api.setGuestPhoto(token, guestId, resized);
+      await reload();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setPhotoBusyId(null);
+    }
+  }
+
   if (loadError) return <div className="banner banner--error">{loadError}</div>;
   if (!clients) return <p className="empty-hint">Загрузка…</p>;
 
@@ -1116,9 +1152,16 @@ function VipPanel({ token, clubId }) {
         <ul className="vip-list">
           {clients.map((c) => (
             <li key={c.id} className="vip-row vip-row--client">
-              <div>
-                Гость #{c.telegram_user_id} · баланс <strong>{c.balance} MDL</strong>
-                {c.is_blocked && <span className="guest-type-badge guest-type-badge--blocked"> 🚫 Заблокирован</span>}
+              <div className="vip-row__identity">
+                {c.photo_data_url ? (
+                  <img src={c.photo_data_url} alt="" className="vip-row__photo" />
+                ) : (
+                  <span className="vip-row__photo vip-row__photo--placeholder">👤</span>
+                )}
+                <span>
+                  {c.display_name || `Гость #${c.telegram_user_id}`} · баланс <strong>{c.balance} MDL</strong>
+                  {c.is_blocked && <span className="guest-type-badge guest-type-badge--blocked"> 🚫 Заблокирован</span>}
+                </span>
               </div>
               <div className="vip-row__actions">
                 <input
@@ -1140,6 +1183,22 @@ function VipPanel({ token, clubId }) {
                 <button type="button" className="btn-link" disabled={busyKey === `zero-${c.id}`} onClick={() => handleZeroBalance(c.id)}>
                   0️⃣ Обнулить баланс
                 </button>
+                {/* Фото клиента необязательное (запрос пользователя
+                2026-10-01) — обычная label-обёртка над скрытым input,
+                чтобы не городить отдельный модальный выбор файла. */}
+                <label className="btn-link vip-photo-upload">
+                  {photoBusyId === c.telegram_user_id ? "Загружаем…" : "📷 Фото"}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    disabled={photoBusyId === c.telegram_user_id}
+                    onChange={(e) => {
+                      const file = e.target.files[0];
+                      e.target.value = "";
+                      if (file) handleUploadPhoto(c.telegram_user_id, file);
+                    }}
+                  />
+                </label>
               </div>
               <div className="vip-row__actions">
                 <input
