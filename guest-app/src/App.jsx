@@ -1729,6 +1729,58 @@ function TableCloseReceiptBanner({ closeRequest, onDismiss }) {
   );
 }
 
+// ДОБАВЛЕНО (запрос пользователя 2026-10-01, "как зайти без QR-кода каждый
+// раз") — подсказка "сохранить сайт на экран", чтобы гость мог вернуться
+// позже одним нажатием значка на телефоне, а не просить снова показать
+// QR-код. Специально НЕ используем настоящую кнопку "Установить"
+// (beforeinstallprompt/manifest c фиксированным start_url) — один и тот
+// же файл манифеста обслуживает все клубы сразу, и жёстко прописанный
+// адрес в нём перепутает клуб при автоустановке. Обычное "На экран
+// Домой" браузера сохраняет именно текущую ссылку гостя (с его клубом),
+// поэтому это просто подсказка из двух шагов, без автоматизации.
+function AddToHomeScreenHint() {
+  const [dismissed, setDismissed] = useState(() => {
+    try {
+      return localStorage.getItem("add_to_home_hint_dismissed") === "1";
+    } catch {
+      return false;
+    }
+  });
+
+  const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
+  const isIOS = /iPhone|iPad|iPod/i.test(ua);
+  const isMobile = isIOS || /Android/i.test(ua);
+  const isStandalone =
+    (typeof window !== "undefined" && window.matchMedia?.("(display-mode: standalone)").matches) ||
+    window.navigator.standalone === true;
+
+  if (dismissed || isStandalone || !isMobile) return null;
+
+  function dismiss() {
+    try {
+      localStorage.setItem("add_to_home_hint_dismissed", "1");
+    } catch {
+      // localStorage недоступен — просто скрываем на этот показ
+    }
+    setDismissed(true);
+  }
+
+  return (
+    <section className="panel add-to-home-hint">
+      <p>
+        📲 Сохраните сайт на экран телефона — зайдёте в следующий раз одним
+        нажатием, без QR-кода.{" "}
+        {isIOS
+          ? 'Нажмите значок "Поделиться" внизу браузера, затем "На экран Домой".'
+          : 'Откройте меню браузера (⋮) и выберите "Добавить на главный экран".'}
+      </p>
+      <button type="button" className="btn-link" onClick={dismiss}>
+        Понятно, скрыть
+      </button>
+    </section>
+  );
+}
+
 export default function App() {
   const { clubId } = useMemo(() => parseLinkParams(), []);
 
@@ -2197,6 +2249,8 @@ export default function App() {
           ✉️ Сообщения
         </button>
       </header>
+
+      <AddToHomeScreenHint />
 
       {meInfo.table_close_receipt && !dismissedCloseRequestIds.has(meInfo.table_close_receipt.id) && (
         <TableCloseReceiptBanner
