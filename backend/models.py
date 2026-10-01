@@ -740,6 +740,7 @@ class ChatMessage(db.Model):
     table_no = db.Column(db.Integer, nullable=True)
     from_guest = db.Column(db.Boolean, nullable=False)
     message_text = db.Column(db.Text, nullable=False)
+    image_data_url = db.Column(db.Text, nullable=True)
     is_read = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(db.DateTime(timezone=True), default=utcnow, nullable=False)
 
@@ -757,6 +758,7 @@ class ChatMessage(db.Model):
             "table_no": self.table_no,
             "from_guest": self.from_guest,
             "message_text": self.message_text,
+            "image_data_url": self.image_data_url,
             "is_read": self.is_read,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
