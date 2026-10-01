@@ -144,10 +144,11 @@ def me():
         "table_group_status": table_group_status,
         "table_close_receipt": table_close_receipt,
         "club_name": club.name if club else None,
-        # Guest App использует это, чтобы решить, показывать ли вообще UI
-        # чата — а не только полагаться на 403 CHAT_DISABLED после попытки
-        # отправить сообщение (POST /chat уже проверяет это на сервере
-        # независимо, см. send_chat_message ниже — здесь только для UX).
+        # ИЗМЕНЕНО (запрос пользователя 2026-10-01): чат гостя с ведущим
+        # теперь работает всегда и больше не завязан на этот флаг (см.
+        # send_chat_message ниже). Поле оставлено для будущего отдельного
+        # чата "гость-гость" (заглушка "Общий чат" в Guest App), когда он
+        # будет реализован.
         "chat_enabled": bool(club.chat_enabled) if club else False,
         "is_vip": guest_type == "vip",
         # ТЗ п.45 — есть ли у гостя постоянный профиль (Google уже
@@ -1148,16 +1149,17 @@ def request_table_group_close():
 @require_guest
 def send_chat_message():
     """
-    Гость пишет KJ (ТЗ §20, §49). Работает только если у клуба включён
-    чат (Club.chat_enabled — 1:1 перенос старого venues.chat_enabled) —
-    так же, как в старом боте пункт меню чата вообще не показывался, если
-    флаг выключен; здесь дополнительно проверяем на сервере, а не только
-    прячем кнопку (старый баг класса "проверка только видимостью кнопки",
-    который новый ТЗ явно требует не повторять — см. PHASE1_AUDIT, §54/§61).
+    Гость пишет KJ (ТЗ §20, §49). ИЗМЕНЕНО (запрос пользователя 2026-10-01,
+    "чат Гости-KJ работает всегда") — раньше здесь дополнительно проверялся
+    Club.chat_enabled (1:1 перенос старого venues.chat_enabled), но
+    пользователь явно уточнил: чат гостя с ведущим должен работать всегда,
+    без переключателя. Club.chat_enabled остаётся в базе для будущего
+    отдельного чата "гость-гость" (пока не реализован, см. заглушку
+    "Общий чат" в Guest App) — переписки с ведущим он больше не касается.
     """
     club = db.session.get(Club, g.club_id)
-    if club is None or not club.chat_enabled:
-        return api_error(403, "CHAT_DISABLED", "Чат отключён в этом клубе")
+    if club is None:
+        return api_error(404, "CLUB_NOT_FOUND", "Клуб не найден")
 
     payload = request.get_json(silent=True) or {}
     message_text = payload.get("message_text")
