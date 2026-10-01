@@ -629,3 +629,14 @@ OrderChangeRequestsPanel), а не терялась среди обычных к
   color: inherit;
   font: inherit;
 }
+
+/* Мигание кнопки "Сообщения", когда есть новые непрочитанные заявки/сообщения от гостей. */
+.btn-link--blink {
+  animation: btn-link-blink 1s step-start infinite;
+}
+
+@keyframes btn-link-blink {
+  50% {
+    opacity: 0.25;
+  }
+}
