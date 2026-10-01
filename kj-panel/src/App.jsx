@@ -735,7 +735,7 @@ function KjChatPanel({ token, clubId, socket }) {
             <li key={t.guestId} className="vip-row">
               <span>
                 {t.lastMessage.from_guest ? "🆕 " : ""}
-                Стол {t.tableNo ?? "—"} · гость #{t.guestId}: {t.lastMessage.message_text}
+                Стол {t.tableNo ?? "—"} · гость #{t.guestId}: {t.lastMessage.message_text || (t.lastMessage.image_data_url ? "📷 Скриншот" : "")}
               </span>
               <span className="vip-row__actions">
                 <button type="button" className="btn-link" onClick={() => setSelectedGuestId(t.guestId)}>
@@ -761,8 +761,12 @@ function KjChatPanel({ token, clubId, socket }) {
       </button>
       <ul className="vip-list">
         {thread.map((m) => (
-          <li key={m.id} className="vip-row">
-            <span>{m.from_guest ? "Гость" : "Вы"}: {m.message_text}</span>
+          <li key={m.id} className="vip-row chat-thread-row">
+            <span>{m.from_guest ? "Гость" : "Вы"}:</span>
+            {m.image_data_url && (
+              <img src={m.image_data_url} alt="Скриншот от гостя" className="chat-thread-row__image" />
+            )}
+            {m.message_text && <span>{m.message_text}</span>}
           </li>
         ))}
       </ul>
