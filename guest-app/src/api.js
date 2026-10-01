@@ -126,11 +126,11 @@ export const api = {
   cancelOrder: (token, orderId) =>
     request(`/api/guest/order/${orderId}/cancel`, { method: "POST", token }),
   getQueue: (token) => request("/api/guest/queue", { token }),
-  sendChatMessage: (token, messageText, imageDataUrl) =>
+  sendChatMessage: (token, messageText, imageDataUrl, serviceId) =>
     request("/api/guest/chat", {
       method: "POST",
       token,
-      body: { message_text: messageText, image_data_url: imageDataUrl },
+      body: { message_text: messageText, image_data_url: imageDataUrl, service_id: serviceId },
     }),
   listChat: (token) => request("/api/guest/chat", { token }),
   listServices: (token) => request("/api/guest/services", { token }),
