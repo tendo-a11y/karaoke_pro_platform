@@ -650,6 +650,11 @@ function TableCloseRequestsPanel({ token, clubId, socket }) {
 function VipPanel({ token, clubId, socket }) {
   const [pending, setPending] = useState(null);
   const [clients, setClients] = useState(null);
+  // ДОБАВЛЕНО (2026-09-30, запрос пользователя "баланс VIP и пополнение") —
+  // заявки гостей "хочу пополнить баланс" (см. docstring
+  // services/vip_topup_request_service.py). Сама сумма по-прежнему
+  // начисляется через handleTopup ниже — эта заявка только уведомление.
+  const [topupRequests, setTopupRequests] = useState(null);
   const [loadError, setLoadError] = useState(null);
   const [actionError, setActionError] = useState(null);
   const [busyKey, setBusyKey] = useState(null);
@@ -658,12 +663,14 @@ function VipPanel({ token, clubId, socket }) {
 
   async function reload() {
     try {
-      const [pendingData, clientsData] = await Promise.all([
+      const [pendingData, clientsData, topupData] = await Promise.all([
         api.listVipRequests(token, clubId, "pending"),
         api.listVipClients(token, clubId),
+        api.listVipTopupRequests(token, clubId),
       ]);
       setPending(pendingData);
       setClients(clientsData);
+      setTopupRequests(topupData);
       setLoadError(null);
     } catch (err) {
       setLoadError(err instanceof ApiError ? err.message : String(err));
@@ -684,8 +691,23 @@ function VipPanel({ token, clubId, socket }) {
       });
     };
     socket.on("vip_request_created", onCreated);
+
+    const onTopupCreated = (topupRequest) => {
+      setTopupRequests((prev) => {
+        const list = prev || [];
+        return list.some((r) => r.id === topupRequest.id) ? list : [...list, topupRequest];
+      });
+    };
+    const onTopupDecided = (topupRequest) => {
+      setTopupRequests((prev) => (prev || []).filter((r) => r.id !== topupRequest.id));
+    };
+    socket.on("vip_topup_request_created", onTopupCreated);
+    socket.on("vip_topup_request_decided", onTopupDecided);
+
     return () => {
       socket.off("vip_request_created", onCreated);
+      socket.off("vip_topup_request_created", onTopupCreated);
+      socket.off("vip_topup_request_decided", onTopupDecided);
     };
   }, [socket]);
 
@@ -838,8 +860,21 @@ function VipPanel({ token, clubId, socket }) {
     }
   }
 
+  async function handleResolveTopup(requestId) {
+    setBusyKey(`topup-${requestId}`);
+    setActionError(null);
+    try {
+      await api.resolveVipTopupRequest(token, requestId);
+      await reload();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
   if (loadError) return <div className="banner banner--error">{loadError}</div>;
-  if (!pending || !clients) return <p className="empty-hint">Загрузка…</p>;
+  if (!pending || !clients || !topupRequests) return <p className="empty-hint">Загрузка…</p>;
 
   return (
     <div className="vip-panel">
@@ -864,6 +899,26 @@ function VipPanel({ token, clubId, socket }) {
                   onClick={() => handleReject(r.id)}
                 >
                   Отклонить
+                </button>
+              </span>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section>
+        <h2>Запросы на пополнение баланса ({topupRequests.length})</h2>
+        {topupRequests.length === 0 && <p className="empty-hint">Запросов нет.</p>}
+        <ul className="vip-list">
+          {topupRequests.map((r) => (
+            <li key={r.id} className="vip-row">
+              <span>Гость #{r.guest_id}</span>
+              <span className="vip-row__actions">
+                <button
+                  type="button" className="btn btn--accent" disabled={busyKey === `topup-${r.id}`}
+                  onClick={() => handleResolveTopup(r.id)}
+                >
+                  Обработано
                 </button>
               </span>
             </li>
