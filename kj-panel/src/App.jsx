@@ -2685,6 +2685,11 @@ export default function App() {
   const [bridgeStatus, setBridgeStatus] = useState(null);
   const [manualAddBusy, setManualAddBusy] = useState(false);
   const [manualAddError, setManualAddError] = useState(null);
+  // Мигание кнопки "Сообщения" (запрос пользователя 2026-10-01) — true, пока
+  // есть хоть одна новая непрочитанная заявка/сообщение любого вида,
+  // собранных на экране "Сообщения"; сбрасывается в false, когда KJ
+  // открывает этот экран (см. onClick кнопки ниже).
+  const [hasNewMessages, setHasNewMessages] = useState(false);
   // 'orders' | 'vip' | 'categories' | 'tables' | 'guests' | 'manual' —
   // переключение верхнеуровневых экранов (Block D KJ Pro; 'categories'/
   // 'tables' добавлены доп. ТЗ "KJ Pro", KJ-01/03/07 и KJ-04 соответственно;
@@ -2741,6 +2746,35 @@ export default function App() {
       } catch {
         // см. комментарий выше — не критично.
       }
+
+      // Мигание кнопки "Сообщения" сразу при открытии панели, если
+      // непрочитанное уже накопилось до того, как KJ зашёл (а не только
+      // после первого же сокет-события после этого) — одним запросом
+      // проверяем все виды заявок/сообщений, которые собирает экран
+      // "Сообщения".
+      try {
+        const [changeReqs, closeReqs, vipReqs, topupReqs, chatMsgs] = await Promise.all([
+          api.listOrderChangeRequests(token, meData.club_id),
+          api.listTableCloseRequests(token, meData.club_id),
+          api.listVipRequests(token, meData.club_id, "pending"),
+          api.listVipTopupRequests(token, meData.club_id),
+          api.listChat(token, meData.club_id),
+        ]);
+        const latestByGuest = new Map();
+        for (const m of chatMsgs || []) {
+          const prev = latestByGuest.get(m.telegram_user_id);
+          if (!prev || m.created_at > prev.created_at) latestByGuest.set(m.telegram_user_id, m);
+        }
+        const chatNeedsReply = [...latestByGuest.values()].some((m) => m.from_guest);
+        if (!cancelled) {
+          setHasNewMessages(
+            changeReqs.length > 0 || closeReqs.length > 0 || vipReqs.length > 0 || topupReqs.length > 0 || chatNeedsReply,
+          );
+        }
+      } catch {
+        // Не критично — просто не замигает сразу при открытии, подхватит
+        // первое же сокет-событие ниже.
+      }
     }
 
     bootstrap();
@@ -2773,6 +2807,17 @@ export default function App() {
 
     socket.on("queue_updated", (payload) => {
       setQueue(payload.queue || []);
+    });
+
+    // Мигание кнопки "Сообщения" (запрос пользователя 2026-10-01) — любое из
+    // этих событий означает новую заявку/сообщение на экране "Сообщения";
+    // гасится кликом по самой кнопке (сброс hasNewMessages в onClick ниже).
+    socket.on("order_change_request_created", () => setHasNewMessages(true));
+    socket.on("table_close_request_created", () => setHasNewMessages(true));
+    socket.on("vip_request_created", () => setHasNewMessages(true));
+    socket.on("vip_topup_request_created", () => setHasNewMessages(true));
+    socket.on("chat_message", (message) => {
+      if (message.from_guest) setHasNewMessages(true);
     });
 
     return () => {
@@ -2860,7 +2905,14 @@ export default function App() {
             </button>
           )}
           {view !== "messages" && (
-            <button type="button" className="btn-link" onClick={() => setView("messages")}>
+            <button
+              type="button"
+              className={hasNewMessages ? "btn-link btn-link--blink" : "btn-link"}
+              onClick={() => {
+                setHasNewMessages(false);
+                setView("messages");
+              }}
+            >
               ✉️ Сообщения
             </button>
           )}
