@@ -406,3 +406,50 @@ select {
    на настоящий обязательный выбор при каждом заказе/замене песни (пустое
    значение + disabled-плейсхолдер + required в App.jsx), это надёжнее
    визуальной подсказки. */
+
+/* Фото гостя рядом с именем (запрос пользователя 2026-10-01, "клиент сам
+загружает своё фото, но это не обязательно, там же где Изменить имя"). */
+.profile-photo-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.profile-photo-row__photo {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 20px;
+}
+
+/* label вместо <button>, поэтому базовый селектор "button" выше её не
+красит — дублируем тот же вид, чтобы кнопка загрузки фото выглядела как
+остальные кнопки на этом экране ("Изменить имя" и т.п.). */
+.profile-photo-upload {
+  background: var(--accent);
+  color: #1a1400;
+  border: none;
+  border-radius: 10px;
+  padding: 12px 16px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  display: inline-block;
+}
+
+.profile-photo-upload input[type="file"] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
