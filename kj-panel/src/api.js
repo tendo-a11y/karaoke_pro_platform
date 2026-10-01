@@ -104,6 +104,13 @@ export const api = {
     request(`/api/kj/vip-requests/${requestId}/approve`, { method: "PUT", token }),
   rejectVipRequest: (token, requestId) =>
     request(`/api/kj/vip-requests/${requestId}/reject`, { method: "PUT", token }),
+  // ДОБАВЛЕНО (2026-09-30, запрос пользователя "баланс VIP и пополнение") —
+  // список заявок "хочу пополнить баланс" и отметка "обработано" (сама
+  // сумма зачисляется через уже существующую topupVipBalance).
+  listVipTopupRequests: (token, clubId) =>
+    request(`/api/kj/vip-topup-requests/${clubId}`, { token }),
+  resolveVipTopupRequest: (token, requestId) =>
+    request(`/api/kj/vip-topup-requests/${requestId}/resolve`, { method: "PUT", token }),
   // ДОБАВЛЕНО (2026-09-20, решение пользователя "Нужно одобрение KJ (запрос
   // → Одобрить/Отклонить)") — заявки гостей на отмену/замену уже принятого
   // заказа, см. backend/routes/kj.py::list_order_change_requests и
