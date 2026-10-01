@@ -190,13 +190,51 @@ function OrderRow({
 // личности теперь целиком держится на Google (см. GuestAccount), новый
 // вход под тем же Google-аккаунтом сам восстанавливает VIP-статус, никакой
 // код для этого предъявлять не нужно.
+// ИЗМЕНЕНО (запрос пользователя 2026-10-01, "Сообщения" у гостя): раньше
+// одна и та же панель показывала и баланс VIP, и кнопку "Стать VIP" для
+// ещё не VIP-гостей. Баланс+пополнение переехали в экран "Сообщения" (см.
+// VipBalancePanel ниже) — эта панель остаётся на главном экране и теперь
+// только про "Стать VIP" (уже VIP-гостям ничего не показывает).
 function VipPanel({ token, meInfo }) {
   const [requesting, setRequesting] = useState(false);
   const [requestSent, setRequestSent] = useState(false);
   const [error, setError] = useState(null);
-  // ДОБАВЛЕНО (2026-09-30, запрос пользователя "баланс VIP и пополнение") —
-  // кнопка "Запросить пополнение", когда баланс уже в минусе (см.
-  // meInfo.vip_balance_blocked/vip_topup_pending из GET /api/guest/me).
+
+  async function handleRequestVip() {
+    setRequesting(true);
+    setError(null);
+    try {
+      await api.requestVip(token);
+      setRequestSent(true);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setRequesting(false);
+    }
+  }
+
+  if (meInfo.is_vip) return null;
+
+  return (
+    <section className="panel vip-panel">
+      <h2>⭐ VIP-статус</h2>
+      {error && <div className="banner banner--error">{error}</div>}
+      {meInfo.vip_request_pending || requestSent ? (
+        <p className="empty-hint">Заявка отправлена — ждите решения ведущего.</p>
+      ) : (
+        <button type="button" onClick={handleRequestVip} disabled={requesting}>
+          {requesting ? "Отправляем…" : "🎟 Стать VIP"}
+        </button>
+      )}
+    </section>
+  );
+}
+
+// ДОБАВЛЕНО (запрос пользователя 2026-10-01, "Сообщения" у гостя): баланс
+// VIP, кэшбэк и кнопка "Запросить пополнение" — раньше часть VipPanel выше,
+// теперь отдельная панель, которая показывается только на экране
+// "Сообщения" (см. App() ниже, view === "messages") и только VIP-гостям.
+function VipBalancePanel({ token, meInfo }) {
   const [requestingTopup, setRequestingTopup] = useState(false);
   const [topupSent, setTopupSent] = useState(false);
   const [topupError, setTopupError] = useState(null);
@@ -214,58 +252,31 @@ function VipPanel({ token, meInfo }) {
     }
   }
 
-  async function handleRequestVip() {
-    setRequesting(true);
-    setError(null);
-    try {
-      await api.requestVip(token);
-      setRequestSent(true);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : String(err));
-    } finally {
-      setRequesting(false);
-    }
-  }
-
-  if (meInfo.is_vip) {
-    return (
-      <section className="panel vip-panel vip-panel--active">
-        <h2>⭐ VIP-профиль</h2>
-        <div className="vip-stat-row">
-          <span>Баланс</span>
-          <strong>{meInfo.vip.balance.toFixed(2)}</strong>
-        </div>
-        <div className="vip-stat-row">
-          <span>Кэшбэк</span>
-          <strong>{meInfo.vip.cashback_percent}%</strong>
-        </div>
-        {meInfo.vip_balance_blocked && (
-          <>
-            <div className="banner banner--error">Пополните баланс, чтобы заказывать новые песни.</div>
-            {topupError && <div className="banner banner--error">{topupError}</div>}
-            {meInfo.vip_topup_pending || topupSent ? (
-              <p className="empty-hint">Запрос на пополнение отправлен — ведущий уже знает.</p>
-            ) : (
-              <button type="button" onClick={handleRequestTopup} disabled={requestingTopup}>
-                {requestingTopup ? "Отправляем…" : "Запросить пополнение"}
-              </button>
-            )}
-          </>
-        )}
-      </section>
-    );
-  }
+  if (!meInfo.is_vip) return null;
 
   return (
-    <section className="panel vip-panel">
-      <h2>⭐ VIP-статус</h2>
-      {error && <div className="banner banner--error">{error}</div>}
-      {meInfo.vip_request_pending || requestSent ? (
-        <p className="empty-hint">Заявка отправлена — ждите решения ведущего.</p>
-      ) : (
-        <button type="button" onClick={handleRequestVip} disabled={requesting}>
-          {requesting ? "Отправляем…" : "🎟 Стать VIP"}
-        </button>
+    <section className="panel vip-panel vip-panel--active">
+      <h2>⭐ VIP-профиль</h2>
+      <div className="vip-stat-row">
+        <span>Баланс</span>
+        <strong>{meInfo.vip.balance.toFixed(2)}</strong>
+      </div>
+      <div className="vip-stat-row">
+        <span>Кэшбэк</span>
+        <strong>{meInfo.vip.cashback_percent}%</strong>
+      </div>
+      {meInfo.vip_balance_blocked && (
+        <>
+          <div className="banner banner--error">Пополните баланс, чтобы заказывать новые песни.</div>
+          {topupError && <div className="banner banner--error">{topupError}</div>}
+          {meInfo.vip_topup_pending || topupSent ? (
+            <p className="empty-hint">Запрос на пополнение отправлен — ведущий уже знает.</p>
+          ) : (
+            <button type="button" onClick={handleRequestTopup} disabled={requestingTopup}>
+              {requestingTopup ? "Отправляем…" : "Запросить пополнение"}
+            </button>
+          )}
+        </>
       )}
     </section>
   );
@@ -1456,6 +1467,11 @@ export default function App() {
   // состояние, поэтому это часть рендера, а не setState в эффекте.
   const linkInvalid = !clubId;
   const [initError, setInitError] = useState(null);
+  // "home" | "messages" — новый отдельный экран "Сообщения" (запрос
+  // пользователя 2026-10-01): собирает в одном месте пополнение VIP-баланса,
+  // чат с ведущим и ещё две кнопки-заглушки под будущие функции, вместо
+  // того чтобы всё это было разбросано по главному экрану.
+  const [view, setView] = useState("home");
 
   const [songTitle, setSongTitle] = useState("");
   const [artist, setArtist] = useState("");
@@ -1841,6 +1857,41 @@ export default function App() {
   const groupOk = !hasTable || meInfo.table_group_status === "admin" || meInfo.table_group_status === "member";
   const canOrder = activated && groupOk;
 
+  // Экран "Сообщения" (запрос пользователя 2026-10-01) — собирает в одном
+  // месте пополнение VIP-баланса, чат с ведущим и ещё два пункта-заглушки
+  // под будущие функции ("Общий чат", "Заказ новой песни"), вместо того
+  // чтобы это было разбросано по главному экрану.
+  if (view === "messages") {
+    return (
+      <div className="app-shell">
+        <header className="app-header">
+          <h1>✉️ Сообщения</h1>
+          <button type="button" className="btn-link" onClick={() => setView("home")}>
+            ← Назад
+          </button>
+        </header>
+
+        <VipBalancePanel token={session.token} meInfo={meInfo} />
+
+        {meInfo.chat_enabled && <ChatPanel token={session.token} />}
+
+        <section className="panel">
+          <h2>💬 Общий чат</h2>
+          <button type="button" className="btn-link" disabled>
+            Скоро
+          </button>
+        </section>
+
+        <section className="panel">
+          <h2>🎵 Заказ новой песни</h2>
+          <button type="button" className="btn-link" disabled>
+            Скоро
+          </button>
+        </section>
+      </div>
+    );
+  }
+
   return (
     <div className="app-shell">
       <header className="app-header">
@@ -1848,6 +1899,9 @@ export default function App() {
         <span className="app-header__table">
           {meInfo.table_no != null ? `Стол ${meInfo.table_no}` : "Без стола"}
         </span>
+        <button type="button" className="btn-link" onClick={() => setView("messages")}>
+          ✉️ Сообщения
+        </button>
       </header>
 
       {meInfo.table_close_receipt && !dismissedCloseRequestIds.has(meInfo.table_close_receipt.id) && (
@@ -2049,8 +2103,6 @@ export default function App() {
           </ol>
         )}
       </section>
-
-      {meInfo.chat_enabled && <ChatPanel token={session.token} />}
     </div>
   );
 }
