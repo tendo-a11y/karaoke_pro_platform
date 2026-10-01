@@ -5,7 +5,7 @@ from flask import Blueprint, current_app, g, jsonify, request
 from auth import issue_kj_google_token, require_kj
 from errors import api_error, api_ok
 from extensions import db
-from models import ChatMessage, Club, KJOperator, Order, STATUS_PLAYING, TableGroupMember, VipClient, VipRequest
+from models import ChatMessage, Club, GuestAccount, KJOperator, Order, STATUS_PLAYING, TableGroupMember, VipClient, VipRequest
 from services import category_service, guest_directory_service, guest_status_service, song_service, table_close_service, table_group_service, vip_service, vip_topup_request_service
 from services.guest_directory_service import GUEST_TYPES, GuestDirectoryError
 from services.category_service import CategoryServiceError
@@ -561,6 +561,15 @@ def list_vip_clients(club_id):
         row = c.to_dict()
         status = guest_status_service.get_status(club_id, c.telegram_user_id)
         row["is_blocked"] = bool(status.is_blocked) if status else False
+        # ДОБАВЛЕНО (запрос пользователя 2026-10-01, "не видно имя гостя во
+        # вкладке VIP"): у VipClient своего имени нет — оно живёт в
+        # постоянном профиле гостя (GuestAccount, см. его докстринг), сюда
+        # просто подмешиваем display_name и фото оттуда по тому же
+        # (club_id, telegram_user_id), по которому уже ищем guest_status
+        # выше.
+        account = GuestAccount.query.filter_by(club_id=club_id, telegram_user_id=c.telegram_user_id).first()
+        row["display_name"] = account.display_name if account else None
+        row["photo_data_url"] = account.photo_data_url if account else None
         result.append(row)
     return api_ok(result)
 
@@ -1058,6 +1067,36 @@ def block_guest(guest_id):
         return api_error(400, "VALIDATION_ERROR", "guest_id должен быть числом")
     status = guest_status_service.block(g.club_id, parsed_id, g.kj)
     return api_ok(status.to_dict())
+
+
+@bp.put("/guests/<guest_id>/photo")
+@require_kj
+def set_guest_photo(guest_id):
+    """
+    Фото VIP-клиента в карточке/списке (запрос пользователя 2026-10-01,
+    вкладка "VIP-клиенты": "давай сделаем возможным загрузить фото клиента.
+    по желанию можно и не загружать. но возможность должна быть") —
+    необязательное поле GuestAccount.photo_data_url (см. его докстринг в
+    models.py). photo_data_url: null — убрать фото; иначе строка вида
+    "data:image/...;base64,..." — фронтенд должен прислать уже уменьшенную
+    картинку, здесь только защитный предел на размер самой строки.
+    """
+    parsed_id = _parse_guest_id(guest_id)
+    if parsed_id is None:
+        return api_error(400, "VALIDATION_ERROR", "guest_id должен быть числом")
+    data = request.get_json(silent=True) or {}
+    photo_data_url = data.get("photo_data_url")
+    if photo_data_url is not None:
+        if not isinstance(photo_data_url, str) or not photo_data_url.startswith("data:image/"):
+            return api_error(400, "VALIDATION_ERROR", "photo_data_url должен быть изображением")
+        if len(photo_data_url) > 2_000_000:
+            return api_error(400, "VALIDATION_ERROR", "Фото слишком большое")
+    account = GuestAccount.query.filter_by(club_id=g.club_id, telegram_user_id=parsed_id).first()
+    if account is None:
+        return api_error(404, "GUEST_ACCOUNT_NOT_FOUND", "Профиль гостя не найден")
+    account.photo_data_url = photo_data_url
+    db.session.commit()
+    return api_ok(account.to_dict())
 
 
 @bp.post("/guests/<guest_id>/unblock")
