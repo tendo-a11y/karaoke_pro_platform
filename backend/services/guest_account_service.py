@@ -67,3 +67,27 @@ def set_display_name(club_id: int, guest_id: int, name: str) -> GuestAccount | N
     account.display_name = name
     db.session.commit()
     return account
+
+
+def set_photo(club_id: int, guest_id: int, photo_data_url: str | None) -> GuestAccount | None:
+    """
+    Гость сам загружает (необязательно) своё фото — рядом с тем же местом,
+    где меняет имя (запрос пользователя 2026-10-01: "клиент сам загружает
+    своё фото (но это не обязательно) там же где Изменить имя", routes/
+    guest.py::set_my_photo). Тот же принцип, что и у set_display_name выше:
+    требует уже существующего постоянного профиля, None здесь — сигнал
+    вызывающему коду вернуть GOOGLE_LINK_REQUIRED. photo_data_url=None
+    убирает уже загруженное фото.
+
+    Отдельно от routes/kj.py::set_guest_photo (KJ тоже может загрузить фото
+    клиента из своей панели, запрос пользователя 2026-10-01 "пусть тоже
+    может загрузить фото клиента сам") — оба пишут в одно и то же поле
+    GuestAccount.photo_data_url, последняя запись побеждает, отдельной
+    истории/авторства фото не ведётся, т.к. это не требовалось.
+    """
+    account = get_by_guest_id(club_id, guest_id)
+    if account is None:
+        return None
+    account.photo_data_url = photo_data_url
+    db.session.commit()
+    return account
