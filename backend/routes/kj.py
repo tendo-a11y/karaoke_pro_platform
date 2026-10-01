@@ -6,7 +6,7 @@ from auth import issue_kj_google_token, require_kj
 from errors import api_error, api_ok
 from extensions import db
 from models import ChatMessage, Club, KJOperator, Order, STATUS_PLAYING, TableGroupMember, VipClient, VipRequest
-from services import category_service, guest_directory_service, guest_status_service, song_service, table_close_service, table_group_service, vip_service
+from services import category_service, guest_directory_service, guest_status_service, song_service, table_close_service, table_group_service, vip_service, vip_topup_request_service
 from services.guest_directory_service import GUEST_TYPES, GuestDirectoryError
 from services.category_service import CategoryServiceError
 from services.google_auth_service import GoogleAuthError, verify_google_credential
@@ -409,6 +409,40 @@ def reject_vip_request(request_id):
     result = vip_service.reject_vip_request(request_id, g.kj)
     if result.outcome == "not_found":
         return api_error(404, "VIP_REQUEST_NOT_FOUND", "Заявка не найдена")
+    if result.outcome == "forbidden":
+        return api_error(403, "FORBIDDEN", "Нет доступа к этой заявке")
+    if result.outcome == "already_decided":
+        return api_error(409, "ALREADY_DECIDED", "Заявка уже обработана")
+    return api_ok(result.request.to_dict())
+
+
+@bp.get("/vip-topup-requests/<int:club_id>")
+@require_kj
+def list_vip_topup_requests(club_id):
+    """
+    Запросы VIP-гостей "хочу пополнить баланс" (см. докстринг
+    services/vip_topup_request_service.py) — тот же вид списка, что и
+    /vip-requests выше. Решённые заявки KJ Panel не показывает, поэтому
+    без параметра ?status, в отличие от /vip-requests.
+    """
+    denied = _ensure_own_club(club_id)
+    if denied:
+        return denied
+    requests_ = vip_topup_request_service.list_pending(club_id)
+    return api_ok([r.to_dict() for r in requests_])
+
+
+@bp.put("/vip-topup-requests/<int:request_id>/resolve")
+@require_kj
+def resolve_vip_topup_request(request_id):
+    """
+    KJ отмечает заявку на пополнение обработанной — деньги он уже зачислил
+    вручную через POST /vip-clients/<id>/topup (как и раньше), эта кнопка
+    только убирает уведомление из списка во всех открытых панелях клуба.
+    """
+    result = vip_topup_request_service.resolve_request(g.club_id, request_id, g.kj)
+    if result.outcome == "not_found":
+        return api_error(404, "VIP_TOPUP_REQUEST_NOT_FOUND", "Заявка не найдена")
     if result.outcome == "forbidden":
         return api_error(403, "FORBIDDEN", "Нет доступа к этой заявке")
     if result.outcome == "already_decided":
