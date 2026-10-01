@@ -1161,15 +1161,25 @@ def send_chat_message():
 
     payload = request.get_json(silent=True) or {}
     message_text = payload.get("message_text")
-    if not message_text or not isinstance(message_text, str):
-        return api_error(400, "VALIDATION_ERROR", "message_text обязателен")
+    image_data_url = payload.get("image_data_url")
+
+    if message_text is not None and not isinstance(message_text, str):
+        return api_error(400, "VALIDATION_ERROR", "message_text должен быть строкой")
+    if image_data_url is not None:
+        if not isinstance(image_data_url, str) or not image_data_url.startswith("data:image/"):
+            return api_error(400, "VALIDATION_ERROR", "image_data_url должен быть изображением")
+        if len(image_data_url) > 2_000_000:
+            return api_error(400, "VALIDATION_ERROR", "Изображение слишком большое")
+    if not (message_text and message_text.strip()) and not image_data_url:
+        return api_error(400, "VALIDATION_ERROR", "Нужно указать текст или изображение")
 
     message = ChatMessage(
         club_id=g.club_id,
         telegram_user_id=g.guest_id,
         table_no=g.table_no,
         from_guest=True,
-        message_text=message_text,
+        message_text=message_text or "",
+        image_data_url=image_data_url,
     )
     db.session.add(message)
     db.session.commit()
