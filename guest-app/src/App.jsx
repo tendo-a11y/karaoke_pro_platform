@@ -194,6 +194,25 @@ function VipPanel({ token, meInfo }) {
   const [requesting, setRequesting] = useState(false);
   const [requestSent, setRequestSent] = useState(false);
   const [error, setError] = useState(null);
+  // ДОБАВЛЕНО (2026-09-30, запрос пользователя "баланс VIP и пополнение") —
+  // кнопка "Запросить пополнение", когда баланс уже в минусе (см.
+  // meInfo.vip_balance_blocked/vip_topup_pending из GET /api/guest/me).
+  const [requestingTopup, setRequestingTopup] = useState(false);
+  const [topupSent, setTopupSent] = useState(false);
+  const [topupError, setTopupError] = useState(null);
+
+  async function handleRequestTopup() {
+    setRequestingTopup(true);
+    setTopupError(null);
+    try {
+      await api.requestVipTopup(token);
+      setTopupSent(true);
+    } catch (err) {
+      setTopupError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setRequestingTopup(false);
+    }
+  }
 
   async function handleRequestVip() {
     setRequesting(true);
@@ -220,6 +239,19 @@ function VipPanel({ token, meInfo }) {
           <span>Кэшбэк</span>
           <strong>{meInfo.vip.cashback_percent}%</strong>
         </div>
+        {meInfo.vip_balance_blocked && (
+          <>
+            <div className="banner banner--error">Пополните баланс, чтобы заказывать новые песни.</div>
+            {topupError && <div className="banner banner--error">{topupError}</div>}
+            {meInfo.vip_topup_pending || topupSent ? (
+              <p className="empty-hint">Запрос на пополнение отправлен — ведущий уже знает.</p>
+            ) : (
+              <button type="button" onClick={handleRequestTopup} disabled={requestingTopup}>
+                {requestingTopup ? "Отправляем…" : "Запросить пополнение"}
+              </button>
+            )}
+          </>
+        )}
       </section>
     );
   }
