@@ -439,6 +439,21 @@ OrderChangeRequestsPanel), а не терялась среди обычных к
   font-size: 14px;
 }
 
+/* ДОБАВЛЕНО (2026-10-01, запрос пользователя "поле ввода длиннее, кнопка
+меньше" для ответа гостю в чате) — compound-селекторы, чтобы не задеть
+обычное использование .vip-amount-input/.btn в других местах (пополнение
+баланса VIP, кэшбэк и т.п.), где узкое поле рядом с несколькими кнопками
+как раз нужно. */
+.vip-amount-input.chat-reply-input {
+  width: auto;
+  flex: 1;
+  min-width: 0;
+}
+.btn.chat-reply-send {
+  flex: 0 0 auto;
+  padding: 10px 16px;
+}
+
 .app-header__nav { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
 
 .categories-panel { display: flex; flex-direction: column; gap: 24px; }
