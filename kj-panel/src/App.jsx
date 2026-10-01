@@ -771,15 +771,22 @@ function KjChatPanel({ token, clubId, socket }) {
         ))}
       </ul>
       {sendError && <div className="banner banner--error">{sendError}</div>}
-      <div className="vip-row__actions">
+      {/* ИЗМЕНЕНО (запрос пользователя 2026-10-01, "поле ввода длиннее,
+      кнопка меньше") — раньше здесь переиспользовались .vip-row__actions/
+      .vip-amount-input, которые другие места (пополнение баланса VIP,
+      кэшбэк) используют с узким полем под несколько кнопок рядом. Для
+      ответа гостю это неудобно — сделан отдельный класс-модификатор
+      chat-reply-row/chat-reply-input/chat-reply-send, не трогающий те
+      другие места. */}
+      <div className="vip-row__actions chat-reply-row">
         <input
-          className="vip-amount-input"
+          className="vip-amount-input chat-reply-input"
           type="text"
           placeholder="Ответ гостю…"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
         />
-        <button type="button" className="btn btn--accent" disabled={sending || !draft.trim()} onClick={handleSend}>
+        <button type="button" className="btn btn--accent chat-reply-send" disabled={sending || !draft.trim()} onClick={handleSend}>
           Отправить
         </button>
       </div>
