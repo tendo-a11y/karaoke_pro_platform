@@ -21,11 +21,20 @@ function formatMoney(amount) {
 // обращения к бэкенду за картинкой — он отдаёт только ссылку).
 function QrCodeImage({ url }) {
   const [dataUrl, setDataUrl] = useState(null);
+  // ДОБАВЛЕНО (запрос пользователя 2026-10-01, "нужна возможность скачать
+  // QR-код") — отдельный, более крупный вариант той же картинки специально
+  // для скачивания (превью на экране по-прежнему 180px, чтобы не менять
+  // вёрстку карточки; для печати/афиши 180px мелковато, поэтому для
+  // скачивания рендерим тот же QR в более высоком разрешении).
+  const [downloadUrl, setDownloadUrl] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
     QRCode.toDataURL(url, { width: 180, margin: 1 }).then((result) => {
       if (!cancelled) setDataUrl(result);
+    });
+    QRCode.toDataURL(url, { width: 1024, margin: 2 }).then((result) => {
+      if (!cancelled) setDownloadUrl(result);
     });
     return () => {
       cancelled = true;
@@ -36,6 +45,11 @@ function QrCodeImage({ url }) {
     <div className="qr-card">
       <div className="qr-card__label">Общий QR-код клуба</div>
       {dataUrl ? <img src={dataUrl} alt="QR-код входа в клуб" /> : <p className="empty-hint">Генерация…</p>}
+      {downloadUrl && (
+        <a className="link-btn" href={downloadUrl} download="qr-club.png">
+          ⬇ Скачать QR-код
+        </a>
+      )}
       <div className="qr-card__url">{url}</div>
     </div>
   );
