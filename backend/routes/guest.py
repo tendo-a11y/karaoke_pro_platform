@@ -1164,6 +1164,7 @@ def send_chat_message():
     payload = request.get_json(silent=True) or {}
     message_text = payload.get("message_text")
     image_data_url = payload.get("image_data_url")
+    service_id = payload.get("service_id")
 
     if message_text is not None and not isinstance(message_text, str):
         return api_error(400, "VALIDATION_ERROR", "message_text должен быть строкой")
@@ -1175,6 +1176,18 @@ def send_chat_message():
     if not (message_text and message_text.strip()) and not image_data_url:
         return api_error(400, "VALIDATION_ERROR", "Нужно указать текст или изображение")
 
+    # ДОБАВЛЕНО (запрос пользователя 2026-10-01, "в заказе через скриншот
+    # тоже нужен выбор категории") — та же проверка, что подразумевает
+    # список /services для гостя: категория должна принадлежать клубу
+    # гостя и не быть скрытой (kj_only), иначе гость мог бы прислать id
+    # чужого клуба или служебную категорию, которую сам выбирать не должен.
+    if service_id is not None:
+        if not isinstance(service_id, int):
+            return api_error(400, "VALIDATION_ERROR", "service_id должен быть числом")
+        service = Service.query.filter_by(id=service_id, club_id=g.club_id, kj_only=False).first()
+        if service is None:
+            return api_error(400, "VALIDATION_ERROR", "Такой категории нет")
+
     message = ChatMessage(
         club_id=g.club_id,
         telegram_user_id=g.guest_id,
@@ -1182,6 +1195,7 @@ def send_chat_message():
         from_guest=True,
         message_text=message_text or "",
         image_data_url=image_data_url,
+        service_id=service_id,
     )
     db.session.add(message)
     db.session.commit()
