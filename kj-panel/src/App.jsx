@@ -647,33 +647,158 @@ function TableCloseRequestsPanel({ token, clubId, socket }) {
 // со всем механизмом access_code/redeem (см. отчёт по п.45 и routes/kj.py
 // ::list_vip_clients). VIP теперь появляется только через заявку гостя,
 // уже подтвердившего личность через Google, + одобрение здесь.
-function VipPanel({ token, clubId, socket }) {
-  const [pending, setPending] = useState(null);
-  const [clients, setClients] = useState(null);
-  // ДОБАВЛЕНО (2026-09-30, запрос пользователя "баланс VIP и пополнение") —
-  // заявки гостей "хочу пополнить баланс" (см. docstring
-  // services/vip_topup_request_service.py). Сама сумма по-прежнему
-  // начисляется через handleTopup ниже — эта заявка только уведомление.
-  const [topupRequests, setTopupRequests] = useState(null);
+function KjChatPanel({ token, clubId, socket }) {
+  // ДОБАВЛЕНО (2026-10-01, запрос пользователя "кнопка Сообщения,
+  // собирающая все обращения, включая личный чат с гостями") — сам чат
+  // (ChatMessage, GET/POST /api/kj/chat) существовал на бэкенде уже
+  // давно (см. models.ChatMessage, routes/kj.py::list_chat/reply_chat) и
+  // был доступен гостю (Guest App::ChatPanel), но у KJ Panel до сих пор не
+  // было экрана, чтобы это читать и отвечать — только эта панель.
+  const [messages, setMessages] = useState(null);
   const [loadError, setLoadError] = useState(null);
-  const [actionError, setActionError] = useState(null);
-  const [busyKey, setBusyKey] = useState(null);
-  const [amountDrafts, setAmountDrafts] = useState({});
-  const [cashbackDrafts, setCashbackDrafts] = useState({});
+  const [selectedGuestId, setSelectedGuestId] = useState(null);
+  const [draft, setDraft] = useState("");
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState(null);
 
   async function reload() {
     try {
-      const [pendingData, clientsData, topupData] = await Promise.all([
-        api.listVipRequests(token, clubId, "pending"),
-        api.listVipClients(token, clubId),
-        api.listVipTopupRequests(token, clubId),
-      ]);
-      setPending(pendingData);
-      setClients(clientsData);
-      setTopupRequests(topupData);
+      const data = await api.listChat(token, clubId);
+      setMessages(data);
       setLoadError(null);
     } catch (err) {
       setLoadError(err instanceof ApiError ? err.message : String(err));
+    }
+  }
+
+  useEffect(() => {
+    reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clubId]);
+
+  useEffect(() => {
+    if (!socket) return undefined;
+    const onMessage = (message) => {
+      setMessages((prev) => {
+        const list = prev || [];
+        return list.some((m) => m.id === message.id) ? list : [...list, message];
+      });
+    };
+    socket.on("chat_message", onMessage);
+    return () => {
+      socket.off("chat_message", onMessage);
+    };
+  }, [socket]);
+
+  async function handleSend() {
+    const text = draft.trim();
+    if (!text || selectedGuestId == null) return;
+    setSending(true);
+    setSendError(null);
+    try {
+      await api.replyChat(token, clubId, selectedGuestId, text);
+      setDraft("");
+      await reload();
+    } catch (err) {
+      setSendError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setSending(false);
+    }
+  }
+
+  if (loadError) return <div className="banner banner--error">{loadError}</div>;
+  if (!messages) return <p className="empty-hint">Загрузка…</p>;
+
+  // Группируем по гостю — тот же приём, что докстринг list_chat на
+  // бэкенде предполагает делать на фронтенде (данных в каждом сообщении
+  // достаточно: telegram_user_id/table_no).
+  const threads = new Map();
+  for (const m of messages) {
+    const key = m.telegram_user_id;
+    const existing = threads.get(key);
+    if (!existing || m.created_at > existing.lastMessage.created_at) {
+      threads.set(key, { guestId: key, tableNo: m.table_no, lastMessage: m });
+    }
+  }
+  const threadList = [...threads.values()].sort(
+    (a, b) => new Date(b.lastMessage.created_at) - new Date(a.lastMessage.created_at),
+  );
+
+  if (threadList.length === 0) return null;
+
+  if (selectedGuestId == null) {
+    return (
+      <section className="order-change-requests-panel">
+        <h2>💬 Сообщения от гостей ({threadList.length})</h2>
+        <ul className="vip-list">
+          {threadList.map((t) => (
+            <li key={t.guestId} className="vip-row">
+              <span>
+                {t.lastMessage.from_guest ? "🆕 " : ""}
+                Стол {t.tableNo ?? "—"} · гость #{t.guestId}: {t.lastMessage.message_text}
+              </span>
+              <span className="vip-row__actions">
+                <button type="button" className="btn-link" onClick={() => setSelectedGuestId(t.guestId)}>
+                  Открыть
+                </button>
+              </span>
+            </li>
+          ))}
+        </ul>
+      </section>
+    );
+  }
+
+  const thread = messages
+    .filter((m) => m.telegram_user_id === selectedGuestId)
+    .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+
+  return (
+    <section className="order-change-requests-panel">
+      <h2>💬 Переписка — гость #{selectedGuestId}</h2>
+      <button type="button" className="btn-link" onClick={() => setSelectedGuestId(null)}>
+        ← Все сообщения
+      </button>
+      <ul className="vip-list">
+        {thread.map((m) => (
+          <li key={m.id} className="vip-row">
+            <span>{m.from_guest ? "Гость" : "Вы"}: {m.message_text}</span>
+          </li>
+        ))}
+      </ul>
+      {sendError && <div className="banner banner--error">{sendError}</div>}
+      <div className="vip-row__actions">
+        <input
+          className="vip-amount-input"
+          type="text"
+          placeholder="Ответ гостю…"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+        />
+        <button type="button" className="btn btn--accent" disabled={sending || !draft.trim()} onClick={handleSend}>
+          Отправить
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function VipRequestsPanel({ token, clubId, socket }) {
+  // ДОБАВЛЕНО (2026-10-01, запрос пользователя "кнопка Сообщения,
+  // собирающая все обращения") — вынесено из VipPanel в отдельную панель,
+  // чтобы показывать вместе со всеми остальными обращениями гостей на
+  // экране "Сообщения", а не прятать внутри вкладки VIP. Тот же паттерн
+  // списка + сокет-событий, что и OrderChangeRequestsPanel выше.
+  const [pending, setPending] = useState(null);
+  const [actionError, setActionError] = useState(null);
+  const [busyKey, setBusyKey] = useState(null);
+
+  async function reload() {
+    try {
+      const data = await api.listVipRequests(token, clubId, "pending");
+      setPending(data);
+    } catch {
+      // Тихо — как и в OrderChangeRequestsPanel выше.
     }
   }
 
@@ -691,28 +816,13 @@ function VipPanel({ token, clubId, socket }) {
       });
     };
     socket.on("vip_request_created", onCreated);
-
-    const onTopupCreated = (topupRequest) => {
-      setTopupRequests((prev) => {
-        const list = prev || [];
-        return list.some((r) => r.id === topupRequest.id) ? list : [...list, topupRequest];
-      });
-    };
-    const onTopupDecided = (topupRequest) => {
-      setTopupRequests((prev) => (prev || []).filter((r) => r.id !== topupRequest.id));
-    };
-    socket.on("vip_topup_request_created", onTopupCreated);
-    socket.on("vip_topup_request_decided", onTopupDecided);
-
     return () => {
       socket.off("vip_request_created", onCreated);
-      socket.off("vip_topup_request_created", onTopupCreated);
-      socket.off("vip_topup_request_decided", onTopupDecided);
     };
   }, [socket]);
 
   async function handleApprove(requestId) {
-    setBusyKey(`req-${requestId}`);
+    setBusyKey(requestId);
     setActionError(null);
     try {
       await api.approveVipRequest(token, requestId);
@@ -725,7 +835,7 @@ function VipPanel({ token, clubId, socket }) {
   }
 
   async function handleReject(requestId) {
-    setBusyKey(`req-${requestId}`);
+    setBusyKey(requestId);
     setActionError(null);
     try {
       await api.rejectVipRequest(token, requestId);
@@ -736,6 +846,139 @@ function VipPanel({ token, clubId, socket }) {
       setBusyKey(null);
     }
   }
+
+  if (!pending || pending.length === 0) return null;
+
+  return (
+    <section className="order-change-requests-panel">
+      <h2>⭐ Заявки на VIP ({pending.length})</h2>
+      {actionError && <div className="banner banner--error">{actionError}</div>}
+      <ul className="vip-list">
+        {pending.map((r) => (
+          <li key={r.id} className="vip-row">
+            <span>Стол {r.table_no ?? "—"} · гость #{r.telegram_user_id}</span>
+            <span className="vip-row__actions">
+              <button
+                type="button" className="btn btn--accent" disabled={busyKey === r.id}
+                onClick={() => handleApprove(r.id)}
+              >
+                Одобрить
+              </button>
+              <button
+                type="button" className="btn btn--reject" disabled={busyKey === r.id}
+                onClick={() => handleReject(r.id)}
+              >
+                Отклонить
+              </button>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function VipTopupRequestsPanel({ token, clubId, socket }) {
+  // ДОБАВЛЕНО (2026-10-01) — та же логика, что раньше жила внутри
+  // VipPanel ("Запросы на пополнение баланса"), вынесена сюда по той же
+  // причине, что и VipRequestsPanel выше.
+  const [pending, setPending] = useState(null);
+  const [actionError, setActionError] = useState(null);
+  const [busyKey, setBusyKey] = useState(null);
+
+  async function reload() {
+    try {
+      const data = await api.listVipTopupRequests(token, clubId);
+      setPending(data);
+    } catch {
+      // Тихо — как и в остальных панелях списка заявок.
+    }
+  }
+
+  useEffect(() => {
+    reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clubId]);
+
+  useEffect(() => {
+    if (!socket) return undefined;
+    const onCreated = (topupRequest) => {
+      setPending((prev) => {
+        const list = prev || [];
+        return list.some((r) => r.id === topupRequest.id) ? list : [...list, topupRequest];
+      });
+    };
+    const onDecided = (topupRequest) => {
+      setPending((prev) => (prev || []).filter((r) => r.id !== topupRequest.id));
+    };
+    socket.on("vip_topup_request_created", onCreated);
+    socket.on("vip_topup_request_decided", onDecided);
+    return () => {
+      socket.off("vip_topup_request_created", onCreated);
+      socket.off("vip_topup_request_decided", onDecided);
+    };
+  }, [socket]);
+
+  async function handleResolve(requestId) {
+    setBusyKey(requestId);
+    setActionError(null);
+    try {
+      await api.resolveVipTopupRequest(token, requestId);
+      await reload();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  if (!pending || pending.length === 0) return null;
+
+  return (
+    <section className="order-change-requests-panel">
+      <h2>💰 Запросы на пополнение баланса ({pending.length})</h2>
+      {actionError && <div className="banner banner--error">{actionError}</div>}
+      <ul className="vip-list">
+        {pending.map((r) => (
+          <li key={r.id} className="vip-row">
+            <span>Гость #{r.guest_id}</span>
+            <span className="vip-row__actions">
+              <button
+                type="button" className="btn btn--accent" disabled={busyKey === r.id}
+                onClick={() => handleResolve(r.id)}
+              >
+                Обработано
+              </button>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function VipPanel({ token, clubId }) {
+  const [clients, setClients] = useState(null);
+  const [loadError, setLoadError] = useState(null);
+  const [actionError, setActionError] = useState(null);
+  const [busyKey, setBusyKey] = useState(null);
+  const [amountDrafts, setAmountDrafts] = useState({});
+  const [cashbackDrafts, setCashbackDrafts] = useState({});
+
+  async function reload() {
+    try {
+      const clientsData = await api.listVipClients(token, clubId);
+      setClients(clientsData);
+      setLoadError(null);
+    } catch (err) {
+      setLoadError(err instanceof ApiError ? err.message : String(err));
+    }
+  }
+
+  useEffect(() => {
+    reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clubId]);
 
   async function handleTopup(vipClientId) {
     const amount = Number(amountDrafts[vipClientId]);
@@ -860,71 +1103,12 @@ function VipPanel({ token, clubId, socket }) {
     }
   }
 
-  async function handleResolveTopup(requestId) {
-    setBusyKey(`topup-${requestId}`);
-    setActionError(null);
-    try {
-      await api.resolveVipTopupRequest(token, requestId);
-      await reload();
-    } catch (err) {
-      setActionError(err instanceof ApiError ? err.message : String(err));
-    } finally {
-      setBusyKey(null);
-    }
-  }
-
   if (loadError) return <div className="banner banner--error">{loadError}</div>;
-  if (!pending || !clients || !topupRequests) return <p className="empty-hint">Загрузка…</p>;
+  if (!clients) return <p className="empty-hint">Загрузка…</p>;
 
   return (
     <div className="vip-panel">
       {actionError && <div className="banner banner--error">{actionError}</div>}
-
-      <section>
-        <h2>Заявки на VIP ({pending.length})</h2>
-        {pending.length === 0 && <p className="empty-hint">Новых заявок нет.</p>}
-        <ul className="vip-list">
-          {pending.map((r) => (
-            <li key={r.id} className="vip-row">
-              <span>Стол {r.table_no ?? "—"} · гость #{r.telegram_user_id}</span>
-              <span className="vip-row__actions">
-                <button
-                  type="button" className="btn btn--accent" disabled={busyKey === `req-${r.id}`}
-                  onClick={() => handleApprove(r.id)}
-                >
-                  Одобрить
-                </button>
-                <button
-                  type="button" className="btn btn--reject" disabled={busyKey === `req-${r.id}`}
-                  onClick={() => handleReject(r.id)}
-                >
-                  Отклонить
-                </button>
-              </span>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      <section>
-        <h2>Запросы на пополнение баланса ({topupRequests.length})</h2>
-        {topupRequests.length === 0 && <p className="empty-hint">Запросов нет.</p>}
-        <ul className="vip-list">
-          {topupRequests.map((r) => (
-            <li key={r.id} className="vip-row">
-              <span>Гость #{r.guest_id}</span>
-              <span className="vip-row__actions">
-                <button
-                  type="button" className="btn btn--accent" disabled={busyKey === `topup-${r.id}`}
-                  onClick={() => handleResolveTopup(r.id)}
-                >
-                  Обработано
-                </button>
-              </span>
-            </li>
-          ))}
-        </ul>
-      </section>
 
       <section>
         <h2>VIP-клиенты ({clients.length})</h2>
@@ -995,19 +1179,6 @@ function VipPanel({ token, clubId, socket }) {
   );
 }
 
-// Экран категорий песни (доп. ТЗ "KJ Pro", пункты KJ-01/KJ-03/KJ-07) —
-// категория это переиспользованная модель Service ("услуга/тариф"), её же
-// видит гость при заказе (routes/guest.py::list_services, не менялось);
-// здесь роль 2 (KJ) сама ведёт список — добавляет, меняет
-// название/описание/цену, включает "бесплатно" для конкретной категории
-// (галочка is_free — отдельный переключатель, НЕ совпадает с общим клубным
-// "Бесплатным вечером" из KJ-02, тот будет сделан отдельно) и удаляет
-// неиспользуемые. Деньги за категорию по факту не проходят через эту
-// систему как настоящий платёж (решение пользователя) — цена нужна для
-// учёта/отчётности. Если у клуба ещё нет ни одной категории, бэкенд сам
-// подставит набор по умолчанию из реальных данных старого бота (см.
-// backend/services/category_service.py::DEFAULT_CATEGORIES) — экран не
-// должен показывать пустой список при первом открытии.
 function CategoriesPanel({ token, clubId }) {
   const [categories, setCategories] = useState(null);
   const [loadError, setLoadError] = useState(null);
@@ -2688,6 +2859,11 @@ export default function App() {
               ➕ Добавить
             </button>
           )}
+          {view !== "messages" && (
+            <button type="button" className="btn-link" onClick={() => setView("messages")}>
+              ✉️ Сообщения
+            </button>
+          )}
           {view !== "vip" && (
             <button type="button" className="btn-link" onClick={() => setView("vip")}>
               ⭐ VIP
@@ -2713,7 +2889,21 @@ export default function App() {
 
       <ConnectionOverviewPanel connected={connected} bridgeStatus={bridgeStatus} />
 
-      {view === "vip" ? (
+      {view === "messages" ? (
+        <main className="app-main">
+          {/* ДОБАВЛЕНО (2026-10-01, запрос пользователя "кнопка Сообщения,
+          собирающая все обращения в одном месте, включая личный чат") —
+          раньше заявки на отмену/замену и на закрытие стола сами по себе
+          появлялись прямо над списком столов, а заявки на VIP и на
+          пополнение баланса были спрятаны внутри вкладки VIP; личного чата
+          с гостем у KJ Panel не было вообще. Теперь всё в одном месте. */}
+          <OrderChangeRequestsPanel token={token} clubId={me.club_id} socket={socketInstance} />
+          <TableCloseRequestsPanel token={token} clubId={me.club_id} socket={socketInstance} />
+          <VipRequestsPanel token={token} clubId={me.club_id} socket={socketInstance} />
+          <VipTopupRequestsPanel token={token} clubId={me.club_id} socket={socketInstance} />
+          <KjChatPanel token={token} clubId={me.club_id} socket={socketInstance} />
+        </main>
+      ) : view === "vip" ? (
         <VipPanel token={token} clubId={me.club_id} socket={socketInstance} />
       ) : view === "categories" ? (
         <CategoriesPanel token={token} clubId={me.club_id} />
@@ -2753,9 +2943,6 @@ export default function App() {
         </div>
       ) : (
         <main className="app-main">
-          <OrderChangeRequestsPanel token={token} clubId={me.club_id} socket={socketInstance} />
-          <TableCloseRequestsPanel token={token} clubId={me.club_id} socket={socketInstance} />
-
           <section>
             <h2>Заказы по столам</h2>
             <OrdersBoard
