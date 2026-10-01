@@ -1449,12 +1449,18 @@ function ProfileNamePanel({ token, meInfo, onNameChanged }) {
             ? <>Ведущий видит вас как «{meInfo.display_name}».</>
             : "Вы ещё не задали имя — ведущий видит только номер гостя."}
         </p>
-        <button type="button" className="btn-link" onClick={() => setEditing(true)}>
-          {meInfo.display_name ? "Изменить имя" : "Задать имя"}
-        </button>
-
         {photoError && <div className="banner banner--error">{photoError}</div>}
+
+        {/* ИЗМЕНЕНО (запрос пользователя 2026-10-01, "Изменить имя и
+        Загрузить фото смотрятся некрасиво, выровняй по одной линии") —
+        раньше кнопка "Изменить имя" была отдельным блоком перед
+        .profile-photo-row, из-за чего вставала на свою строку; теперь она
+        просто первый элемент внутри той же flex-строки. */}
         <div className="profile-photo-row">
+          <button type="button" className="btn-link" onClick={() => setEditing(true)}>
+            {meInfo.display_name ? "Изменить имя" : "Задать имя"}
+          </button>
+
           {meInfo.photo_data_url ? (
             <img src={meInfo.photo_data_url} alt="" className="profile-photo-row__photo" />
           ) : (
