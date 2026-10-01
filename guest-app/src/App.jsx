@@ -636,7 +636,7 @@ function resizeImageToBase64(file) {
   });
 }
 
-function AiSearch({ token, onPick }) {
+function AiSearch({ token, onPick, onScreenshotHelp }) {
   const [mode, setMode] = useState("text");
   const [text, setText] = useState("");
   const [results, setResults] = useState([]);
@@ -714,6 +714,16 @@ function AiSearch({ token, onPick }) {
       </div>
 
       {mode === "screenshot" ? (
+        onScreenshotHelp ? (
+          <div className="screenshot-search">
+            <p className="empty-hint">
+              ИИ теперь не всегда узнаёт песню по скриншоту — проще прислать скриншот ведущему в сообщениях, он посмотрит сам.
+            </p>
+            <button type="button" className="link-btn" onClick={onScreenshotHelp}>
+              ✉️ Перейти в Сообщения
+            </button>
+          </div>
+        ) : (
         <div className="screenshot-search">
           <p className="empty-hint">
             Загрузите скриншот из Shazam, Spotify, ВКонтакте или похожего приложения — определим песню по картинке.
@@ -752,6 +762,7 @@ function AiSearch({ token, onPick }) {
             </ul>
           )}
         </div>
+        )
       ) : (
         <>
           <form className="order-form" onSubmit={handleSearch}>
@@ -1094,6 +1105,8 @@ function TableGroupPanel({ token, guestId, hasTable, status, onGroupChanged }) {
 function ChatPanel({ token }) {
   const [messages, setMessages] = useState([]);
   const [draft, setDraft] = useState("");
+  const [pendingImage, setPendingImage] = useState(null);
+  const [imageBusy, setImageBusy] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(null);
   const listEndRef = useRef(null);
@@ -1122,15 +1135,47 @@ function ChatPanel({ token }) {
     listEndRef.current?.scrollIntoView({ block: "nearest" });
   }, [messages.length]);
 
+  async function handleAttachImage(file) {
+    setImageBusy(true);
+    setError(null);
+    try {
+      const resized = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(reader.error || new Error("Не удалось прочитать файл"));
+        reader.onload = () => {
+          const img = new Image();
+          img.onerror = () => reject(new Error("Не удалось прочитать изображение"));
+          img.onload = () => {
+            const maxSide = 800;
+            const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+            const canvas = document.createElement("canvas");
+            canvas.width = Math.round(img.width * scale);
+            canvas.height = Math.round(img.height * scale);
+            canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+            resolve(canvas.toDataURL("image/jpeg", 0.82));
+          };
+          img.src = reader.result;
+        };
+        reader.readAsDataURL(file);
+      });
+      setPendingImage(resized);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setImageBusy(false);
+    }
+  }
+
   async function handleSend(event) {
     event.preventDefault();
     const text = draft.trim();
-    if (!text) return;
+    if (!text && !pendingImage) return;
     setSending(true);
     setError(null);
     try {
-      await api.sendChatMessage(token, text);
+      await api.sendChatMessage(token, text, pendingImage || undefined);
       setDraft("");
+      setPendingImage(null);
       await refresh();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : String(err));
@@ -1147,12 +1192,23 @@ function ChatPanel({ token }) {
         {messages.map((m) => (
           <li key={m.id} className={`chat-message ${m.from_guest ? "chat-message--mine" : "chat-message--kj"}`}>
             <span className="chat-message__author">{m.from_guest ? "Вы" : "KJ"}</span>
-            <span className="chat-message__text">{m.message_text}</span>
+            {m.image_data_url && (
+              <img src={m.image_data_url} alt="Скриншот" className="chat-message__image" />
+            )}
+            {m.message_text && <span className="chat-message__text">{m.message_text}</span>}
           </li>
         ))}
         <li ref={listEndRef} />
       </ul>
       {error && <div className="banner banner--error">{error}</div>}
+      {pendingImage && (
+        <div className="chat-attachment-preview">
+          <img src={pendingImage} alt="" className="chat-attachment-preview__image" />
+          <button type="button" className="btn-link" onClick={() => setPendingImage(null)}>
+            ✕ Убрать
+          </button>
+        </div>
+      )}
       <form className="chat-form" onSubmit={handleSend}>
         <input
           type="text"
@@ -1161,7 +1217,20 @@ function ChatPanel({ token }) {
           placeholder="Написать ведущему…"
           maxLength={500}
         />
-        <button type="submit" disabled={sending || !draft.trim()}>
+        <label className="chat-attach-btn" aria-disabled={imageBusy}>
+          📎
+          <input
+            type="file"
+            accept="image/*"
+            disabled={imageBusy}
+            onChange={(e) => {
+              const file = e.target.files[0];
+              e.target.value = "";
+              if (file) handleAttachImage(file);
+            }}
+          />
+        </label>
+        <button type="submit" disabled={sending || imageBusy || (!draft.trim() && !pendingImage)}>
           Отправить
         </button>
       </form>
@@ -2026,6 +2095,7 @@ export default function App() {
         "Заказать". */}
         <AiSearch
           token={session.token}
+          onScreenshotHelp={() => setView("messages")}
           onPick={(song) => {
             setSongTitle(song.title);
             setArtist(song.artist || "");
