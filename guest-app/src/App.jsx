@@ -1237,9 +1237,10 @@ function ChatPanel({ token }) {
 // Технически сообщение всё равно uходит в ту же переписку ChatMessage,
 // что и обычный чат — чтобы у ведущего было одно место, где смотреть все
 // сообщения от гостя, см. KjChatPanel в kj-panel.
-function ScreenshotOrderPanel({ token, autoFocus, onFocused }) {
+function ScreenshotOrderPanel({ token, services, autoFocus, onFocused }) {
   const [pendingImage, setPendingImage] = useState(null);
   const [comment, setComment] = useState("");
+  const [serviceId, setServiceId] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [sent, setSent] = useState(false);
@@ -1285,13 +1286,14 @@ function ScreenshotOrderPanel({ token, autoFocus, onFocused }) {
   }
 
   async function handleSend() {
-    if (!pendingImage) return;
+    if (!pendingImage || !serviceId) return;
     setBusy(true);
     setError(null);
     try {
-      await api.sendChatMessage(token, comment.trim(), pendingImage);
+      await api.sendChatMessage(token, comment.trim(), pendingImage, Number(serviceId));
       setPendingImage(null);
       setComment("");
+      setServiceId("");
       setSent(true);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : String(err));
@@ -1329,6 +1331,16 @@ function ScreenshotOrderPanel({ token, autoFocus, onFocused }) {
           }}
         />
       </label>
+      {services.length > 0 && (
+        <select value={serviceId} onChange={(e) => setServiceId(e.target.value)} required>
+          <option value="" disabled>Выберите категорию…</option>
+          {services.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.name}{s.is_free ? " (бесплатно)" : ` — ${s.price}`}
+            </option>
+          ))}
+        </select>
+      )}
       <input
         type="text"
         value={comment}
@@ -1336,7 +1348,7 @@ function ScreenshotOrderPanel({ token, autoFocus, onFocused }) {
         placeholder="Комментарий (необязательно)"
         maxLength={300}
       />
-      <button type="button" disabled={busy || !pendingImage} onClick={handleSend}>
+      <button type="button" disabled={busy || !pendingImage || !serviceId} onClick={handleSend}>
         Отправить ведущему
       </button>
     </section>
@@ -2152,6 +2164,7 @@ export default function App() {
 
         <ScreenshotOrderPanel
           token={session.token}
+          services={services}
           autoFocus={focusScreenshotOrder}
           onFocused={() => setFocusScreenshotOrder(false)}
         />
