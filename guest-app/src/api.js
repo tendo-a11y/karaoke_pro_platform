@@ -131,6 +131,9 @@ export const api = {
       method: "POST", token, body: { image_base64: imageBase64, media_type: mediaType },
     }),
   requestVip: (token) => request("/api/guest/vip/request", { method: "POST", token }),
+  // ДОБАВЛЕНО (2026-09-30, запрос пользователя "баланс VIP и пополнение") —
+  // кнопка "Запросить пополнение" у VIP-гостя с отрицательным балансом.
+  requestVipTopup: (token) => request("/api/guest/vip/topup-request", { method: "POST", token }),
   listFavorites: (token) => request("/api/guest/favorites", { token }),
   addFavorite: (token, songTitle, artist, serviceId) =>
     request("/api/guest/favorites", {
