@@ -6,7 +6,7 @@ from auth import issue_guest_token, require_guest
 from errors import api_error, api_ok
 from extensions import db
 from models import STATUS_COMPLETED, STATUS_ERROR, STATUS_ORDER_CHANGE_PENDING, STATUS_REJECTED, ChatMessage, Club, Order, OrderChangeRequest, Service
-from services import ai_search_service, guest_account_service, guest_status_service, song_service, table_board_service, table_close_service, table_group_service, vdj_service, vip_service
+from services import ai_search_service, billing_service, guest_account_service, guest_status_service, song_service, table_board_service, table_close_service, table_group_service, vdj_service, vip_service, vip_topup_request_service
 from services.google_auth_service import GoogleAuthError, verify_google_credential
 from sockets import emit_chat_message, emit_order_created, emit_vip_request_created
 from vdj import get_vdj_client
@@ -98,6 +98,13 @@ def me():
     guest_type, vip = _guest_type_and_vip(g.club_id, g.guest_id)
 
     pending_request = vip_service.get_pending_vip_request(g.club_id, g.guest_id)
+    # Запрос пользователя 2026-09-30: проактивно показываем "Пополните
+    # баланс" уже в /me, не дожидаясь, пока гость попробует заказать песню
+    # и получит VIP_BALANCE_NEGATIVE (см. create_order ниже).
+    vip_balance_blocked = guest_type == "vip" and billing_service.is_vip_balance_blocked(g.club_id, g.guest_id)
+    pending_topup_request = (
+        vip_topup_request_service.get_pending_for_guest(g.club_id, g.guest_id) if guest_type == "vip" else None
+    )
     account = guest_account_service.get_by_guest_id(g.club_id, g.guest_id)
     has_permanent_profile = account is not None
 
@@ -160,6 +167,8 @@ def me():
         "vip": {"balance": float(vip.balance), "cashback_percent": float(vip.cashback_percent)}
         if vip else None,
         "vip_request_pending": pending_request is not None,
+        "vip_balance_blocked": vip_balance_blocked,
+        "vip_topup_pending": pending_topup_request is not None,
     })
 
 
@@ -232,6 +241,10 @@ def create_order():
             "У вас нет доступа к заказам за этим столом — нужно быть одобренным участником группы",
         )
 
+    # По умолчанию None — услуга необязательна (см. докстринг выше), а
+    # billing_service.check_vip_balance ниже должна получить именно None,
+    # а не упасть с NameError, если гость ничего не выбрал.
+    service = None
     if service_id is not None:
         if not isinstance(service_id, int):
             return api_error(400, "VALIDATION_ERROR", "service_id должен быть числом")
@@ -255,6 +268,16 @@ def create_order():
 
     detected_guest_type, _vip = _guest_type_and_vip(g.club_id, g.guest_id)
     guest_type = detected_guest_type or ("no_table" if g.table_no is None else "client")
+
+    # Запрос пользователя 2026-09-30: если у VIP-гостя баланс уходит в
+    # минус с учётом уже заказанных, но ещё не списанных песен — новую
+    # песню заказать нельзя (см. docstring billing_service.check_vip_balance).
+    balance_check = billing_service.check_vip_balance(g.club_id, g.guest_id, guest_type, service)
+    if balance_check.blocked:
+        return api_error(
+            409, "VIP_BALANCE_NEGATIVE",
+            "Пополните баланс, чтобы заказать ещё одну песню",
+        )
 
     order = Order(
         telegram_user_id=g.guest_id,
@@ -392,6 +415,23 @@ def request_vip():
 
     emit_vip_request_created(result.request)
     return api_ok(result.request.to_dict(), status_code=201)
+
+
+@bp.post("/vip/topup-request")
+@require_guest
+def request_vip_topup():
+    """
+    Кнопка "Запросить пополнение" у VIP-гостя, чей баланс уже ушёл в минус
+    (см. billing_service.is_vip_balance_blocked, поле vip_balance_blocked в
+    /me) — сама заявка деньги не переводит, только уведомляет KJ, см.
+    докстринг services/vip_topup_request_service.py.
+    """
+    vip = vip_service.get_vip_client(g.club_id, g.guest_id)
+    if vip is None:
+        return api_error(403, "NOT_VIP", "Запрос на пополнение доступен только VIP-гостям")
+
+    result = vip_topup_request_service.request_topup(g.club_id, g.guest_id)
+    return api_ok(result.request.to_dict(), status_code=201 if result.outcome == "ok" else 200)
 
 
 @bp.post("/profile/link-google")
@@ -643,6 +683,15 @@ def reorder_favorite(favorite_id):
     guest_type, _vip = _guest_type_and_vip(g.club_id, g.guest_id)
     guest_type = guest_type or ("no_table" if g.table_no is None else "client")
     max_active = current_app.config["MAX_ACTIVE_SONGS_PER_GUEST"]
+
+    # Та же проверка баланса, что и в create_order — повторный заказ из
+    # избранного тоже создаёт настоящий платный Order.
+    balance_check = billing_service.check_vip_balance(g.club_id, g.guest_id, guest_type, service)
+    if balance_check.blocked:
+        return api_error(
+            409, "VIP_BALANCE_NEGATIVE",
+            "Пополните баланс, чтобы заказать ещё одну песню",
+        )
 
     result = vip_service.reorder_favorite(
         g.club_id, g.guest_id, g.table_no, guest_type, favorite_id, max_active, service_id,
