@@ -1183,6 +1183,12 @@ function ProfileNamePanel({ token, meInfo, onNameChanged }) {
   const [name, setName] = useState(meInfo.display_name || "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  // Фото гостя (запрос пользователя 2026-10-01, "клиент сам загружает своё
+  // фото, но это не обязательно, там же где Изменить имя") — отдельные
+  // busy/error от редактирования имени выше, чтобы крутилка на одной
+  // кнопке не блокировала другую.
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [photoError, setPhotoError] = useState(null);
 
   // Если имя обновилось извне (например, опрос /me после действия в другой
   // вкладке) — подхватываем новое значение, но только пока сами не
@@ -1211,6 +1217,55 @@ function ProfileNamePanel({ token, meInfo, onNameChanged }) {
     }
   }
 
+  // Уменьшаем фото прямо в браузере перед отправкой — так же, как и в KJ
+  // Panel (routes/guest.py::set_my_photo ограничивает длину строки на
+  // сервере, но без сжатия на телефоне фото с камеры легко превысило бы
+  // этот предел).
+  async function handleUploadPhoto(file) {
+    setPhotoBusy(true);
+    setPhotoError(null);
+    try {
+      const resized = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(reader.error || new Error("Не удалось прочитать файл"));
+        reader.onload = () => {
+          const img = new Image();
+          img.onerror = () => reject(new Error("Не удалось прочитать изображение"));
+          img.onload = () => {
+            const maxSide = 300;
+            const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+            const canvas = document.createElement("canvas");
+            canvas.width = Math.round(img.width * scale);
+            canvas.height = Math.round(img.height * scale);
+            canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+            resolve(canvas.toDataURL("image/jpeg", 0.8));
+          };
+          img.src = reader.result;
+        };
+        reader.readAsDataURL(file);
+      });
+      await api.setMyPhoto(token, resized);
+      await onNameChanged();
+    } catch (err) {
+      setPhotoError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setPhotoBusy(false);
+    }
+  }
+
+  async function handleRemovePhoto() {
+    setPhotoBusy(true);
+    setPhotoError(null);
+    try {
+      await api.setMyPhoto(token, null);
+      await onNameChanged();
+    } catch (err) {
+      setPhotoError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setPhotoBusy(false);
+    }
+  }
+
   if (!editing) {
     return (
       <section className="panel profile-panel">
@@ -1223,6 +1278,33 @@ function ProfileNamePanel({ token, meInfo, onNameChanged }) {
         <button type="button" className="btn-link" onClick={() => setEditing(true)}>
           {meInfo.display_name ? "Изменить имя" : "Задать имя"}
         </button>
+
+        {photoError && <div className="banner banner--error">{photoError}</div>}
+        <div className="profile-photo-row">
+          {meInfo.photo_data_url ? (
+            <img src={meInfo.photo_data_url} alt="" className="profile-photo-row__photo" />
+          ) : (
+            <span className="profile-photo-row__photo profile-photo-row__photo--placeholder">👤</span>
+          )}
+          <label className="btn-link profile-photo-upload">
+            {photoBusy ? "Загружаем…" : meInfo.photo_data_url ? "Заменить фото" : "Загрузить фото (необязательно)"}
+            <input
+              type="file"
+              accept="image/*"
+              disabled={photoBusy}
+              onChange={(e) => {
+                const file = e.target.files[0];
+                e.target.value = "";
+                if (file) handleUploadPhoto(file);
+              }}
+            />
+          </label>
+          {meInfo.photo_data_url && (
+            <button type="button" className="btn-link" disabled={photoBusy} onClick={handleRemovePhoto}>
+              ✕ Убрать фото
+            </button>
+          )}
+        </div>
       </section>
     );
   }
