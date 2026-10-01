@@ -463,6 +463,15 @@ class GuestAccount(db.Model):
     # угодно раз, это не разовая настройка при активации.
     display_name = db.Column(db.String(60), nullable=True)
 
+    # Фото гостя (запрос пользователя 2026-10-01, "не видно имя... давай
+    # сделаем возможным загрузить фото клиента", вкладка VIP-клиенты KJ
+    # Panel) — необязательное, KJ может не загружать. Хранится прямо строкой
+    # data:image/...;base64,... (см. routes/kj.py::upload_guest_photo) —
+    # для масштаба одного караоке-клуба (десятки VIP, не тысячи) отдельное
+    # файловое хранилище было бы лишней инфраструктурой; фронтенд уменьшает
+    # фото перед отправкой, сервер дополнительно ограничивает размер строки.
+    photo_data_url = db.Column(db.Text, nullable=True)
+
     created_at = db.Column(db.DateTime(timezone=True), default=utcnow, nullable=False)
 
     club = db.relationship("Club")
@@ -479,6 +488,7 @@ class GuestAccount(db.Model):
             "telegram_user_id": self.telegram_user_id,
             "email": self.email,
             "display_name": self.display_name,
+            "photo_data_url": self.photo_data_url,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
