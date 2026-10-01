@@ -736,6 +736,7 @@ function KjChatPanel({ token, clubId, socket }) {
               <span>
                 {t.lastMessage.from_guest ? "🆕 " : ""}
                 Стол {t.tableNo ?? "—"} · гость #{t.guestId}: {t.lastMessage.message_text || (t.lastMessage.image_data_url ? "📷 Скриншот" : "")}
+                {t.lastMessage.service_name ? ` (категория: ${t.lastMessage.service_name})` : ""}
               </span>
               <span className="vip-row__actions">
                 <button type="button" className="btn-link" onClick={() => setSelectedGuestId(t.guestId)}>
@@ -763,6 +764,7 @@ function KjChatPanel({ token, clubId, socket }) {
         {thread.map((m) => (
           <li key={m.id} className="vip-row chat-thread-row">
             <span>{m.from_guest ? "Гость" : "Вы"}:</span>
+            {m.service_name && <span className="chat-thread-row__category">Категория: {m.service_name}</span>}
             {m.image_data_url && (
               <img src={m.image_data_url} alt="Скриншот от гостя" className="chat-thread-row__image" />
             )}
