@@ -706,7 +706,7 @@ function AiSearch({ token, onPick, onScreenshotHelp }) {
             key={m.key}
             type="button"
             className={`link-btn${mode === m.key ? " finder-modes__active" : ""}`}
-            onClick={() => switchMode(m.key)}
+            onClick={() => (m.key === "screenshot" && onScreenshotHelp ? onScreenshotHelp() : switchMode(m.key))}
           >
             {m.label}
           </button>
@@ -714,16 +714,6 @@ function AiSearch({ token, onPick, onScreenshotHelp }) {
       </div>
 
       {mode === "screenshot" ? (
-        onScreenshotHelp ? (
-          <div className="screenshot-search">
-            <p className="empty-hint">
-              ИИ теперь не всегда узнаёт песню по скриншоту — проще прислать скриншот ведущему в сообщениях, он посмотрит сам.
-            </p>
-            <button type="button" className="link-btn" onClick={onScreenshotHelp}>
-              ✉️ Перейти в Сообщения
-            </button>
-          </div>
-        ) : (
         <div className="screenshot-search">
           <p className="empty-hint">
             Загрузите скриншот из Shazam, Spotify, ВКонтакте или похожего приложения — определим песню по картинке.
@@ -755,14 +745,13 @@ function AiSearch({ token, onPick, onScreenshotHelp }) {
                       if (screenshotInputRef.current) screenshotInputRef.current.value = "";
                     }}
                   >
-                    🎵 {s.artist ? `${s.artist} — ${s.title}` : s.title}
+                    🎵 {s.artist ? `undefined — undefined` : s.title}
                   </button>
                 </li>
               ))}
             </ul>
           )}
         </div>
-        )
       ) : (
         <>
           <form className="order-form" onSubmit={handleSearch}>
@@ -1238,6 +1227,122 @@ function ChatPanel({ token }) {
   );
 }
 
+// Отдельный пункт "Заказ через скриншот" (запрос пользователя 2026-10-01):
+// раньше кнопка "Скриншот" в поиске песни сама пыталась распознать песню
+// по картинке через ИИ — пользователь решил, что это больше не нужно (ИИ
+// не всегда справляется), и попросил вместо этого отдельное, понятное
+// место в Сообщениях специально для отправки скриншота ведущему — не
+// внутри общего чата с ведущим (ChatPanel) и не внутри "Заказ новой
+// песни" (это про другое — заказ создания ещё не существующей песни).
+// Технически сообщение всё равно uходит в ту же переписку ChatMessage,
+// что и обычный чат — чтобы у ведущего было одно место, где смотреть все
+// сообщения от гостя, см. KjChatPanel в kj-panel.
+function ScreenshotOrderPanel({ token, autoFocus, onFocused }) {
+  const [pendingImage, setPendingImage] = useState(null);
+  const [comment, setComment] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const [sent, setSent] = useState(false);
+  const sectionRef = useRef(null);
+
+  useEffect(() => {
+    if (autoFocus && sectionRef.current) {
+      sectionRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+      onFocused?.();
+    }
+  }, [autoFocus, onFocused]);
+
+  async function handleFile(file) {
+    setBusy(true);
+    setError(null);
+    setSent(false);
+    try {
+      const resized = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(reader.error || new Error("Не удалось прочитать файл"));
+        reader.onload = () => {
+          const img = new Image();
+          img.onerror = () => reject(new Error("Не удалось прочитать изображение"));
+          img.onload = () => {
+            const maxSide = 800;
+            const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+            const canvas = document.createElement("canvas");
+            canvas.width = Math.round(img.width * scale);
+            canvas.height = Math.round(img.height * scale);
+            canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+            resolve(canvas.toDataURL("image/jpeg", 0.82));
+          };
+          img.src = reader.result;
+        };
+        reader.readAsDataURL(file);
+      });
+      setPendingImage(resized);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleSend() {
+    if (!pendingImage) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.sendChatMessage(token, comment.trim(), pendingImage);
+      setPendingImage(null);
+      setComment("");
+      setSent(true);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="panel" ref={sectionRef}>
+      <h2>📷 Заказ через скриншот</h2>
+      <p className="empty-hint">
+        Пришлите скриншот нужной песни (например, из Shazam, Spotify или ВКонтакте) — ведущий посмотрит и оформит заказ сам.
+      </p>
+      {error && <div className="banner banner--error">{error}</div>}
+      {sent && !pendingImage && <p className="empty-hint">Скриншот отправлен ведущему ✅</p>}
+      {pendingImage && (
+        <div className="chat-attachment-preview">
+          <img src={pendingImage} alt="" className="chat-attachment-preview__image" />
+          <button type="button" className="btn-link" onClick={() => setPendingImage(null)}>
+            ✕ Убрать
+          </button>
+        </div>
+      )}
+      <label className="btn-link profile-photo-upload">
+        {busy ? "Загружаем…" : pendingImage ? "Заменить скриншот" : "Выбрать скриншот"}
+        <input
+          type="file"
+          accept="image/*"
+          disabled={busy}
+          onChange={(e) => {
+            const file = e.target.files[0];
+            e.target.value = "";
+            if (file) handleFile(file);
+          }}
+        />
+      </label>
+      <input
+        type="text"
+        value={comment}
+        onChange={(e) => setComment(e.target.value)}
+        placeholder="Комментарий (необязательно)"
+        maxLength={300}
+      />
+      <button type="button" disabled={busy || !pendingImage} onClick={handleSend}>
+        Отправить ведущему
+      </button>
+    </section>
+  );
+}
+
 // Имя, которое гость сам себе задаёт (запрос пользователя 2026-09,
 // "самопереименование гостя") — видно ведущему в KJ Panel (список гостей и
 // карточка гостя), вместо голого номера guest_id. Доступно только ПОСЛЕ
@@ -1623,6 +1728,11 @@ export default function App() {
   // чат с ведущим и ещё две кнопки-заглушки под будущие функции, вместо
   // того чтобы всё это было разбросано по главному экрану.
   const [view, setView] = useState("home");
+  // ДОБАВЛЕНО (2026-10-01, запрос пользователя "заказ через скриншот") —
+  // при переходе из кнопки "Скриншот" в форме заказа сразу прокручиваем к
+  // отдельному разделу для скриншота в Сообщениях, чтобы не искать его
+  // среди остальных пунктов.
+  const [focusScreenshotOrder, setFocusScreenshotOrder] = useState(false);
 
   const [songTitle, setSongTitle] = useState("");
   const [artist, setArtist] = useState("");
@@ -2039,6 +2149,14 @@ export default function App() {
             Скоро
           </button>
         </section>
+
+        {meInfo.chat_enabled && (
+          <ScreenshotOrderPanel
+            token={session.token}
+            autoFocus={focusScreenshotOrder}
+            onFocused={() => setFocusScreenshotOrder(false)}
+          />
+        )}
       </div>
     );
   }
@@ -2095,7 +2213,10 @@ export default function App() {
         "Заказать". */}
         <AiSearch
           token={session.token}
-          onScreenshotHelp={() => setView("messages")}
+          onScreenshotHelp={() => {
+            setFocusScreenshotOrder(true);
+            setView("messages");
+          }}
           onPick={(song) => {
             setSongTitle(song.title);
             setArtist(song.artist || "");
