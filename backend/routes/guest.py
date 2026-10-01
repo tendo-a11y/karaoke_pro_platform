@@ -160,6 +160,11 @@ def me():
         # "самопереименование гостя") — null, пока не задано или пока нет
         # постоянного профиля вообще, см. PUT /profile/name ниже.
         "display_name": account.display_name if account else None,
+        # Фото, которое гость сам загрузил рядом с именем (запрос
+        # пользователя 2026-10-01) — необязательное, null, если не
+        # загружено или пока нет постоянного профиля, см. PUT /profile/photo
+        # ниже.
+        "photo_data_url": account.photo_data_url if account else None,
         # Старое: handlers/vip.py::vip_profile (баланс/кэшбэк), п.9-10-11
         # отчёта по Role 3/4/5. join date (added_at) старый бот тоже нигде
         # не показывал — не добавляем и здесь, чтобы не изобретать поле,
@@ -558,6 +563,37 @@ def set_display_name():
         return api_error(
             409, "GOOGLE_LINK_REQUIRED",
             "Чтобы задать имя, сначала войдите через Google",
+        )
+
+    return api_ok(account.to_dict())
+
+
+@bp.put("/profile/photo")
+@require_guest
+def set_my_photo():
+    """
+    Гость сам загружает своё фото, рядом с тем же экраном, где меняет имя
+    (запрос пользователя 2026-10-01: "клиент сам загружает своё фото (но
+    это не обязательно) там же где Изменить имя") — необязательное,
+    photo_data_url: null убирает уже загруженное фото. Фронтенд должен
+    прислать уже уменьшенную картинку (см. Guest App ProfileNamePanel),
+    здесь только защитный предел на размер строки, тот же, что и у KJ-
+    версии этого же поля (routes/kj.py::set_guest_photo).
+    """
+    payload = request.get_json(silent=True) or {}
+    photo_data_url = payload.get("photo_data_url")
+
+    if photo_data_url is not None:
+        if not isinstance(photo_data_url, str) or not photo_data_url.startswith("data:image/"):
+            return api_error(400, "VALIDATION_ERROR", "photo_data_url должен быть изображением")
+        if len(photo_data_url) > 2_000_000:
+            return api_error(400, "VALIDATION_ERROR", "Фото слишком большое")
+
+    account = guest_account_service.set_photo(g.club_id, g.guest_id, photo_data_url)
+    if account is None:
+        return api_error(
+            409, "GOOGLE_LINK_REQUIRED",
+            "Чтобы загрузить фото, сначала войдите через Google",
         )
 
     return api_ok(account.to_dict())
