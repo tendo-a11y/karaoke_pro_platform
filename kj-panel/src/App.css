@@ -640,3 +640,38 @@ OrderChangeRequestsPanel), а не терялась среди обычных к
     opacity: 0.25;
   }
 }
+
+/* Фото VIP-клиента в списке (запрос пользователя 2026-10-01) — кружок
+фиксированного размера, чтобы разные пропорции загруженных фото не ломали
+высоту строки; для гостя без фото показываем такой же кружок с эмодзи
+вместо пустого места. */
+.vip-row__identity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.vip-row__photo {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--panel-muted, rgba(255, 255, 255, 0.08));
+  font-size: 18px;
+}
+
+.vip-photo-upload {
+  position: relative;
+  overflow: hidden;
+}
+
+.vip-photo-upload input[type="file"] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
