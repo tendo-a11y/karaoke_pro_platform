@@ -85,6 +85,14 @@ export const api = {
       token,
       body: { display_name: displayName },
     }),
+  // Фото гостя, рядом с именем (запрос пользователя 2026-10-01) —
+  // необязательное, photoDataUrl === null убирает уже загруженное фото.
+  setMyPhoto: (token, photoDataUrl) =>
+    request("/api/guest/profile/photo", {
+      method: "PUT",
+      token,
+      body: { photo_data_url: photoDataUrl },
+    }),
   linkGoogle: (token, tableNo, googleCredential) =>
     request("/api/guest/profile/link-google", {
       method: "POST", token, body: { table_no: tableNo, google_credential: googleCredential },
