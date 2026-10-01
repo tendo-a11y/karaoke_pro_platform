@@ -111,6 +111,19 @@ export const api = {
     request(`/api/kj/vip-topup-requests/${clubId}`, { token }),
   resolveVipTopupRequest: (token, requestId) =>
     request(`/api/kj/vip-topup-requests/${requestId}/resolve`, { method: "PUT", token }),
+  // ДОБАВЛЕНО (2026-10-01, запрос пользователя "кнопка Сообщения,
+  // собирающая все обращения, включая личный чат с гостями") — чат уже
+  // был готов на бэкенде (routes/kj.py::list_chat/reply_chat), здесь не
+  // хватало только обёртки на фронтенде.
+  listChat: (token, clubId, telegramUserId) =>
+    request(
+      `/api/kj/chat/${clubId}${telegramUserId ? `?telegram_user_id=${telegramUserId}` : ""}`,
+      { token },
+    ),
+  replyChat: (token, clubId, telegramUserId, messageText) =>
+    request(`/api/kj/chat/${clubId}`, {
+      method: "POST", token, body: { telegram_user_id: telegramUserId, message_text: messageText },
+    }),
   // ДОБАВЛЕНО (2026-09-20, решение пользователя "Нужно одобрение KJ (запрос
   // → Одобрить/Отклонить)") — заявки гостей на отмену/замену уже принятого
   // заказа, см. backend/routes/kj.py::list_order_change_requests и
