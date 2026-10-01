@@ -353,3 +353,26 @@ def emit_table_group_moved(club_id: int, old_table_no: int, new_table_no: int):
         {"club_id": club_id, "old_table_no": old_table_no, "new_table_no": new_table_no},
         room=_club_room(club_id),
     )
+
+
+def emit_vip_topup_request_created(topup_request):
+    """
+    Новая заявка VIP-гостя "хочу пополнить баланс" (запрос пользователя
+    2026-09-30, см. докстринг models.VipTopupRequest) — тот же паттерн, что
+    и emit_vip_request_created/emit_table_close_request_created выше: KJ
+    Panel должна узнать о ней мгновенно, не дожидаясь следующего опроса.
+    """
+    socketio.emit(
+        "vip_topup_request_created", topup_request.to_dict(), room=_club_room(topup_request.club_id)
+    )
+
+
+def emit_vip_topup_request_decided(topup_request):
+    """
+    KJ отметил заявку на пополнение обработанной — все подключённые панели
+    клуба сразу убирают её из списка ожидающих, тот же паттерн, что и у
+    emit_table_close_request_decided выше.
+    """
+    socketio.emit(
+        "vip_topup_request_decided", topup_request.to_dict(), room=_club_room(topup_request.club_id)
+    )
