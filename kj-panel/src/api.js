@@ -135,6 +135,12 @@ export const api = {
   rejectOrderChangeRequest: (token, requestId) =>
     request(`/api/kj/order-change-requests/${requestId}/reject`, { method: "PUT", token }),
   listVipClients: (token, clubId) => request(`/api/kj/vip-clients/${clubId}`, { token }),
+  // Фото гостя в карточке VIP-клиента (запрос пользователя 2026-10-01) —
+  // необязательное, photoDataUrl === null убирает уже загруженное фото.
+  setGuestPhoto: (token, guestId, photoDataUrl) =>
+    request(`/api/kj/guests/${guestId}/photo`, {
+      method: "PUT", token, body: { photo_data_url: photoDataUrl },
+    }),
   updateVipCashback: (token, vipClientId, cashbackPercent) =>
     request(`/api/kj/vip-clients/${vipClientId}/cashback`, {
       method: "PUT", token, body: { cashback_percent: cashbackPercent },
