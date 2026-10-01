@@ -741,10 +741,17 @@ class ChatMessage(db.Model):
     from_guest = db.Column(db.Boolean, nullable=False)
     message_text = db.Column(db.Text, nullable=False)
     image_data_url = db.Column(db.Text, nullable=True)
+    # ДОБАВЛЕНО (запрос пользователя 2026-10-01, "в заказе через скриншот
+    # тоже нужен выбор категории") — тот же тариф (Service), что гость
+    # выбирает в обычной форме заказа; нужен, чтобы KJ видел, на какую
+    # категорию рассчитывать заказ, даже когда заказ пока только в виде
+    # скриншота в переписке, а не настоящего Order.
+    service_id = db.Column(db.Integer, db.ForeignKey("services.id"), nullable=True)
     is_read = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(db.DateTime(timezone=True), default=utcnow, nullable=False)
 
     club = db.relationship("Club")
+    service = db.relationship("Service")
 
     __table_args__ = (
         db.Index("ix_chat_messages_club_user", "club_id", "telegram_user_id"),
@@ -759,6 +766,8 @@ class ChatMessage(db.Model):
             "from_guest": self.from_guest,
             "message_text": self.message_text,
             "image_data_url": self.image_data_url,
+            "service_id": self.service_id,
+            "service_name": self.service.name if self.service else None,
             "is_read": self.is_read,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
