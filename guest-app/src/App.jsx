@@ -2134,7 +2134,21 @@ export default function App() {
 
         <VipBalancePanel token={session.token} meInfo={meInfo} />
 
-        {meInfo.chat_enabled && <ChatPanel token={session.token} />}
+        {/* ИЗМЕНЕНО (запрос пользователя 2026-10-01, "чат Гости-KJ работает
+        всегда") — раньше оба пункта ниже показывались только при
+        meInfo.chat_enabled; пользователь явно уточнил, что чат с ведущим и
+        заказ через скриншот должны работать всегда. chat_enabled остаётся
+        зарезервирован под будущий отдельный чат "гость-гость" (пункт
+        "Общий чат" ниже, пока заглушка). Порядок пунктов — по просьбе
+        пользователя: 1) чат с ведущим, 2) заказ через скриншот, 3) общий
+        чат (заглушка), 4) заказ новой песни (заглушка). */}
+        <ChatPanel token={session.token} />
+
+        <ScreenshotOrderPanel
+          token={session.token}
+          autoFocus={focusScreenshotOrder}
+          onFocused={() => setFocusScreenshotOrder(false)}
+        />
 
         <section className="panel">
           <h2>💬 Общий чат</h2>
@@ -2149,14 +2163,6 @@ export default function App() {
             Скоро
           </button>
         </section>
-
-        {meInfo.chat_enabled && (
-          <ScreenshotOrderPanel
-            token={session.token}
-            autoFocus={focusScreenshotOrder}
-            onFocused={() => setFocusScreenshotOrder(false)}
-          />
-        )}
       </div>
     );
   }
