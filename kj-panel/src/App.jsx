@@ -647,6 +647,103 @@ function TableCloseRequestsPanel({ token, clubId, socket }) {
 // со всем механизмом access_code/redeem (см. отчёт по п.45 и routes/kj.py
 // ::list_vip_clients). VIP теперь появляется только через заявку гостя,
 // уже подтвердившего личность через Google, + одобрение здесь.
+function AdminMessagesPanel({ token, clubId, socket }) {
+  // ДОБАВЛЕНО (2026-10-03, запрос пользователя "в админке есть панель
+  // управления KJ... сообщения приходят KJ в его панель сообщения. Но
+  // они по умолчанию сверху и в приоритете" + "режим переписки 2 да
+  // висеть пока не откроет да") — двусторонняя переписка с
+  // администрацией, отдельная от чата с гостем (KjChatPanel ниже).
+  const [messages, setMessages] = useState(null);
+  const [loadError, setLoadError] = useState(null);
+  const [draft, setDraft] = useState("");
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState(null);
+
+  async function reload() {
+    try {
+      const data = await api.listAdminMessages(token, clubId);
+      setMessages(data);
+      setLoadError(null);
+      await api.markAdminMessagesRead(token, clubId);
+    } catch (err) {
+      setLoadError(err instanceof ApiError ? err.message : String(err));
+    }
+  }
+
+  useEffect(() => {
+    reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clubId]);
+
+  useEffect(() => {
+    if (!socket) return undefined;
+    const onMessage = (message) => {
+      setMessages((prev) => {
+        const list = prev || [];
+        return list.some((m) => m.id === message.id) ? list : [...list, message];
+      });
+      if (message.from_admin) {
+        api.markAdminMessagesRead(token, clubId).catch(() => {});
+      }
+    };
+    socket.on("admin_message", onMessage);
+    return () => {
+      socket.off("admin_message", onMessage);
+    };
+  }, [socket, token, clubId]);
+
+  async function handleSend() {
+    const text = draft.trim();
+    if (!text) return;
+    setSending(true);
+    setSendError(null);
+    try {
+      await api.sendAdminMessage(token, clubId, text);
+      setDraft("");
+      await reload();
+    } catch (err) {
+      setSendError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setSending(false);
+    }
+  }
+
+  if (loadError) return <div className="banner banner--error">{loadError}</div>;
+
+  return (
+    <section className="order-change-requests-panel admin-messages-panel">
+      <h2>📢 Сообщения от администрации</h2>
+      {!messages ? (
+        <p className="empty-hint">Загрузка…</p>
+      ) : messages.length === 0 ? (
+        <p className="empty-hint">Сообщений пока нет.</p>
+      ) : (
+        <ul className="vip-list">
+          {messages.map((m) => (
+            <li key={m.id} className="vip-row chat-thread-row">
+              <span>{m.from_admin ? "Администрация" : "Вы"}:</span>
+              <span>{m.message_text}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {sendError && <div className="banner banner--error">{sendError}</div>}
+      <div className="vip-row__actions chat-reply-row">
+        <input
+          className="vip-amount-input chat-reply-input"
+          type="text"
+          placeholder="Сообщение администрации…"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+        />
+        <button type="button" className="btn btn--accent chat-reply-send" disabled={sending || !draft.trim()} onClick={handleSend}>
+          Отправить
+        </button>
+      </div>
+    </section>
+  );
+}
+
 function KjChatPanel({ token, clubId, socket }) {
   // ДОБАВЛЕНО (2026-10-01, запрос пользователя "кнопка Сообщения,
   // собирающая все обращения, включая личный чат с гостями") — сам чат
@@ -2825,12 +2922,13 @@ export default function App() {
       // проверяем все виды заявок/сообщений, которые собирает экран
       // "Сообщения".
       try {
-        const [changeReqs, closeReqs, vipReqs, topupReqs, chatMsgs] = await Promise.all([
+        const [changeReqs, closeReqs, vipReqs, topupReqs, chatMsgs, adminMsgs] = await Promise.all([
           api.listOrderChangeRequests(token, meData.club_id),
           api.listTableCloseRequests(token, meData.club_id),
           api.listVipRequests(token, meData.club_id, "pending"),
           api.listVipTopupRequests(token, meData.club_id),
           api.listChat(token, meData.club_id),
+          api.listAdminMessages(token, meData.club_id),
         ]);
         const latestByGuest = new Map();
         for (const m of chatMsgs || []) {
@@ -2838,9 +2936,12 @@ export default function App() {
           if (!prev || m.created_at > prev.created_at) latestByGuest.set(m.telegram_user_id, m);
         }
         const chatNeedsReply = [...latestByGuest.values()].some((m) => m.from_guest);
+        // ДОБАВЛЕНО (2026-10-03) — непрочитанное сообщение от администрации
+        // тоже должно сразу зажигать мигающую кнопку "Сообщения".
+        const hasUnreadAdminMessage = (adminMsgs || []).some((m) => m.from_admin && !m.is_read_by_kj);
         if (!cancelled) {
           setHasNewMessages(
-            changeReqs.length > 0 || closeReqs.length > 0 || vipReqs.length > 0 || topupReqs.length > 0 || chatNeedsReply,
+            changeReqs.length > 0 || closeReqs.length > 0 || vipReqs.length > 0 || topupReqs.length > 0 || chatNeedsReply || hasUnreadAdminMessage,
           );
         }
       } catch {
@@ -2890,6 +2991,9 @@ export default function App() {
     socket.on("vip_topup_request_created", () => setHasNewMessages(true));
     socket.on("chat_message", (message) => {
       if (message.from_guest) setHasNewMessages(true);
+    });
+    socket.on("admin_message", (message) => {
+      if (message.from_admin) setHasNewMessages(true);
     });
 
     return () => {
@@ -3021,6 +3125,7 @@ export default function App() {
           появлялись прямо над списком столов, а заявки на VIP и на
           пополнение баланса были спрятаны внутри вкладки VIP; личного чата
           с гостем у KJ Panel не было вообще. Теперь всё в одном месте. */}
+          <AdminMessagesPanel token={token} clubId={me.club_id} socket={socketInstance} />
           <OrderChangeRequestsPanel token={token} clubId={me.club_id} socket={socketInstance} />
           <TableCloseRequestsPanel token={token} clubId={me.club_id} socket={socketInstance} />
           <VipRequestsPanel token={token} clubId={me.club_id} socket={socketInstance} />
