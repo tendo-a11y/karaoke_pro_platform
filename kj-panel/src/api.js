@@ -124,6 +124,14 @@ export const api = {
     request(`/api/kj/chat/${clubId}`, {
       method: "POST", token, body: { telegram_user_id: telegramUserId, message_text: messageText },
     }),
+  // ДОБАВЛЕНО (2026-10-03, запрос пользователя "в админке есть панель
+  // управления KJ... сообщения приходят KJ в его панель сообщения") —
+  // переписка с администрацией, режим двусторонний.
+  listAdminMessages: (token, clubId) => request(`/api/kj/admin-messages/${clubId}`, { token }),
+  sendAdminMessage: (token, clubId, messageText) =>
+    request(`/api/kj/admin-messages/${clubId}`, { method: "POST", token, body: { message_text: messageText } }),
+  markAdminMessagesRead: (token, clubId) =>
+    request(`/api/kj/admin-messages/${clubId}/read`, { method: "PUT", token }),
   // ДОБАВЛЕНО (2026-09-20, решение пользователя "Нужно одобрение KJ (запрос
   // → Одобрить/Отклонить)") — заявки гостей на отмену/замену уже принятого
   // заказа, см. backend/routes/kj.py::list_order_change_requests и
