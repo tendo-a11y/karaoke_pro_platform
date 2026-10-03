@@ -5,7 +5,7 @@ from flask import Blueprint, current_app, g, jsonify, request
 from auth import issue_kj_google_token, require_kj
 from errors import api_error, api_ok
 from extensions import db
-from models import ChatMessage, Club, GuestAccount, KJOperator, Order, STATUS_PLAYING, TableGroupMember, VipClient, VipRequest
+from models import AdminKjMessage, ChatMessage, Club, GuestAccount, KJOperator, Order, STATUS_PLAYING, TableGroupMember, VipClient, VipRequest
 from services import category_service, guest_directory_service, guest_status_service, song_service, table_close_service, table_group_service, vip_service, vip_topup_request_service
 from services.guest_directory_service import GUEST_TYPES, GuestDirectoryError
 from services.category_service import CategoryServiceError
@@ -29,7 +29,7 @@ from services.vdj_service import (
     update_order_category,
     update_order_table,
 )
-from sockets import emit_chat_message, emit_table_group_moved
+from sockets import emit_admin_message, emit_chat_message, emit_table_group_moved
 from vdj import bridge_status
 
 bp = Blueprint("kj", __name__, url_prefix="/api/kj")
@@ -357,6 +357,57 @@ def reply_chat(club_id):
     emit_chat_message(message)
 
     return api_ok(message.to_dict(), status_code=201)
+
+
+@bp.get("/admin-messages/<int:club_id>")
+@require_kj
+def list_admin_messages(club_id):
+    """
+    Переписка с администрацией клуба (запрос пользователя 2026-10-03:
+    "в админке есть панель управления KJ... сообщения приходят KJ в его
+    панель сообщений"). Отдельная от ChatMessage (гость↔KJ) переписка —
+    см. models.py::AdminKjMessage.
+    """
+    denied = _ensure_own_club(club_id)
+    if denied:
+        return denied
+    messages = AdminKjMessage.query.filter_by(club_id=club_id).order_by(AdminKjMessage.created_at.asc()).all()
+    return api_ok([m.to_dict() for m in messages])
+
+
+@bp.post("/admin-messages/<int:club_id>")
+@require_kj
+def reply_admin_message(club_id):
+    """Ответ KJ администрации (режим переписки двусторонний, запрос
+    пользователя 2026-10-03: "режим переписки 2 да")."""
+    denied = _ensure_own_club(club_id)
+    if denied:
+        return denied
+    payload = request.get_json(silent=True) or {}
+    message_text = payload.get("message_text")
+    if not message_text or not isinstance(message_text, str) or not message_text.strip():
+        return api_error(400, "VALIDATION_ERROR", "message_text обязателен")
+    message = AdminKjMessage(club_id=club_id, from_admin=False, message_text=message_text.strip())
+    db.session.add(message)
+    db.session.commit()
+    emit_admin_message(message)
+    return api_ok(message.to_dict(), status_code=201)
+
+
+@bp.put("/admin-messages/<int:club_id>/read")
+@require_kj
+def mark_admin_messages_read(club_id):
+    """Отметка прочтения — сообщение от администрации должно "висеть,
+    пока не откроет" (запрос пользователя 2026-10-03), поэтому снимается
+    только явным действием, а не автоматически при списке."""
+    denied = _ensure_own_club(club_id)
+    if denied:
+        return denied
+    AdminKjMessage.query.filter_by(club_id=club_id, from_admin=True, is_read_by_kj=False).update(
+        {"is_read_by_kj": True}
+    )
+    db.session.commit()
+    return api_ok({"marked_read": True})
 
 
 @bp.get("/vip-requests/<int:club_id>")
