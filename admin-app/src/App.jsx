@@ -100,6 +100,89 @@ function ClubForm({ initial, submitLabel, onSubmit, busy, error }) {
 // видимых текущему админу (у super_admin — по всем клубам), поэтому здесь
 // фильтруем по clubId на клиенте, а не заводим отдельный query-параметр на
 // бэкенде — списки заведомо небольшие (число KJ клуба).
+function KjMessagesThread({ token, clubId }) {
+  // ДОБАВЛЕНО (2026-10-03, запрос пользователя "в админке есть панель
+  // управления KJ. ОТТУДА можно писать сообщения... надо добавить
+  // возможность отправки сообщения KJ", режим переписки двусторонний) —
+  // чат администрации с диджеем прямо на карточке KJ.
+  const [open, setOpen] = useState(false);
+  const [messages, setMessages] = useState(null);
+  const [loadError, setLoadError] = useState(null);
+  const [draft, setDraft] = useState("");
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState(null);
+
+  async function reload() {
+    try {
+      const data = await api.listKjMessages(token, clubId);
+      setMessages(data);
+      setLoadError(null);
+    } catch (err) {
+      setLoadError(err instanceof ApiError ? err.message : String(err));
+    }
+  }
+
+  function handleToggle() {
+    const next = !open;
+    setOpen(next);
+    if (next && messages == null) reload();
+  }
+
+  async function handleSend() {
+    const text = draft.trim();
+    if (!text) return;
+    setSending(true);
+    setSendError(null);
+    try {
+      await api.sendKjMessage(token, clubId, text);
+      setDraft("");
+      await reload();
+    } catch (err) {
+      setSendError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <div className="kj-row__chat">
+      <button type="button" className="link-btn" onClick={handleToggle}>
+        {open ? "Скрыть переписку" : "💬 Написать диджею"}
+      </button>
+      {open && (
+        <div className="kj-row__chat-body">
+          {loadError && <div className="banner banner--error">{loadError}</div>}
+          {!messages ? (
+            <p className="empty-hint">Загрузка…</p>
+          ) : messages.length === 0 ? (
+            <p className="empty-hint">Сообщений пока нет.</p>
+          ) : (
+            <ul className="kj-row__chat-list">
+              {messages.map((m) => (
+                <li key={m.id} className="kj-row__chat-message">
+                  <strong>{m.from_admin ? "Вы" : "Диджей"}:</strong> {m.message_text}
+                </li>
+              ))}
+            </ul>
+          )}
+          {sendError && <div className="banner banner--error">{sendError}</div>}
+          <div className="kj-row__chat-send">
+            <input
+              type="text"
+              placeholder="Сообщение диджею…"
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+            />
+            <button type="button" disabled={sending || !draft.trim()} onClick={handleSend}>
+              Отправить
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function KjManagementPanel({ token, clubId, isSuperAdmin }) {
   const [kjList, setKjList] = useState(null);
   const [loadError, setLoadError] = useState(null);
@@ -261,6 +344,7 @@ function KjManagementPanel({ token, clubId, isSuperAdmin }) {
                   </span>
                 )}
               </div>
+              <KjMessagesThread token={token} clubId={clubId} />
             </li>
           ))}
         </ul>
