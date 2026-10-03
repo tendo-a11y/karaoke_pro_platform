@@ -772,6 +772,54 @@ class ChatMessage(db.Model):
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
+class AdminKjMessage(db.Model):
+    """
+    Переписка администрации с диджеем клуба (запрос пользователя 2026-10-03:
+    "в админке есть панель управления KJ... надо добавить возможность
+    отправки сообщения KJ... сообщения приходят KJ в его панель сообщений,
+    но по умолчанию сверху и в приоритете" + "режим переписки — да, висит
+    пока не откроет — да"). Отдельная от ChatMessage (гость↔KJ) переписка —
+    здесь нет конкретного гостя, только один общий тред клуба: "администрация"
+    (любой админ, видящий этот клуб, см. club_service._resolve_visible_club)
+    ↔ "любой активный KJ этого клуба" — тот же принцип "общего ящика клуба",
+    что и у ChatMessage (см. её докстринг про ответ "первого, кто взял
+    трубку"), а не отдельный тред на каждого KJ-оператора.
+
+    is_read_by_kj/is_read_by_admin — отдельные флаги прочтения для каждой
+    стороны (а не общий is_read, как у ChatMessage, где читатель всегда
+    однозначен по from_guest): обе стороны могут прочитать входящие в разное
+    время, и KJ Panel должна подсвечивать именно "непрочитанные ОТ
+    администрации" (from_admin=True, is_read_by_kj=False) сверху экрана
+    "Сообщения", как попросил пользователь.
+    """
+
+    __tablename__ = "admin_kj_messages"
+
+    id = db.Column(db.Integer, primary_key=True)
+    club_id = db.Column(db.Integer, db.ForeignKey("clubs.club_id"), nullable=False, index=True)
+    from_admin = db.Column(db.Boolean, nullable=False)
+    message_text = db.Column(db.Text, nullable=False)
+    is_read_by_kj = db.Column(db.Boolean, nullable=False, default=False)
+    is_read_by_admin = db.Column(db.Boolean, nullable=False, default=False)
+    created_at = db.Column(db.DateTime(timezone=True), default=utcnow, nullable=False)
+
+    club = db.relationship("Club")
+
+    __table_args__ = (
+        db.Index("ix_admin_kj_messages_club_created", "club_id", "created_at"),
+    )
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "club_id": self.club_id,
+            "from_admin": self.from_admin,
+            "message_text": self.message_text,
+            "is_read_by_kj": self.is_read_by_kj,
+            "is_read_by_admin": self.is_read_by_admin,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
 
 # --- Групповой стол (старое: database.py::table_groups/table_join_requests,
 # аудит "Групповой стол/Присоединение/Управление группой", утверждённая
