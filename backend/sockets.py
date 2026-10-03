@@ -316,6 +316,17 @@ def emit_chat_message(message):
     socketio.emit("chat_message", message.to_dict(), room=_club_room(message.club_id))
 
 
+def emit_admin_message(message):
+    """
+    Новое сообщение в переписке администрации с диджеем (см.
+    models.py::AdminKjMessage, запрос пользователя 2026-10-03) — тот же
+    паттерн, что и emit_chat_message выше: доставляется только KJ Panel
+    (комната клуба), Admin App своего WebSocket-подключения не имеет и
+    узнаёт об ответе KJ обычным перезапросом.
+    """
+    socketio.emit("admin_message", message.to_dict(), room=_club_room(message.club_id))
+
+
 def emit_table_close_request_created(close_request):
     """
     Новая заявка гостя-админа на закрытие группового стола (запрос
