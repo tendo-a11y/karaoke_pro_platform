@@ -2,7 +2,7 @@ from flask import Blueprint, Response, current_app, g, request
 
 from auth import issue_admin_google_token, require_admin
 from errors import api_error, api_ok
-from models import AdminUser
+from models import AdminUser, Club, AdminKjMessage
 from extensions import db
 from services import admin_admin_service, club_service, kj_admin_service, report_service, system_admin_service
 from services.admin_admin_service import AdminAdminServiceError
@@ -255,6 +255,47 @@ def set_kj_status(kj_id):
     except KjAdminServiceError as exc:
         return _service_error_response(exc)
     return api_ok(kj.to_dict())
+
+
+def _ensure_visible_club(admin, club_id):
+    """
+    Доступ к переписке с диджеем клуба: тот же принцип, что и в
+    club_service._resolve_visible_club — супер-админ видит любой клуб,
+    обычный админ только свой (запрос пользователя 2026-10-03: панель
+    сообщений администрации в блоке "Управление KJ").
+    """
+    club = db.session.get(Club, club_id)
+    if club is None:
+        return None, api_error(404, "CLUB_NOT_FOUND", "Клуб не найден")
+    if not admin.is_super_admin and club.club_id != admin.club_id:
+        return None, api_error(403, "FORBIDDEN", "Нет доступа к этому клубу")
+    return club, None
+
+
+@bp.get("/clubs/<int:club_id>/kj-messages")
+@require_admin
+def list_kj_messages(club_id):
+    club, error = _ensure_visible_club(g.admin, club_id)
+    if error:
+        return error
+    messages = AdminKjMessage.query.filter_by(club_id=club_id).order_by(AdminKjMessage.created_at.asc()).all()
+    return api_ok([m.to_dict() for m in messages])
+
+
+@bp.post("/clubs/<int:club_id>/kj-messages")
+@require_admin
+def send_kj_message(club_id):
+    club, error = _ensure_visible_club(g.admin, club_id)
+    if error:
+        return error
+    payload = request.get_json(silent=True) or {}
+    message_text = payload.get("message_text")
+    if not message_text or not isinstance(message_text, str) or not message_text.strip():
+        return api_error(400, "VALIDATION_ERROR", "message_text обязателен")
+    message = AdminKjMessage(club_id=club_id, from_admin=True, message_text=message_text.strip())
+    db.session.add(message)
+    db.session.commit()
+    return api_ok(message.to_dict(), status_code=201)
 
 
 # --- Отчёты (Block #3, только super_admin) ---
