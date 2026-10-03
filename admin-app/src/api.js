@@ -97,6 +97,12 @@ export const api = {
     request(`/api/admin/kj/${kjId}`, { method: "PUT", token, body: payload }),
   setKjStatus: (token, kjId, isActive) =>
     request(`/api/admin/kj/${kjId}/status`, { method: "PUT", token, body: { is_active: isActive } }),
+  // ДОБАВЛЕНО (2026-10-03, запрос пользователя "в админке есть панель
+  // управления KJ... надо добавить возможность отправки сообщения KJ") —
+  // переписка администрации с диджеем клуба.
+  listKjMessages: (token, clubId) => request(`/api/admin/clubs/${clubId}/kj-messages`, { token }),
+  sendKjMessage: (token, clubId, messageText) =>
+    request(`/api/admin/clubs/${clubId}/kj-messages`, { method: "POST", token, body: { message_text: messageText } }),
   getReportsOverview: (token) => request("/api/admin/reports/overview", { token }),
   getSystemOverview: (token) => request("/api/admin/system/overview", { token }),
   getSystemLogs: (token) => request("/api/admin/system/logs", { token }),
