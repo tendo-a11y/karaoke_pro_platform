@@ -757,6 +757,11 @@ function KjChatPanel({ token, clubId, socket }) {
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState(null);
+  // ДОБАВЛЕНО (2026-10-04, запрос пользователя "нигде нет кнопки удаления
+  // сообщений и очистки чата") — deletingId блокирует кнопку только у
+  // своего сообщения, clearing — у кнопки "Очистить чат" целиком.
+  const [deletingId, setDeletingId] = useState(null);
+  const [clearing, setClearing] = useState(false);
 
   async function reload() {
     try {
@@ -800,6 +805,35 @@ function KjChatPanel({ token, clubId, socket }) {
       setSendError(err instanceof ApiError ? err.message : String(err));
     } finally {
       setSending(false);
+    }
+  }
+
+  async function handleDeleteMessage(messageId) {
+    setDeletingId(messageId);
+    setSendError(null);
+    try {
+      await api.deleteChatMessage(token, messageId);
+      setMessages((prev) => (prev || []).filter((m) => m.id !== messageId));
+    } catch (err) {
+      setSendError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  async function handleClearChat() {
+    if (selectedGuestId == null) return;
+    if (!window.confirm("Удалить всю переписку с этим гостем? Это действие нельзя отменить.")) return;
+    setClearing(true);
+    setSendError(null);
+    try {
+      await api.clearChat(token, clubId, selectedGuestId);
+      setMessages((prev) => (prev || []).filter((m) => m.telegram_user_id !== selectedGuestId));
+      setSelectedGuestId(null);
+    } catch (err) {
+      setSendError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setClearing(false);
     }
   }
 
@@ -854,9 +888,14 @@ function KjChatPanel({ token, clubId, socket }) {
   return (
     <section className="order-change-requests-panel">
       <h2>💬 Переписка — гость #{selectedGuestId}</h2>
-      <button type="button" className="btn-link" onClick={() => setSelectedGuestId(null)}>
-        ← Все сообщения
-      </button>
+      <div className="chat-thread-header-actions">
+        <button type="button" className="btn-link" onClick={() => setSelectedGuestId(null)}>
+          ← Все сообщения
+        </button>
+        <button type="button" className="btn-link btn-link--danger" disabled={clearing} onClick={handleClearChat}>
+          {clearing ? "Очищаем…" : "🗑 Очистить чат"}
+        </button>
+      </div>
       <ul className="vip-list">
         {thread.map((m) => (
           <li key={m.id} className="vip-row chat-thread-row">
@@ -866,6 +905,14 @@ function KjChatPanel({ token, clubId, socket }) {
               <img src={m.image_data_url} alt="Скриншот от гостя" className="chat-thread-row__image" />
             )}
             {m.message_text && <span>{m.message_text}</span>}
+            <button
+              type="button"
+              className="btn-link btn-link--danger chat-thread-row__delete"
+              disabled={deletingId === m.id}
+              onClick={() => handleDeleteMessage(m.id)}
+            >
+              {deletingId === m.id ? "Удаляем…" : "✕ Удалить"}
+            </button>
           </li>
         ))}
       </ul>
