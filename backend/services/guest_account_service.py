@@ -91,3 +91,26 @@ def set_photo(club_id: int, guest_id: int, photo_data_url: str | None) -> GuestA
     account.photo_data_url = photo_data_url
     db.session.commit()
     return account
+
+
+def delete_account(club_id: int, guest_id: int) -> bool:
+    """
+    Гость полностью удаляет свой постоянный профиль (запрос пользователя
+    2026-10-04, право на удаление персональных данных) — одним действием,
+    сразу, без подтверждения диджеем/админом (routes/guest.py::
+    delete_my_profile). Стирается вся запись целиком: имя, фото и
+    привязка Google-аккаунта. Заказы/избранное/VIP-баланс/переписка,
+    уже накопленные на этом guest_id, НЕ трогаются — они и так были
+    привязаны только к обезличенному номеру (см. docstring GuestAccount
+    выше), без этой записи в них не остаётся ничего, что опознаёт
+    человека. После удаления guest_id сессии не меняется — если гость
+    снова войдёт через тот же Google-аккаунт, для него будет создана
+    новая запись (см. link_google, outcome="created"), как для первого
+    раза. Возвращает False, если постоянного профиля и так не было.
+    """
+    account = get_by_guest_id(club_id, guest_id)
+    if account is None:
+        return False
+    db.session.delete(account)
+    db.session.commit()
+    return True
