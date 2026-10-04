@@ -492,3 +492,25 @@ select {
   opacity: 0;
   cursor: pointer;
 }
+
+/* ДОБАВЛЕНО (запрос пользователя 2026-10-04) — ссылки на правовые
+   документы и кнопка "Удалить мои данные" в профиле гостя. */
+.profile-legal-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-top: 10px;
+}
+
+.profile-legal-row a {
+  color: var(--muted);
+  font-size: 13px;
+  text-decoration: underline;
+}
+
+.btn-link--danger {
+  background: transparent;
+  color: var(--danger);
+  border: 1px solid var(--danger);
+}
