@@ -420,6 +420,21 @@ function VipPanel({ token, meInfo }) {
   return (
     <section className="panel vip-panel">
       <h2>⭐ VIP-статус</h2>
+      {/* ДОБАВЛЕНО (2026-10-04, запрос пользователя "бот и приложение —
+      два отдельных инструмента, что в боте то и в приложении, во вкладку
+      VIP надо добавить то, что есть в боте") — перенос locales.py::
+      become_vip_text старого бота: фиксированный список из трёх пунктов
+      (как в боте — пополнение/кешбек/повтор песен) плюс, если KJ его
+      заполнил, свой текст клуба сверху (см. backend/routes/guest.py::me,
+      club.vip_description; KJ редактирует его в KJ Panel, вкладка VIP). */}
+      {meInfo.vip_description && (
+        <p className="empty-hint vip-panel__custom-desc">{meInfo.vip_description}</p>
+      )}
+      <ul className="vip-benefits-list">
+        <li>Пополнение баланса через приложение</li>
+        <li>Кешбек с заказов</li>
+        <li>Повтор любимых песен</li>
+      </ul>
       {error && <div className="banner banner--error">{error}</div>}
       {meInfo.vip_request_pending || requestSent ? (
         <p className="empty-hint">Заявка отправлена — ждите решения ведущего.</p>
