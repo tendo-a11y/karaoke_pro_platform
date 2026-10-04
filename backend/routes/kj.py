@@ -359,6 +359,40 @@ def reply_chat(club_id):
     return api_ok(message.to_dict(), status_code=201)
 
 
+# ДОБАВЛЕНО (2026-10-04, запрос пользователя "нигде нет кнопки удаления
+# сообщений и очистки чата") — реальное удаление строки(строк)
+# ChatMessage, без мягкого флага: переписка короткая и ситуативная (на
+# один вечер), отдельной истории версий для неё, в отличие от заказов/
+# транзакций, в проекте никогда не было. KJ может удалить любое
+# сообщение в переписке своего клуба — и гостя, и своё — та же логика
+# модерации, что и везде в KJ Panel (блокировка гостя, удаление его
+# фото и т.п.).
+@bp.delete("/chat/<int:message_id>")
+@require_kj
+def delete_chat_message(message_id):
+    message = db.session.get(ChatMessage, message_id)
+    if message is None:
+        return api_error(404, "MESSAGE_NOT_FOUND", "Сообщение не найдено")
+    if message.club_id != g.club_id:
+        return api_error(403, "FORBIDDEN", "Нет доступа к этому сообщению")
+    db.session.delete(message)
+    db.session.commit()
+    return api_ok({"deleted": True})
+
+
+@bp.delete("/chat/<int:club_id>/<int:telegram_user_id>")
+@require_kj
+def clear_chat(club_id, telegram_user_id):
+    """"Очистить чат" — удаляет всю переписку с одним гостем целиком, та
+    же модерация, что и у отдельного сообщения выше, но на весь диалог."""
+    denied = _ensure_own_club(club_id)
+    if denied:
+        return denied
+    ChatMessage.query.filter_by(club_id=club_id, telegram_user_id=telegram_user_id).delete()
+    db.session.commit()
+    return api_ok({"cleared": True})
+
+
 @bp.get("/admin-messages/<int:club_id>")
 @require_kj
 def list_admin_messages(club_id):
