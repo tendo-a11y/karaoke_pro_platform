@@ -188,6 +188,22 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   display: block;
 }
 
+/* ДОБАВЛЕНО (2026-10-04, запрос пользователя "нигде нет кнопки удаления
+   сообщений и очистки чата") — маленькая, ненавязчивая кнопка под своим
+   сообщением, и заголовок чата в строку с кнопкой "Очистить чат". */
+.chat-panel__header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.chat-message__delete {
+  align-self: flex-end;
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 2px 4px;
+  margin-top: 2px;
+}
+.chat-message__delete:disabled { opacity: 0.5; cursor: default; }
+
 .chat-attachment-preview {
   display: flex;
   align-items: center;
