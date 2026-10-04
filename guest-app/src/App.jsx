@@ -1316,6 +1316,10 @@ function ChatPanel({ token }) {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(null);
   const listEndRef = useRef(null);
+  // ДОБАВЛЕНО (2026-10-04, запрос пользователя "нигде нет кнопки удаления
+  // сообщений и очистки чата") — то же самое, что и в KJ Panel.
+  const [deletingId, setDeletingId] = useState(null);
+  const [clearing, setClearing] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -1390,9 +1394,43 @@ function ChatPanel({ token }) {
     }
   }
 
+  async function handleDeleteMessage(messageId) {
+    setDeletingId(messageId);
+    setError(null);
+    try {
+      await api.deleteChatMessage(token, messageId);
+      setMessages((prev) => prev.filter((m) => m.id !== messageId));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  async function handleClearChat() {
+    if (!window.confirm("Удалить всю переписку с ведущим? Это действие нельзя отменить.")) return;
+    setClearing(true);
+    setError(null);
+    try {
+      await api.clearChat(token);
+      setMessages([]);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setClearing(false);
+    }
+  }
+
   return (
     <section className="panel chat-panel">
-      <h2>💬 Чат с ведущим</h2>
+      <div className="chat-panel__header">
+        <h2>💬 Чат с ведущим</h2>
+        {messages.length > 0 && (
+          <button type="button" className="link-btn link-btn--danger" disabled={clearing} onClick={handleClearChat}>
+            {clearing ? "Очищаем…" : "🗑 Очистить чат"}
+          </button>
+        )}
+      </div>
       <ul className="chat-list">
         {messages.length === 0 && <li className="empty-hint">Сообщений пока нет.</li>}
         {messages.map((m) => (
@@ -1402,6 +1440,14 @@ function ChatPanel({ token }) {
               <img src={m.image_data_url} alt="Скриншот" className="chat-message__image" />
             )}
             {m.message_text && <span className="chat-message__text">{m.message_text}</span>}
+            <button
+              type="button"
+              className="chat-message__delete"
+              disabled={deletingId === m.id}
+              onClick={() => handleDeleteMessage(m.id)}
+            >
+              {deletingId === m.id ? "Удаляем…" : "✕"}
+            </button>
           </li>
         ))}
         <li ref={listEndRef} />
