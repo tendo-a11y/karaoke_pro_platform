@@ -1067,6 +1067,83 @@ function VipTopupRequestsPanel({ token, clubId, socket }) {
   );
 }
 
+// ДОБАВЛЕНО (2026-10-04, запрос пользователя "бот и приложение — два
+// отдельных инструмента, что в боте то и в приложении, во вкладку VIP надо
+// добавить то, что есть в боте") — перенос handlers/kj.py::
+// vip_description_edit старого бота: KJ сам пишет текст про преимущества
+// VIP своего клуба, гость видит его в Guest App на вкладке VIP поверх
+// фиксированного списка (пополнение/кешбек/повтор песен), см.
+// guest-app App.jsx::VipPanel и backend/routes/kj.py::get_vip_settings/
+// update_vip_settings. По образцу TableSettingsPanel выше — одна форма,
+// одна кнопка "Сохранить", пустое поле = ничего не добавлено.
+function VipDescriptionPanel({ token, clubId }) {
+  const [draft, setDraft] = useState("");
+  const [loadError, setLoadError] = useState(null);
+  const [actionError, setActionError] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  async function reload() {
+    try {
+      const data = await api.getVipSettings(token, clubId);
+      setDraft(data.vip_description || "");
+      setLoadError(null);
+    } catch (err) {
+      setLoadError(err instanceof ApiError ? err.message : String(err));
+    }
+  }
+
+  useEffect(() => {
+    reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clubId]);
+
+  async function handleSave(event) {
+    event.preventDefault();
+    setBusy(true);
+    setActionError(null);
+    setSaved(false);
+    try {
+      const data = await api.updateVipSettings(token, clubId, draft);
+      setDraft(data.vip_description || "");
+      setSaved(true);
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (loadError) return <div className="banner banner--error">{loadError}</div>;
+
+  return (
+    <section className="vip-description-panel">
+      <h2>Описание VIP для гостей</h2>
+      <p className="empty-hint">
+        Этот текст увидит гость на кнопке «Стать VIP» — над стандартным списком (пополнение баланса,
+        кешбек, повтор любимых песен). Оставьте поле пустым, если ничего добавлять не нужно.
+      </p>
+      {actionError && <div className="banner banner--error">{actionError}</div>}
+      <form className="vip-description-form" onSubmit={handleSave}>
+        <textarea
+          rows={4}
+          placeholder="Например: именинникам — бесплатный коктейль"
+          value={draft}
+          onChange={(e) => {
+            setDraft(e.target.value);
+            setSaved(false);
+          }}
+          disabled={busy}
+        />
+        <button type="submit" className="btn btn--accent" disabled={busy}>
+          {busy ? "Сохраняем…" : "Сохранить"}
+        </button>
+      </form>
+      {saved && <p className="empty-hint">Сохранено.</p>}
+    </section>
+  );
+}
+
 function VipPanel({ token, clubId }) {
   const [clients, setClients] = useState(null);
   const [loadError, setLoadError] = useState(null);
@@ -1254,6 +1331,8 @@ function VipPanel({ token, clubId }) {
 
   return (
     <div className="vip-panel">
+      <VipDescriptionPanel token={token} clubId={clubId} />
+
       {actionError && <div className="banner banner--error">{actionError}</div>}
 
       <section>
