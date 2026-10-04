@@ -427,6 +427,14 @@ OrderChangeRequestsPanel), а не терялась среди обычных к
   display: block;
 }
 
+/* ДОБАВЛЕНО (2026-10-04, запрос пользователя "нигде нет кнопки удаления
+   сообщений и очистки чата") — красная ссылка-кнопка, переиспользует
+   .btn-link (см. выше), но другого цвета; chat-thread-row__delete
+   прижимает её к себе, а не растягивает на всю ширину колонки. */
+.btn-link--danger { color: var(--danger); }
+.chat-thread-row__delete { align-self: flex-end; padding: 2px 4px; font-size: 12px; }
+.chat-thread-header-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+
 .vip-row__actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 
 .vip-amount-input {
