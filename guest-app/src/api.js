@@ -93,6 +93,9 @@ export const api = {
       token,
       body: { photo_data_url: photoDataUrl },
     }),
+  // "Удалить мои данные" (запрос пользователя 2026-10-04) — стирает имя,
+  // фото и привязку Google сразу и полностью, без подтверждения.
+  deleteMyProfile: (token) => request("/api/guest/profile", { method: "DELETE", token }),
   linkGoogle: (token, tableNo, googleCredential) =>
     request("/api/guest/profile/link-google", {
       method: "POST", token, body: { table_no: tableNo, google_credential: googleCredential },
