@@ -39,7 +39,7 @@ body { margin: 0; background: var(--bg); color: var(--text); }
 .app-header {
   display: flex;
   justify-content: space-between;
-  align-items: baseline;
+  align-items: center;
   padding-bottom: 12px;
   border-bottom: 1px solid var(--border);
 }
