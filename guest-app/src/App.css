@@ -514,3 +514,68 @@ select {
   color: var(--danger);
   border: 1px solid var(--danger);
 }
+
+
+/* ДОБАВЛЕНО (запрос пользователя 2026-10-04) — страницы политики
+   конфиденциальности и условий использования внутри самого приложения
+   (см. LegalPageScreen/getLegalPage в App.jsx). Все правила строго
+   вложены в .legal-page, чтобы никак не задеть остальной интерфейс. */
+.legal-page {
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.legal-page .wrap {
+  max-width: 680px;
+  margin: 0 auto;
+  padding: 24px 16px 60px;
+}
+
+.legal-page .wrap h1 {
+  font-size: 22px;
+  margin-bottom: 4px;
+}
+
+.legal-page .wrap .updated {
+  color: var(--muted);
+  font-size: 13px;
+  margin-bottom: 24px;
+}
+
+.legal-page .wrap h2 {
+  font-size: 17px;
+  margin-top: 32px;
+  margin-bottom: 8px;
+  color: var(--accent);
+}
+
+.legal-page .wrap p,
+.legal-page .wrap li {
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.legal-page .wrap ul {
+  padding-left: 20px;
+}
+
+.legal-page .wrap .box {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 18px;
+  margin: 16px 0;
+}
+
+.legal-page .wrap a {
+  color: var(--accent);
+}
+
+.legal-page .wrap .back {
+  display: inline-block;
+  margin-top: 32px;
+  color: var(--muted);
+  font-size: 14px;
+  text-decoration: underline;
+}
