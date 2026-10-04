@@ -136,6 +136,12 @@ export const api = {
       body: { message_text: messageText, image_data_url: imageDataUrl, service_id: serviceId },
     }),
   listChat: (token) => request("/api/guest/chat", { token }),
+  // Удаление сообщения / очистка чата (запрос пользователя 2026-10-04,
+  // "нигде нет кнопки удаления сообщений и очистки чата") — см.
+  // backend/routes/guest.py::delete_own_chat_message/clear_own_chat.
+  deleteChatMessage: (token, messageId) =>
+    request(`/api/guest/chat/${messageId}`, { method: "DELETE", token }),
+  clearChat: (token) => request("/api/guest/chat", { method: "DELETE", token }),
   listServices: (token) => request("/api/guest/services", { token }),
   searchSongs: (token, query) =>
     request(`/api/guest/songs/search?q=${encodeURIComponent(query)}`, { token }),
