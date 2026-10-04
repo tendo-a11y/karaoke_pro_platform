@@ -600,6 +600,26 @@ def set_my_photo():
     return api_ok(account.to_dict())
 
 
+@bp.delete("/profile")
+@require_guest
+def delete_my_profile():
+    """
+    "Удалить мои данные" (запрос пользователя 2026-10-04, право на
+    удаление персональных данных) — гость сам стирает свой постоянный
+    профиль (имя, фото, привязку Google) одним нажатием, сразу и
+    полностью, без подтверждения диджеем/админом (см.
+    guest_account_service.delete_account). После этого /me снова вернёт
+    has_permanent_profile=False — то же состояние, что и до первого входа
+    через Google, но guest_id сессии не меняется, поэтому уже сделанные
+    заказы/VIP-баланс продолжают работать, просто больше ни с каким
+    именем/фото/почтой не связаны.
+    """
+    deleted = guest_account_service.delete_account(g.club_id, g.guest_id)
+    if not deleted:
+        return api_error(404, "NO_PROFILE", "Постоянный профиль не найден — нечего удалять")
+    return api_ok({"deleted": True})
+
+
 @bp.get("/vip/transactions")
 @require_guest
 def list_vip_transactions():
