@@ -143,6 +143,15 @@ export const api = {
   rejectOrderChangeRequest: (token, requestId) =>
     request(`/api/kj/order-change-requests/${requestId}/reject`, { method: "PUT", token }),
   listVipClients: (token, clubId) => request(`/api/kj/vip-clients/${clubId}`, { token }),
+  // Описание VIP клуба (запрос пользователя 2026-10-04, перенос из бота) —
+  // текст, который видит гость в Guest App на вкладке VIP поверх
+  // фиксированного списка преимуществ, см. backend/routes/kj.py::
+  // get_vip_settings/update_vip_settings.
+  getVipSettings: (token, clubId) => request(`/api/kj/vip-settings/${clubId}`, { token }),
+  updateVipSettings: (token, clubId, description) =>
+    request(`/api/kj/vip-settings/${clubId}`, {
+      method: "PUT", token, body: { vip_description: description },
+    }),
   // Фото гостя в карточке VIP-клиента (запрос пользователя 2026-10-01) —
   // необязательное, photoDataUrl === null убирает уже загруженное фото.
   setGuestPhoto: (token, guestId, photoDataUrl) =>
