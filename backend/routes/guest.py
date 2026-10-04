@@ -1245,6 +1245,33 @@ def list_chat_messages():
     return api_ok([m.to_dict() for m in messages])
 
 
+# ДОБАВЛЕНО (2026-10-04, запрос пользователя "нигде нет кнопки удаления
+# сообщений и очистки чата... и в приложении гостя тоже") — гость может
+# удалить любое сообщение в своей переписке с KJ (и своё, и ответ KJ) —
+# это целиком его собственный диалог, см. тот же выбор на стороне KJ
+# (routes/kj.py::delete_chat_message/clear_chat).
+@bp.delete("/chat/<int:message_id>")
+@require_guest
+def delete_own_chat_message(message_id):
+    message = db.session.get(ChatMessage, message_id)
+    if message is None:
+        return api_error(404, "MESSAGE_NOT_FOUND", "Сообщение не найдено")
+    if message.club_id != g.club_id or message.telegram_user_id != g.guest_id:
+        return api_error(403, "FORBIDDEN", "Нет доступа к этому сообщению")
+    db.session.delete(message)
+    db.session.commit()
+    return api_ok({"deleted": True})
+
+
+@bp.delete("/chat")
+@require_guest
+def clear_own_chat():
+    """"Очистить чат" — удаляет всю переписку этого гостя с KJ целиком."""
+    ChatMessage.query.filter_by(club_id=g.club_id, telegram_user_id=g.guest_id).delete()
+    db.session.commit()
+    return api_ok({"cleared": True})
+
+
 @bp.get("/queue")
 @require_guest
 def queue():
