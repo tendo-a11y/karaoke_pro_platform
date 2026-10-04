@@ -1069,6 +1069,46 @@ def update_table_settings(club_id):
     })
 
 
+# ДОБАВЛЕНО (2026-10-04, запрос пользователя "бот и приложение — два
+# отдельных инструмента, что в боте то и в приложении, во вкладку VIP надо
+# добавить то, что есть в боте") — перенос handlers/kj.py::
+# vip_description_edit старого бота (кнопка "📝 Описание VIP (RU)"): KJ сам
+# вписывает текст про преимущества VIP своего клуба, он показывается
+# гостю в Guest App на вкладке VIP поверх фиксированного списка
+# (пополнение/кешбек/повтор песен), см. routes/guest.py::me и
+# guest-app App.jsx::VipPanel. По образцу table-settings выше — тот же
+# паттерн get/put по club_id с _ensure_own_club.
+@bp.get("/vip-settings/<int:club_id>")
+@require_kj
+def get_vip_settings(club_id):
+    denied = _ensure_own_club(club_id)
+    if denied:
+        return denied
+    club = db.session.get(Club, club_id)
+    if club is None:
+        return api_error(404, "CLUB_NOT_FOUND", "Клуб не найден")
+    return api_ok({"vip_description": club.vip_description})
+
+
+@bp.put("/vip-settings/<int:club_id>")
+@require_kj
+def update_vip_settings(club_id):
+    denied = _ensure_own_club(club_id)
+    if denied:
+        return denied
+    payload = request.get_json(silent=True) or {}
+    club = db.session.get(Club, club_id)
+    if club is None:
+        return api_error(404, "CLUB_NOT_FOUND", "Клуб не найден")
+    if "vip_description" in payload:
+        value = payload.get("vip_description")
+        if value is not None and not isinstance(value, str):
+            return api_error(400, "VALIDATION_ERROR", "vip_description должен быть строкой или null")
+        club.vip_description = (value or "").strip() or None
+        db.session.commit()
+    return api_ok({"vip_description": club.vip_description})
+
+
 # --- Список гостей / карточка гостя (запрос пользователя 2026-09: сортировка
 # VIP/Простой/Без стола, переход в карточку, блокировка, снятие со стола,
 # статистика по вечеру/неделе/месяцу, избранные песни видны). guest_id —
