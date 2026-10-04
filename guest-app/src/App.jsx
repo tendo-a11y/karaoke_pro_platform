@@ -1375,6 +1375,11 @@ function ProfileNamePanel({ token, meInfo, onNameChanged }) {
   // кнопке не блокировала другую.
   const [photoBusy, setPhotoBusy] = useState(false);
   const [photoError, setPhotoError] = useState(null);
+  // "Удалить мои данные" (запрос пользователя 2026-10-04, право на
+  // удаление персональных данных) — сразу и полностью, без отдельного
+  // экрана, с одним окном подтверждения (window.confirm).
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState(null);
 
   // Если имя обновилось извне (например, опрос /me после действия в другой
   // вкладке) — подхватываем новое значение, но только пока сами не
@@ -1452,6 +1457,22 @@ function ProfileNamePanel({ token, meInfo, onNameChanged }) {
     }
   }
 
+  async function handleDeleteMyData() {
+    if (!window.confirm("Удалить имя, фото и привязку к Google-аккаунту? Это действие нельзя отменить.")) {
+      return;
+    }
+    setDeleteBusy(true);
+    setDeleteError(null);
+    try {
+      await api.deleteMyProfile(token);
+      await onNameChanged();
+    } catch (err) {
+      setDeleteError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setDeleteBusy(false);
+    }
+  }
+
   if (!editing) {
     return (
       <section className="panel profile-panel">
@@ -1497,6 +1518,27 @@ function ProfileNamePanel({ token, meInfo, onNameChanged }) {
             </button>
           )}
         </div>
+
+        {/* ДОБАВЛЕНО (запрос пользователя 2026-10-04) — ссылки на
+        политику конфиденциальности/условия использования и кнопка
+        "Удалить мои данные" (право на удаление персональных данных),
+        рядом с остальными действиями над профилем. */}
+        <div className="profile-legal-row">
+          <a href="/privacy.html" target="_blank" rel="noopener noreferrer" className="btn-link">
+            Политика конфиденциальности
+          </a>
+          <a href="/terms.html" target="_blank" rel="noopener noreferrer" className="btn-link">
+            Условия использования
+          </a>
+        </div>
+        {meInfo.has_permanent_profile && (
+          <div className="profile-legal-row">
+            {deleteError && <div className="banner banner--error">{deleteError}</div>}
+            <button type="button" className="btn-link btn-link--danger" disabled={deleteBusy} onClick={handleDeleteMyData}>
+              {deleteBusy ? "Удаляем…" : "🗑 Удалить мои данные"}
+            </button>
+          </div>
+        )}
       </section>
     );
   }
