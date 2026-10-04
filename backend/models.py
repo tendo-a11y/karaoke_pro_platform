@@ -100,6 +100,18 @@ class Club(db.Model):
     # 1-го стола (то же поведение, что было до этой настройки).
     queue_start_table = db.Column(db.Integer, nullable=True)
 
+    # ДОБАВЛЕНО (2026-10-04, запрос пользователя "бот и приложение — два
+    # отдельных инструмента, что в боте то и в приложении"): перенос
+    # venues.vip_description из старой SQLite базы бота (handlers/kj.py::
+    # vip_description_edit, кнопка "📝 Описание VIP (RU)") — свой текст
+    # клуба про преимущества VIP-статуса. Показывается гостю на вкладке
+    # VIP в Guest App поверх трёх фиксированных пунктов
+    # (пополнение/кешбек/повтор песен), см. routes/guest.py::me и
+    # guest-app App.jsx::VipPanel. Редактируется KJ в KJ Panel, вкладка
+    # VIP (routes/kj.py::get_vip_settings/update_vip_settings). None —
+    # ничего не добавлено клубом, гость видит только фиксированный текст.
+    vip_description = db.Column(db.Text, nullable=True)
+
     # Секрет для локального VDJ-моста (см. vdj/bridge_client.py). Backend
     # централизован (обычно в облаке), а VirtualDJ стоит локально на
     # компьютере KJ без доступа из интернета — мостик сам подключается
@@ -126,6 +138,7 @@ class Club(db.Model):
             "songs_per_table": self.songs_per_table,
             "queue_mode": self.queue_mode,
             "queue_start_table": self.queue_start_table,
+            "vip_description": self.vip_description,
         }
 
 
