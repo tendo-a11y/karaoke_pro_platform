@@ -172,6 +172,13 @@ def me():
         # которого не было в UI старой системы.
         "vip": {"balance": float(vip.balance), "cashback_percent": float(vip.cashback_percent)}
         if vip else None,
+        # ДОБАВЛЕНО (2026-10-04, запрос пользователя "в приложении должно
+        # быть то же описание VIP, что и в боте") — свой текст клуба про
+        # преимущества VIP (см. models.py::Club.vip_description,
+        # routes/kj.py::update_vip_settings); Guest App показывает его на
+        # вкладке VIP поверх фиксированного списка, см. App.jsx::VipPanel.
+        # None — клуб ничего не вписал, показывается только фикс. текст.
+        "vip_description": club.vip_description if club else None,
         "vip_request_pending": pending_request is not None,
         "vip_balance_blocked": vip_balance_blocked,
         "vip_topup_pending": pending_topup_request is not None,
