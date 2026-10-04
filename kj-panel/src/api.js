@@ -124,6 +124,13 @@ export const api = {
     request(`/api/kj/chat/${clubId}`, {
       method: "POST", token, body: { telegram_user_id: telegramUserId, message_text: messageText },
     }),
+  // Удаление сообщения / очистка чата (запрос пользователя 2026-10-04,
+  // "нигде нет кнопки удаления сообщений и очистки чата") — см.
+  // backend/routes/kj.py::delete_chat_message/clear_chat.
+  deleteChatMessage: (token, messageId) =>
+    request(`/api/kj/chat/${messageId}`, { method: "DELETE", token }),
+  clearChat: (token, clubId, telegramUserId) =>
+    request(`/api/kj/chat/${clubId}/${telegramUserId}`, { method: "DELETE", token }),
   // ДОБАВЛЕНО (2026-10-03, запрос пользователя "в админке есть панель
   // управления KJ... сообщения приходят KJ в его панель сообщения") —
   // переписка с администрацией, режим двусторонний.
