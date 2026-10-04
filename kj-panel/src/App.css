@@ -467,6 +467,24 @@ OrderChangeRequestsPanel), а не терялась среди обычных к
 .free-evening-banner h2 { margin: 0 0 8px; color: var(--accent); }
 .free-evening-banner .category-row__free { color: var(--text); font-size: 14px; }
 
+/* ДОБАВЛЕНО (2026-10-04, запрос пользователя "во вкладку VIP добавить то,
+   что есть в боте") — форма описания VIP в колонку (многострочный текст +
+   кнопка), в отличие от .table-settings-form ниже (узкие числовые поля в
+   строку), см. App.jsx::VipDescriptionPanel. */
+.vip-description-panel { max-width: 480px; margin-bottom: 24px; }
+.vip-description-form { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+.vip-description-form textarea {
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 14px;
+  font-family: inherit;
+  resize: vertical;
+}
+.vip-description-form .btn { align-self: flex-start; padding: 8px 16px; }
+
 .table-settings-panel { display: flex; flex-direction: column; gap: 24px; max-width: 420px; }
 .table-settings-form { display: flex; gap: 8px; align-items: center; margin-top: 12px; }
 .table-settings-form input {
