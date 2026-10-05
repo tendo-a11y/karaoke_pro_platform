@@ -91,6 +91,12 @@ export const api = {
   // считаются одной суммой при закрытии стола.
   markPlayed: (token, orderId) =>
     request(`/api/kj/order/${orderId}/mark-played`, { method: "PUT", token }),
+  // Запрос пользователя 2026-10 (жалоба "мой заказ не подсвечивается
+  // зелёным" в Guest App): ставит УЖЕ принятый заказ в живую очередь
+  // VirtualDJ, не создавая отдельный "ничей" заказ, как это делает
+  // addManualOrder ниже — см. routes/kj.py::push_order_to_vdj_route.
+  pushOrderToVdj: (token, orderId) =>
+    request(`/api/kj/order/${orderId}/push-to-vdj`, { method: "PUT", token }),
   getQueue: (token, clubId) => request(`/api/kj/queue/${clubId}`, { token }),
   addManualOrder: (token, { songTitle, artist, tableNo }) =>
     request(`/api/kj/order/manual`, {
