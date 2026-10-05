@@ -912,8 +912,13 @@ def get_guest_queue_view(club_id: int, guest_id: int) -> list[dict]:
     }
 
     def _is_crazy(service_id):
-        lowered = service_names.get(service_id, "").strip().lower()
-        return "крейз" in lowered or "crazy" in lowered
+        # Та же категория, что и в services/table_board_service.py::
+        # CRAZY_CATEGORY_NAME ("CRAZY" — приоритетная категория, всегда
+        # идёт первой в очереди) — сравниваем точно так же, по имени
+        # Service, не импортируя константу напрямую, чтобы не создавать
+        # цикл импорта (table_board_service уже импортирует из этого файла).
+        name = service_names.get(service_id, "").strip()
+        return name.upper() == "CRAZY"
 
     result = []
     for item in live_queue:
@@ -1009,6 +1014,56 @@ def claim_vdj_queue_item(kj, vdj_item_id: str, song_title: str, artist, table_no
     emit_queue_updated(kj.club_id, get_kj_queue_view(kj.club_id))
 
     return order, "claimed"
+
+
+def push_order_to_queue(order_id: int, kj):
+    """
+    KJ Pro, кнопка "🎵 В очередь VDJ" на уже принятом (STATUS_QUEUED) заказе
+    на карточке стола (OrdersBoardSlot) — запрос пользователя 2026-10.
+
+    Раньше единственным способом что-либо добавить в живую очередь
+    VirtualDJ был add_manual_song() ниже — он специально создаёт "ничей"
+    заказ (telegram_user_id=-1, см. её докстринг), потому что рассчитан на
+    случай, когда KJ сам вводит песню с нуля, без заказа гостя вообще.
+    confirm_order() же выше принципиально не трогает VirtualDJ сама. В
+    результате ни один настоящий заказ гостя не получал vdj_item_id, и
+    get_kj_queue_view()/get_guest_queue_view() никогда не находили для живой
+    очереди подходящий заказ — значит не могли подсветить ни VIP, ни
+    "Крейзи", ни "это моя песня" (жалоба пользователя: "мой заказ не
+    подсвечивается зелёным").
+
+    Эта функция — третий путь: берёт УЖЕ существующий настоящий заказ
+    гостя и добавляет именно его песню в VirtualDJ, записывая vdj_item_id
+    в тот же Order — guest_type/telegram_user_id/service_id остаются от
+    настоящего заказа (не трогаем их), поэтому дальше оба queue-view
+    находят его и подсвечивают правильно.
+
+    Разрешено только для STATUS_QUEUED без vdj_item_id — иначе одна и та же
+    песня оказалась бы в очереди VirtualDJ дважды.
+
+    Возвращает (order, outcome), outcome — один из:
+        "not_found", "forbidden", "already_queued", "vdj_error", "queued".
+    """
+    order = db.session.get(Order, order_id)
+    if order is None:
+        return None, "not_found"
+    if order.club_id != kj.club_id:
+        return None, "forbidden"
+    if order.status != STATUS_QUEUED or order.vdj_item_id:
+        return order, "already_queued"
+
+    vdj = get_vdj_client(kj.club_id)
+    try:
+        vdj_item_id = vdj.add_to_queue(order.song_title, order.artist, order.table_no)
+    except VirtualDJError:
+        return order, "vdj_error"
+
+    order.vdj_item_id = vdj_item_id
+    db.session.commit()
+
+    emit_queue_updated(kj.club_id, get_kj_queue_view(kj.club_id))
+
+    return order, "queued"
 
 
 def add_manual_song(kj, song_title: str, artist, table_no: int):
