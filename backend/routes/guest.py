@@ -1278,17 +1278,10 @@ def queue():
     """
     Живая очередь VirtualDJ клуба — единая для всех ролей (это требование
     было с самого начала задачи: очередь видна и KJ Pro, и Guest App, без
-    различий по источнику заказа, ТЗ §22/§35). По структуре ответа
-    идентична /api/kj/queue/<club_id>.
+    различий по источнику заказа, ТЗ §22/§35). Раньше отдавала голые данные
+    VirtualDJ; теперь дополнительно подсвечивает VIP-заказы, заказы с
+    платной категорией "Крейзи" и собственную песню гостя (запрос
+    пользователя, 2026-10) — см. services/vdj_service.py::
+    get_guest_queue_view().
     """
-    vdj = get_vdj_client(g.club_id)
-    items = vdj.get_queue()
-    return api_ok([
-        {
-            "vdj_item_id": i.vdj_item_id,
-            "song_title": i.song_title,
-            "artist": i.artist,
-            "table_no": i.table_no,
-        }
-        for i in items
-    ])
+    return api_ok(vdj_service.get_guest_queue_view(g.club_id, g.guest_id))
