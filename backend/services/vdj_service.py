@@ -872,6 +872,77 @@ def get_kj_queue_view(club_id: int) -> list[dict]:
     return result
 
 
+def get_guest_queue_view(club_id: int, guest_id: int) -> list[dict]:
+    """
+    Живая очередь VirtualDJ для Guest App — то же сопоставление с Order по
+    vdj_item_id, что и в get_kj_queue_view() выше (см. её докстринг про
+    "равно или заканчивается на" и разбор дублей среди одинаковых песен в
+    очереди), но без раскрытия самих заказов гостю — только три признака
+    для подсветки в интерфейсе (запрос пользователя, 2026-10): is_vip
+    (заказ оформлен VIP-гостем — Order.guest_type, проставляется при
+    создании заказа), is_mine (это заказ самого гостя, который сейчас
+    смотрит очередь — сравнение с Order.telegram_user_id, см. require_guest
+    в auth.py про то, что это то же значение, что и g.guest_id) и is_crazy
+    (заказ оформлен с платной категорией "Крейзи" — своего флага у
+    категории нет, поэтому определяется по названию Service, т.к. набор
+    категорий у каждого клуба свой и задаётся KJ/админом вручную).
+
+    Сознательно не трогает unused_orders и не помечает "потерянные" заказы
+    STATUS_REJECTED, как это делает get_kj_queue_view() — это обслуживание
+    очереди должно происходить только один раз за опрос, и её уже выполняет
+    KJ Panel (оба экрана опрашивают один и тот же club_id параллельно).
+    """
+    vdj = get_vdj_client(club_id)
+    live_queue = vdj.get_queue()
+
+    unused_orders = (
+        db.session.query(Order)
+        .filter(
+            Order.club_id == club_id,
+            Order.status == STATUS_QUEUED,
+            Order.vdj_item_id.isnot(None),
+        )
+        .order_by(Order.queued_at.asc())
+        .all()
+    )
+
+    service_names = {
+        s.id: (s.name or "")
+        for s in db.session.query(Service).filter(Service.club_id == club_id).all()
+    }
+
+    def _is_crazy(service_id):
+        lowered = service_names.get(service_id, "").strip().lower()
+        return "крейз" in lowered or "crazy" in lowered
+
+    result = []
+    for item in live_queue:
+        matched = None
+        if item.vdj_item_id:
+            for order in unused_orders:
+                if not order.vdj_item_id:
+                    continue
+                if order.vdj_item_id == item.vdj_item_id or item.vdj_item_id.endswith(order.vdj_item_id):
+                    matched = order
+                    break
+            if matched is not None:
+                unused_orders.remove(matched)
+
+        result.append(
+            {
+                "vdj_item_id": item.vdj_item_id,
+                "song_title": item.song_title,
+                "artist": item.artist,
+                "table_no": matched.table_no if matched else None,
+                "is_vip": bool(matched and matched.guest_type == "vip"),
+                "is_mine": bool(matched and matched.telegram_user_id == guest_id),
+                "is_crazy": bool(matched and _is_crazy(matched.service_id)),
+            }
+        )
+
+    return result
+
+
 def claim_vdj_queue_item(kj, vdj_item_id: str, song_title: str, artist, table_no, service_id):
     """
     Доп. ТЗ "KJ Pro" (запрос пользователя 2026-09-14, после первого живого
