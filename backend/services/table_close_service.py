@@ -54,6 +54,7 @@ from models import (
     TX_TYPE_ORDER_PAYMENT,
 )
 from services import billing_service, guest_status_service, table_group_service
+from services.table_board_service import ACTIVE_TABLE_STATUSES
 from sockets import emit_table_close_request_created, emit_table_close_request_decided
 
 
@@ -374,27 +375,54 @@ def close_table_directly(club_id: int, table_no: int, kj, hide_receipt: bool) ->
     с карточки стола) — она устарела, помечаем её отклонённой, чтобы не
     зависала в списке "Заявки на закрытие стола" как будто ничего не
     произошло.
+
+    ОБНОВЛЕНО (запрос пользователя 2026-10, жалоба "один стол не
+    закрылся" — "Все столы должны быть закрыты при нажатии на кнопку
+    закрыть стол, даже если марсиане заказ прислали"): раньше отсутствие
+    TableGroup означало "за столом никого нет" и давало TABLE_EMPTY — но
+    песню на стол можно поставить и без TableGroup (диджей сам вписал её
+    вручную, см. docstring list_occupied_table_nos в table_group_service.py
+    за полным обоснованием). Теперь при отсутствии группы ищем просто
+    активные заказы этого стола (ACTIVE_TABLE_STATUSES) — если они есть,
+    закрываем стол тем же способом (чек, списание), просто без шагов, что
+    касаются только настоящей компании гостей (удалять/сбрасывать нечего —
+    группы никогда не было). requested_by_guest_id = -1 — то же "не гость"
+    значение, что и в add_manual_song() (vdj_service.py).
     """
     group = table_group_service.get_group(club_id, table_no)
-    if group is None:
-        return DecisionResult(outcome="not_found")
 
-    # Читаем admin_guest_id ДО удаления группы ниже — bulk TableGroup.query
-    # .delete() истекает (expire) уже загруженный объект group в сессии, и
-    # обращение к его атрибутам после удаления попыталось бы перечитать уже
-    # не существующую строку (ObjectDeletedError).
-    admin_guest_id = group.admin_guest_id
-    member_guest_id_ints = [
-        m.guest_id
-        for m in TableGroupMember.query.filter_by(club_id=club_id, table_no=table_no).all()
-    ]
+    if group is not None:
+        # Читаем admin_guest_id/created_at ДО удаления группы ниже — bulk
+        # TableGroup.query.delete() истекает (expire) уже загруженный
+        # объект group в сессии, и обращение к его атрибутам после
+        # удаления попыталось бы перечитать уже не существующую строку
+        # (ObjectDeletedError).
+        admin_guest_id = group.admin_guest_id
+        member_guest_id_ints = [
+            m.guest_id
+            for m in TableGroupMember.query.filter_by(club_id=club_id, table_no=table_no).all()
+        ]
+        since = group.created_at
+    else:
+        active_orders = Order.query.filter(
+            Order.club_id == club_id,
+            Order.table_no == table_no,
+            Order.status.in_(ACTIVE_TABLE_STATUSES),
+        ).all()
+        if not active_orders:
+            return DecisionResult(outcome="not_found")
+        admin_guest_id = -1
+        member_guest_id_ints = []
+        since = min(o.created_at for o in active_orders)
+
     member_guest_ids = [str(gid) for gid in member_guest_id_ints]
-    closed_orders = complete_table_orders(club_id, table_no, group.created_at)
-    receipt = _build_receipt(club_id, table_no, group.created_at)
+    closed_orders = complete_table_orders(club_id, table_no, since)
+    receipt = _build_receipt(club_id, table_no, since)
 
-    TableJoinRequest.query.filter_by(club_id=club_id, table_no=table_no).delete()
-    TableGroupMember.query.filter_by(club_id=club_id, table_no=table_no).delete()
-    TableGroup.query.filter_by(club_id=club_id, table_no=table_no).delete()
+    if group is not None:
+        TableJoinRequest.query.filter_by(club_id=club_id, table_no=table_no).delete()
+        TableGroupMember.query.filter_by(club_id=club_id, table_no=table_no).delete()
+        TableGroup.query.filter_by(club_id=club_id, table_no=table_no).delete()
 
     req = TableCloseRequest(
         club_id=club_id,
