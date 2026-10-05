@@ -141,6 +141,29 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .queue-list { list-style: decimal; padding-left: 20px; }
 .queue-list li { padding-left: 4px; font-size: 14px; }
 
+.queue-item--vip {
+  background: rgba(255, 196, 0, 0.16);
+  border-radius: 6px;
+  padding: 4px 6px;
+}
+.queue-item--crazy {
+  background: rgba(186, 85, 211, 0.16);
+  border-radius: 6px;
+  padding: 4px 6px;
+}
+.queue-item--vip.queue-item--crazy {
+  background: linear-gradient(90deg, rgba(255, 196, 0, 0.18), rgba(186, 85, 211, 0.18));
+}
+.queue-item--mine {
+  border-left: 3px solid var(--accent);
+  padding-left: 8px;
+  font-weight: 600;
+}
+.queue-item__mine-badge {
+  color: var(--accent);
+  font-weight: 600;
+}
+
 .order-row {
   background: var(--panel-alt);
   border: 1px solid var(--border);
