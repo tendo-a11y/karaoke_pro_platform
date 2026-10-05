@@ -24,6 +24,7 @@ from services.vdj_service import (
     get_kj_queue_view,
     list_pending_change_requests,
     mark_played,
+    push_order_to_queue,
     reject_order,
     reject_order_change_request,
     update_order_category,
@@ -229,6 +230,37 @@ def mark_played_route(order_id):
 
     if outcome == "played":
         return api_ok(order.to_dict())
+
+    if outcome in _OUTCOME_HTTP:
+        status_code, error_code, message = _OUTCOME_HTTP[outcome]
+        return api_error(status_code, error_code, message)
+
+    return api_error(500, "INTERNAL_ERROR", "Неизвестный результат обработки заказа")
+
+
+@bp.put("/order/<int:order_id>/push-to-vdj")
+@require_kj
+def push_order_to_vdj_route(order_id):
+    """
+    KJ Pro, кнопка "🎵 В очередь VDJ" на уже принятом заказе (OrdersBoardSlot,
+    запрос пользователя 2026-10 — жалоба "мой заказ не подсвечивается
+    зелёным", см. docstring push_order_to_queue() в services/vdj_service.py
+    за полным обоснованием). Ставит именно этот, настоящий заказ гостя в
+    живую очередь VirtualDJ, не теряя его личность — в отличие от "➕
+    Добавить песню" ниже (add_manual_order), которая всегда создаёт
+    "ничей" заказ. Только так подсветка VIP/Крейзи/"моя песня" в Guest App
+    может сработать.
+    """
+    order, outcome = push_order_to_queue(order_id, g.kj)
+
+    if outcome == "queued":
+        return api_ok(order.to_dict())
+
+    if outcome == "vdj_error":
+        return api_error(502, "VDJ_UNAVAILABLE", "Не удалось добавить песню в VirtualDJ")
+
+    if outcome == "already_queued":
+        return api_error(409, "ALREADY_IN_VDJ_QUEUE", "Эта песня уже в очереди VirtualDJ")
 
     if outcome in _OUTCOME_HTTP:
         status_code, error_code, message = _OUTCOME_HTTP[outcome]
