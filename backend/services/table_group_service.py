@@ -39,6 +39,7 @@ from models import (
     TableJoinRequest,
 )
 from services import guest_status_service
+from services.table_board_service import ACTIVE_TABLE_STATUSES
 
 
 def _utcnow():
@@ -338,16 +339,38 @@ def leave_group(club_id: int, table_no: int, guest_id: int) -> MemberActionResul
 
 def list_occupied_table_nos(club_id: int) -> set[int]:
     """
-    Номера столов, за которыми прямо сейчас сидит какая-то компания (есть
-    строка TableGroup) — используется KJ Panel, чтобы при переносе стола
-    (см. move_table ниже) предлагать выбирать номер только из СВОБОДНЫХ
-    столов: move_table сознательно не умеет разруливать конфликт "стол
-    назначения уже занят" (решение пользователя 2026-09-28 — KJ физически
-    видит, куда сажает гостей, и в интерфейсе просто не должен иметь
-    возможности выбрать уже занятый стол).
+    Номера столов, которые сейчас нельзя считать свободными — используется
+    и KJ Panel при переносе стола (см. move_table ниже, предлагать номер
+    только из свободных), и "Закрыть все столы" (table_close_service.
+    close_all_tables), чтобы знать, какие столы вообще нужно закрывать.
+
+    Раньше это были только столы с реальной строкой TableGroup (компания
+    гостей, зашедших через приложение). ОБНОВЛЕНО (запрос пользователя
+    2026-10, жалоба "один стол не закрылся" — "Все столы должны быть
+    закрыты при нажатии на кнопку закрыть стол, даже если марсиане заказ
+    прислали"): песню на стол можно поставить и без захода гостя в
+    приложение — диджей сам вписывает её вручную ("➕ Добавить песню"/
+    "Присвоить" в vdj_service.py, см. их докстринги) — такой стол никогда
+    не получает TableGroup, поэтому раньше "Закрыть все столы" его просто
+    не видела. Теперь занятым считается и стол с любым активным заказом
+    (тот же набор статусов, что и на карточках "Заказы по столам", см.
+    ACTIVE_TABLE_STATUSES выше) — независимо от того, кто и как его туда
+    поставил.
     """
     rows = TableGroup.query.filter_by(club_id=club_id).with_entities(TableGroup.table_no).all()
-    return {row[0] for row in rows}
+    group_table_nos = {row[0] for row in rows}
+
+    order_rows = (
+        Order.query.filter(
+            Order.club_id == club_id,
+            Order.table_no.isnot(None),
+            Order.status.in_(ACTIVE_TABLE_STATUSES),
+        )
+        .with_entities(Order.table_no)
+        .distinct()
+        .all()
+    )
+    return group_table_nos | {row[0] for row in order_rows}
 
 
 class MoveResult:
