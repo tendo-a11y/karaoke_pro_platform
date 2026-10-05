@@ -2756,12 +2756,23 @@ export default function App() {
           <p className="empty-hint">Очередь пуста.</p>
         ) : (
           <ol className="queue-list">
-            {queue.map((item) => (
-              <li key={item.vdj_item_id}>
-                🎵 {item.song_title}
-                {item.artist ? ` — ${item.artist}` : ""}
-              </li>
-            ))}
+            {queue.map((item) => {
+              const itemClasses = ["queue-item"];
+              if (item.is_vip) itemClasses.push("queue-item--vip");
+              if (item.is_crazy) itemClasses.push("queue-item--crazy");
+              if (item.is_mine) itemClasses.push("queue-item--mine");
+              return (
+                <li key={item.vdj_item_id} className={itemClasses.join(" ")}>
+                  {item.is_vip ? "👑 " : ""}
+                  {item.is_crazy ? "🔥 " : ""}
+                  🎵 {item.song_title}
+                  {item.artist ? ` — ${item.artist}` : ""}
+                  {item.is_mine ? (
+                    <span className="queue-item__mine-badge"> — ваша песня 🎤</span>
+                  ) : null}
+                </li>
+              );
+            })}
           </ol>
         )}
       </section>
