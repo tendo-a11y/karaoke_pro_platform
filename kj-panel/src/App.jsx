@@ -2412,7 +2412,7 @@ function GuestsPanel({ token, clubId }) {
 // пользователя "только на карточке").
 const BOARD_SLOT_NEEDS_DECISION = new Set(["pending", "processing", "error"]);
 
-function OrdersBoardSlot({ slot, categories, busy, onAccept, onReject, onComplete, onChangeCategory, onOpenGuest }) {
+function OrdersBoardSlot({ slot, categories, busy, onAccept, onReject, onComplete, onChangeCategory, onOpenGuest, onPushToVdj }) {
   if (slot == null) {
     return <div className="table-slot table-slot--empty">Свободен</div>;
   }
@@ -2501,6 +2501,20 @@ function OrdersBoardSlot({ slot, categories, busy, onAccept, onReject, onComplet
       потому что списание происходит только в момент "Готово". */}
       {isQueued && (
         <div className="table-slot__actions">
+          {/* ДОБАВЛЕНО (запрос пользователя 2026-10, жалоба "мой заказ не
+          подсвечивается зелёным" в Guest App): единственный прежний способ
+          попасть в живую очередь VirtualDJ ("➕ Добавить песню") создаёт
+          заказ без привязки к гостю — поэтому подсветка VIP/Крейзи/"моя
+          песня" никогда не срабатывала. Эта кнопка ставит именно ЭТОТ,
+          уже принятый заказ гостя в очередь VirtualDJ, сохраняя его
+          личность (см. push_order_to_queue() в backend). Показывается,
+          пока песня ещё не поставлена (vdj_item_id пуст) — после этого
+          место само освобождается кнопкой "Готово", как и раньше. */}
+          {!slot.vdj_item_id && (
+            <button type="button" className="btn btn--complete" disabled={busy} onClick={() => onPushToVdj(slot.order_id)}>
+              🎵 В очередь VDJ
+            </button>
+          )}
           {canComplete && (
             <button type="button" className="btn btn--complete" disabled={busy} onClick={() => onComplete(slot.order_id)}>
               🏁 Готово
@@ -2668,6 +2682,23 @@ function OrdersBoard({ token, clubId, socket, onOpenGuest, onOpenTable }) {
     }
   }
 
+  // Запрос пользователя 2026-10: ставит уже принятый заказ в живую очередь
+  // VirtualDJ, сохраняя его личность (см. onPushToVdj в OrdersBoardSlot) —
+  // та же схема busy/reload, что и у остальных действий на доске.
+  async function handlePushToVdj(orderId) {
+    setBusyOrderId(orderId);
+    setActionError(null);
+    try {
+      await api.pushOrderToVdj(token, orderId);
+      await reload();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+      await reload();
+    } finally {
+      setBusyOrderId(null);
+    }
+  }
+
   // ДОБАВЛЕНО (2026-09-19, жалоба пользователя "не сделано изменение
   // категории песни"): смена категории прямо на карточке места, пока заказ
   // ещё "queued" (см. onChangeCategory в OrdersBoardSlot выше) — та же
@@ -2809,6 +2840,7 @@ function OrdersBoard({ token, clubId, socket, onOpenGuest, onOpenTable }) {
                   onComplete={handleComplete}
                   onChangeCategory={handleChangeCategory}
                   onOpenGuest={onOpenGuest}
+                  onPushToVdj={handlePushToVdj}
                 />
               ))}
             </div>
