@@ -21,6 +21,14 @@ import "./App.css";
 const QUEUE_POSITION_STATUSES = ["pending", "processing", "queued", "error"];
 
 function orderStatusLabel(order) {
+  // ДОБАВЛЕНО (2026-10): заказ сверх вместимости стола ждёт своей очереди
+  // невидимо для ведущего (order.waiting_position, см. routes/guest.py::
+  // list_my_orders) — показываем это гостю явно, а не просто номером.
+  if (order.waiting_position != null) {
+    return order.queue_position != null
+      ? `⏳ Ждёт очереди · #${order.queue_position}`
+      : "⏳ Ждёт очереди";
+  }
   if (QUEUE_POSITION_STATUSES.includes(order.status) && order.queue_position != null) {
     return `#${order.queue_position}`;
   }
