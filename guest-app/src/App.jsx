@@ -314,25 +314,32 @@ function LegalPageScreen({ page }) {
 // главной форме заказа, теперь и в "Заказать снова", "Заменить песню" и
 // "Заказ через скриншот", чтобы предупреждение о цене нельзя было обойти.
 function ServiceSelect({ services, value, onChange, disabled }) {
-  // ИЗМЕНЕНО (2026-10, запрос пользователя: "KARAOKE — 35 ?, KARAOKE BACK
-  // — 35 ?, а при нажатии на ? описание") — вместо системного выпадающего
-  // списка свой: в раскрытом списке у каждой категории своя кнопка "❓",
-  // которая показывает описание именно этой категории.
+  // Свой список выбора категории вместо системного (запрос пользователя
+  // 2026-10): в раскрытом списке у каждой категории кнопка "❓", которая
+  // открывает карточку категории поверх экрана (название, цена, описание,
+  // "Выбрать"/"Закрыть"). CRAZY выбирается ТОЛЬКО через карточку — нажатие
+  // на её название тоже открывает карточку, и подтверждение цены находится
+  // внутри неё, рядом с описанием ("выбор должен быть осознанным").
   const [open, setOpen] = useState(false);
-  const [infoId, setInfoId] = useState(null);
-  const [pendingCrazyId, setPendingCrazyId] = useState(null);
+  const [cardId, setCardId] = useState(null);
   const selected = services.find((s) => String(s.id) === String(value));
-  const pendingCrazy = services.find((s) => String(s.id) === String(pendingCrazyId));
+  const card = services.find((s) => String(s.id) === String(cardId));
+  const isCrazy = (s) => (s.name || "").trim().toUpperCase() === "CRAZY";
   const labelOf = (s) => `${s.name}${s.is_free ? " (бесплатно)" : ` — ${s.price}`}`;
 
   function choose(service) {
-    setOpen(false);
-    setInfoId(null);
-    if ((service.name || "").trim().toUpperCase() === "CRAZY") {
-      setPendingCrazyId(String(service.id));
+    if (isCrazy(service)) {
+      setCardId(service.id);
       return;
     }
+    setOpen(false);
     onChange(String(service.id));
+  }
+
+  function confirmCard() {
+    onChange(String(card.id));
+    setCardId(null);
+    setOpen(false);
   }
 
   return (
@@ -369,34 +376,36 @@ function ServiceSelect({ services, value, onChange, disabled }) {
                   type="button"
                   className="service-picker__info"
                   title="Описание категории"
-                  onClick={() => setInfoId((prev) => (prev === s.id ? null : s.id))}
+                  onClick={() => setCardId(s.id)}
                 >
                   ❓
                 </button>
               </div>
-              {infoId === s.id && (
-                <p className="service-picker__desc">{s.description || "Описание пока не добавлено."}</p>
-              )}
             </li>
           ))}
         </ul>
       )}
-      {pendingCrazy && (
-        <div className="banner banner--error" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <span>Категория «Crazy» — песня вне очереди, стоит {pendingCrazy.price} лей. Подтвердить выбор?</span>
-          <span>
-            <button
-              type="button"
-              className="btn btn--accent"
-              onClick={() => {
-                onChange(String(pendingCrazy.id));
-                setPendingCrazyId(null);
-              }}
-            >
-              Да, выбрать
-            </button>{" "}
-            <button type="button" className="btn-link" onClick={() => setPendingCrazyId(null)}>Отмена</button>
-          </span>
+      {card && (
+        <div className="service-card-overlay" onClick={() => setCardId(null)}>
+          <div className="service-card" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+            <h3 className="service-card__title">{card.name}</h3>
+            <p className="service-card__price">{card.is_free ? "Бесплатно" : `Цена: ${card.price}`}</p>
+            <p className="service-card__desc">{card.description || "Описание пока не добавлено."}</p>
+            {isCrazy(card) && (
+              <p className="service-card__warning">
+                ⚠️ Это самая дорогая категория: песня вне очереди стоит {card.price} лей.
+                Подтвердите, что выбираете её осознанно.
+              </p>
+            )}
+            <div className="service-card__buttons">
+              <button type="button" disabled={disabled} onClick={confirmCard}>
+                {isCrazy(card) ? `Да, выбираю за ${card.price} лей` : "Выбрать"}
+              </button>
+              <button type="button" className="service-card__close" onClick={() => setCardId(null)}>
+                Закрыть
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
