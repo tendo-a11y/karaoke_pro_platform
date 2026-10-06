@@ -339,19 +339,27 @@ function ServiceSelect({ services, value, onChange, disabled }) {
             </option>
           ))}
         </select>
-        {selected && (
-          <button
-            type="button"
-            className="btn-link service-select-row__info"
-            onClick={() => setShowInfo((v) => !v)}
-            title="Описание категории"
-          >
-            ❓
-          </button>
-        )}
+        <button
+          type="button"
+          className="btn-link service-select-row__info"
+          onClick={() => setShowInfo((v) => !v)}
+          title="Описание категорий"
+        >
+          ❓
+        </button>
       </span>
-      {showInfo && selected && (
-        <p className="empty-hint">{selected.description || "Описание пока не добавлено."}</p>
+      {/* ИЗМЕНЕНО (2026-10, жалоба пользователя "нет значка (?)"): кнопка
+      "❓" видна всегда, а не только после выбора категории; пока категория
+      не выбрана — показывает описания всех категорий сразу. */}
+      {showInfo && (
+        <div className="service-select-info">
+          {(selected ? [selected] : services).map((s) => (
+            <p key={s.id} className="empty-hint">
+              <strong>{s.name}{s.is_free ? " (бесплатно)" : ` — ${s.price}`}</strong>
+              {": "}{s.description || "описание пока не добавлено"}
+            </p>
+          ))}
+        </div>
       )}
       {pendingCrazy && (
         <div className="banner banner--error" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -2714,47 +2722,7 @@ export default function App() {
                 // плейсхолдер-опция ниже недоступна для повторного выбора
                 // (disabled), поэтому required реально не даёт отправить
                 // заказ без осознанного выбора категории каждый раз.
-                <span className="service-select-row">
-                  <select
-                    value={serviceId}
-                    onChange={(e) => handleSelectService(e.target.value)}
-                    required
-                  >
-                    <option value="" disabled>Выберите категорию…</option>
-                    {services.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name}{s.is_free ? " (бесплатно)" : ` — ${s.price}`}
-                      </option>
-                    ))}
-                  </select>
-                  {serviceId && (
-                    <button
-                      type="button"
-                      className="btn-link service-select-row__info"
-                      onClick={() => setShowCategoryInfo((v) => !v)}
-                      title="Описание категории"
-                    >
-                      ❓
-                    </button>
-                  )}
-                </span>
-              )}
-              {showCategoryInfo && serviceId && (
-                <p className="empty-hint">
-                  {services.find((s) => String(s.id) === serviceId)?.description || "Описание пока не добавлено."}
-                </p>
-              )}
-              {pendingCrazyServiceId && (
-                <div className="banner banner--error" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  <span>
-                    Категория «Crazy» — песня вне очереди, стоит{" "}
-                    {services.find((s) => String(s.id) === pendingCrazyServiceId)?.price} лей. Подтвердить выбор?
-                  </span>
-                  <span>
-                    <button type="button" className="btn btn--accent" onClick={confirmCrazySelection}>Да, выбрать</button>{" "}
-                    <button type="button" className="btn-link" onClick={cancelCrazySelection}>Отмена</button>
-                  </span>
-                </div>
+                <ServiceSelect services={services} value={serviceId} onChange={setServiceId} />
               )}
               <button type="submit" disabled={submitting || !songTitle.trim()}>
                 {submitting ? "Отправляем…" : "🎶 Заказать"}
