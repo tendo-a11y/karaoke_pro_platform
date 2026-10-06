@@ -1195,14 +1195,15 @@ function ReplaceForm({ order, token, services, busy, onSubmit, onCancel }) {
           type="text"
           value={artist}
           onChange={(e) => setArtist(e.target.value)}
-          placeholder="Исполнитель (необязательно)"
+          placeholder="Исполнитель (обязательно)"
           maxLength={200}
+          required
         />
         {services.length > 0 && (
           <ServiceSelect services={services} value={serviceId} onChange={setServiceId} />
         )}
         <div className="replace-form__buttons">
-          <button type="submit" disabled={busy || !songTitle.trim()}>
+          <button type="submit" disabled={busy || !songTitle.trim() || !artist.trim()}>
             {busy ? "Сохраняем…" : "✅ Сохранить замену"}
           </button>
           <button type="button" className="link-btn" onClick={onCancel} disabled={busy}>
@@ -2784,8 +2785,9 @@ export default function App() {
                 type="text"
                 value={artist}
                 onChange={(e) => setArtist(e.target.value)}
-                placeholder="Исполнитель (необязательно)"
+                placeholder="Исполнитель (обязательно)"
                 maxLength={200}
+                required
               />
               {services.length > 0 && (
                 // "Без тарифа" убран из списка (запрос пользователя
@@ -2796,7 +2798,7 @@ export default function App() {
                 // заказ без осознанного выбора категории каждый раз.
                 <ServiceSelect services={services} value={serviceId} onChange={setServiceId} />
               )}
-              <button type="submit" disabled={submitting || !songTitle.trim()}>
+              <button type="submit" disabled={submitting || !songTitle.trim() || !artist.trim()}>
                 {submitting ? "Отправляем…" : "🎶 Заказать"}
               </button>
             </form>
