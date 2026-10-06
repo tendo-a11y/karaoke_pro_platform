@@ -700,3 +700,25 @@ select {
 }
 .service-card__buttons { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
 .service-card__close { background: none; color: var(--muted); border: 1px solid var(--border); font-weight: 600; }
+
+/* ДОБАВЛЕНО (2026-10, запрос пользователя: "пусть эта зона моргает и
+   надпись Найти другого цвета, чтоб выделялась") — блок поиска песни
+   (ИИ-поиск / Ссылка / Скриншот + "Найти") в "Заказать песню". */
+@keyframes ai-search-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 176, 32, 0); border-color: var(--border); }
+  50% { box-shadow: 0 0 16px 3px rgba(255, 176, 32, 0.55); border-color: var(--accent); }
+}
+.order-form-panel .ai-search {
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+  margin-bottom: 14px;
+  animation: ai-search-pulse 1.6s ease-in-out infinite;
+}
+.order-form-panel .ai-search .order-form button[type="submit"] {
+  background: var(--ok);
+  color: #ffffff;
+}
+@media (prefers-reduced-motion: reduce) {
+  .order-form-panel .ai-search { animation: none; border-color: var(--accent); }
+}
