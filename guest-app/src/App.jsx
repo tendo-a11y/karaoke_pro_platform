@@ -1904,7 +1904,7 @@ function ProfileNamePanel({ token, meInfo, onNameChanged }) {
         {meInfo.has_permanent_profile && (
           <div className="profile-legal-row">
             {deleteError && <div className="banner banner--error">{deleteError}</div>}
-            <button type="button" className="btn-link btn-link--danger" disabled={deleteBusy} onClick={handleDeleteMyData}>
+            <button type="button" className="btn-link" disabled={deleteBusy} onClick={handleDeleteMyData}>
               {deleteBusy ? "Удаляем…" : "🗑 Удалить мои данные"}
             </button>
           </div>
