@@ -1336,24 +1336,7 @@ function TableGroupPanel({ token, guestId, hasTable, status, onGroupChanged }) {
 
   return (
     <section className="panel table-group-panel">
-      <h2>
-        👥 Групповой стол
-        {status === "admin" && (
-          <button
-            type="button"
-            className="btn-link"
-            title="Что значит админ стола"
-            onClick={() => setShowAdminInfo((v) => !v)}
-          >
-            ❓
-          </button>
-        )}
-      </h2>
-      {status === "admin" && showAdminInfo && (
-        <p className="empty-hint">
-          Вы — админ стола. Только вы разрешаете, кому сесть за стол. Чужие сесть не могут.
-        </p>
-      )}
+      <h2>👥 Групповой стол</h2>
       {error && <div className="banner banner--error">{error}</div>}
 
       {status === "pending" && (
@@ -1379,7 +1362,22 @@ function TableGroupPanel({ token, guestId, hasTable, status, onGroupChanged }) {
                   <span>
                     {m.is_admin ? "👑 " : "🙂 "}
                     {m.guest_id === guestId ? "Вы" : `Гость ${m.guest_id}`}
+                    {m.is_admin && m.guest_id === guestId && (
+                      <button
+                        type="button"
+                        className="btn-link"
+                        title="Что значит админ стола"
+                        onClick={() => setShowAdminInfo((v) => !v)}
+                      >
+                        ❓
+                      </button>
+                    )}
                   </span>
+                  {m.is_admin && m.guest_id === guestId && showAdminInfo && (
+                    <p className="empty-hint">
+                      Вы — админ стола. Только вы разрешаете, кому сесть за стол. Чужие сесть не могут.
+                    </p>
+                  )}
                   {view.is_admin && !m.is_admin && (
                     <div className="favorite-actions">
                       <button
