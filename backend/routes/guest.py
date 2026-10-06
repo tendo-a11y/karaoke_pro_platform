@@ -1,4 +1,5 @@
 import secrets
+from datetime import datetime, timedelta, timezone
 
 from flask import Blueprint, current_app, g, request
 
@@ -333,6 +334,57 @@ def list_services():
     return api_ok([s.to_dict() for s in services])
 
 
+def _norm_song_text(value) -> str:
+    return " ".join((value or "").lower().split())
+
+
+def _mark_ordered_today(club_id: int, items: list[dict]) -> list[dict]:
+    """
+    Помечает в результатах поиска песни, которые в этом клубе уже кто-то
+    заказал за последние сутки (запрос пользователя 2026-10: "чтоб другим
+    цветом выделялись песни заказанные" — в списке песен у гостя). Только
+    подсказка цветом: заказать такую песню по-прежнему можно. Отклонённые
+    и ошибочные заказы не считаются. Сравнение по названию + исполнителю
+    без учёта регистра и лишних пробелов; если у заказа или у результата
+    исполнитель не указан — достаточно совпадения названия.
+    """
+    if not items:
+        return items
+    since = datetime.now(timezone.utc) - timedelta(days=1)
+    rows = (
+        Order.query.with_entities(Order.song_title, Order.artist)
+        .filter(
+            Order.club_id == club_id,
+            Order.created_at >= since,
+            Order.status.notin_([STATUS_REJECTED, STATUS_ERROR]),
+        )
+        .all()
+    )
+    pairs = set()
+    titles_any = set()
+    titles_without_artist = set()
+    for song_title, artist in rows:
+        title_key = _norm_song_text(song_title)
+        artist_key = _norm_song_text(artist)
+        if not title_key:
+            continue
+        titles_any.add(title_key)
+        if artist_key:
+            pairs.add((title_key, artist_key))
+        else:
+            titles_without_artist.add(title_key)
+    for item in items:
+        title_key = _norm_song_text(item.get("title"))
+        artist_key = _norm_song_text(item.get("artist"))
+        if not title_key:
+            item["ordered_today"] = False
+        elif not artist_key:
+            item["ordered_today"] = title_key in titles_any
+        else:
+            item["ordered_today"] = (title_key, artist_key) in pairs or title_key in titles_without_artist
+    return items
+
+
 @bp.get("/songs/search")
 @require_guest
 def search_songs():
@@ -347,7 +399,7 @@ def search_songs():
     """
     query = request.args.get("q", "")
     songs = song_service.search_songs(g.club_id, query)
-    return api_ok([s.to_dict() for s in songs])
+    return api_ok(_mark_ordered_today(g.club_id, [s.to_dict() for s in songs]))
 
 
 @bp.post("/songs/ai-search")
@@ -370,6 +422,8 @@ def ai_search_songs():
         return api_error(400, "VALIDATION_ERROR", "text обязателен и должен быть непустой строкой")
 
     results = ai_search_service.ai_powered_search(text.strip())
+    if isinstance(results, list) and all(isinstance(x, dict) for x in results):
+        results = _mark_ordered_today(g.club_id, results)
     return api_ok(results)
 
 
@@ -404,6 +458,8 @@ def screenshot_search_songs():
         return api_error(400, "VALIDATION_ERROR", "media_type должен быть image/jpeg, image/png или image/webp")
 
     results = ai_search_service.screenshot_powered_search(image_base64.strip(), media_type)
+    if isinstance(results, list) and all(isinstance(x, dict) for x in results):
+        results = _mark_ordered_today(g.club_id, results)
     return api_ok(results)
 
 
