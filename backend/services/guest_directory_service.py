@@ -19,9 +19,9 @@ auth.py::require_guest).
 и vip_service.list_transactions, а не календарные сутки — см. докстринг
 club_service.py про это решение.
 """
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 
-from models import Favorite, GuestAccount, GuestStatus, Order, VipClient
+from models import Favorite, GuestAccount, GuestStatus, Order, STATUS_COMPLETED, Service, VipClient
 
 WINDOW_EVENING_DAYS = 1
 WINDOW_WEEK_DAYS = 7
@@ -193,6 +193,12 @@ def get_guest_detail(club_id: int, guest_id: int) -> dict:
         "is_blocked": bool(status.is_blocked) if status else False,
         "email": account.email if account else None,
         "display_name": account.display_name if account else None,
+        # ДОБАВЛЕНО (запрос пользователя 2026-10: "Kj должен иметь
+        # возможность сам... добавить его фото") — поле уже существовало
+        # (GuestAccount.photo_data_url, см. routes/kj.py::set_guest_photo),
+        # просто не отдавалось в карточку обычного гостя — только в списке
+        # VIP-клиентов (vip_service.list_clients).
+        "photo_data_url": account.photo_data_url if account else None,
         "last_song_title": entry["last_song_title"],
         "last_artist": entry["last_artist"],
         "last_activity_at": entry["last_activity_at"].isoformat() if entry["last_activity_at"] else None,
@@ -202,4 +208,68 @@ def get_guest_detail(club_id: int, guest_id: int) -> dict:
         "vip_balance": float(vip.balance) if vip else None,
         "vip_cashback_percent": float(vip.cashback_percent) if vip else None,
         "favorites": [f.to_dict() for f in favorites],
+    }
+
+
+def get_guest_song_history(club_id: int, guest_id: int, date_from: date | None, date_to: date | None) -> dict:
+    """
+    История реально спетых песен гостя для карточки гостя в KJ Panel
+    (запрос пользователя 2026-10: "какие песни были спеты нужно сохранять
+    в истории Гостя по дням. По сессиям по неделям месяцам годам с
+    выбором по календарю"). "Спето" — то же самое определение, что и в
+    чеке стола (STATUS_COMPLETED, см. table_close_service.py::
+    _build_receipt) — заказ действительно дошёл до конца, а не был снят
+    кнопкой "Удалить"/"Вернуть".
+
+    date_from/date_to — календарные границы (включительно), на усмотрение
+    вызывающего кода (routes/kj.py сам переводит пресеты "день/неделя/
+    месяц/год" в конкретные даты, либо принимает произвольный диапазон,
+    выбранный KJ в календаре) — None с любой стороны значит "без границы".
+
+    Группируем по дню (одна строка — один календарный день, самый
+    естественный смысл "по сессиям" для karaoke-вечера, который всегда
+    укладывается в один день) — так проще смотреть и считать итоги за
+    период, чем плоский список без разбивки.
+    """
+    query = Order.query.filter(
+        Order.club_id == club_id,
+        Order.telegram_user_id == guest_id,
+        Order.status == STATUS_COMPLETED,
+    )
+    if date_from is not None:
+        query = query.filter(Order.created_at >= datetime.combine(date_from, time.min, tzinfo=timezone.utc))
+    if date_to is not None:
+        query = query.filter(Order.created_at <= datetime.combine(date_to, time.max, tzinfo=timezone.utc))
+    orders = query.order_by(Order.created_at.desc()).all()
+
+    service_ids = {o.service_id for o in orders if o.service_id is not None}
+    services_by_id = {}
+    if service_ids:
+        services_by_id = {s.id: s for s in Service.query.filter(Service.id.in_(service_ids)).all()}
+
+    days: dict[str, dict] = {}
+    total_amount = 0.0
+    for order in orders:
+        service = services_by_id.get(order.service_id) if order.service_id else None
+        price = float(service.price) if service is not None and service.price is not None else 0.0
+        total_amount += price
+
+        day_key = order.created_at.date().isoformat()
+        day_bucket = days.setdefault(day_key, {"date": day_key, "songs": [], "count": 0, "sum": 0.0})
+        day_bucket["songs"].append({
+            "order_id": order.id,
+            "song_title": order.song_title,
+            "artist": order.artist,
+            "table_no": order.table_no,
+            "category": service.name if service is not None else None,
+            "price": price,
+            "played_at": order.created_at.isoformat(),
+        })
+        day_bucket["count"] += 1
+        day_bucket["sum"] += price
+
+    return {
+        "song_count": len(orders),
+        "total_amount": total_amount,
+        "days": sorted(days.values(), key=lambda d: d["date"], reverse=True),
     }
