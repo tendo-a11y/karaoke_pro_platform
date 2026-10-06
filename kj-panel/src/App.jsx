@@ -1925,11 +1925,45 @@ const GUEST_TYPE_BADGE = {
   no_table: "🚪 Без стола",
 };
 
+// Уменьшение фото перед отправкой (до 300px по большей стороне, JPEG) —
+// общая функция для VipPanel и GuestCard (карточка гостя, запрос
+// пользователя 2026-10: KJ сам загружает фото гостя).
+function resizeImageToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error || new Error("Не удалось прочитать файл"));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error("Не удалось прочитать изображение"));
+      img.onload = () => {
+        const maxSide = 300;
+        const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL("image/jpeg", 0.8));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 function GuestCard({ token, clubId, guestId, onBack, onChanged }) {
   const [guest, setGuest] = useState(null);
   const [loadError, setLoadError] = useState(null);
   const [actionError, setActionError] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [nameDraft, setNameDraft] = useState("");
+  const [nameBusy, setNameBusy] = useState(false);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [history, setHistory] = useState(null);
+  const [historyError, setHistoryError] = useState(null);
+  const [historyPeriod, setHistoryPeriod] = useState("week"); // today|week|month|year|custom
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
 
   async function reload() {
     try {
@@ -1945,6 +1979,10 @@ function GuestCard({ token, clubId, guestId, onBack, onChanged }) {
     reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [guestId]);
+
+  useEffect(() => {
+    if (guest) setNameDraft(guest.display_name || "");
+  }, [guest]);
 
   async function handleToggleBlock() {
     setBusy(true);
@@ -2000,6 +2038,73 @@ function GuestCard({ token, clubId, guestId, onBack, onChanged }) {
     }
   }
 
+  async function handleSaveName() {
+    const name = nameDraft.trim();
+    if (!name) return;
+    setNameBusy(true);
+    setActionError(null);
+    try {
+      await api.renameGuest(token, guestId, name);
+      await reload();
+      onChanged?.();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setNameBusy(false);
+    }
+  }
+
+  async function handleUploadPhoto(file) {
+    setPhotoBusy(true);
+    setActionError(null);
+    try {
+      // Тот же приём уменьшения фото перед отправкой, что и в VipPanel
+      // (canvas.toDataURL("image/jpeg", 0.8)) — переиспользуем ту же логику.
+      const resized = await resizeImageToDataUrl(file);
+      await api.setGuestPhoto(token, guestId, resized);
+      await reload();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setPhotoBusy(false);
+    }
+  }
+
+  function periodToRange(period) {
+    const now = new Date();
+    const toIso = (d) => d.toISOString().slice(0, 10);
+    if (period === "today") return { from: toIso(now), to: toIso(now) };
+    if (period === "week") {
+      const from = new Date(now); from.setDate(from.getDate() - 6);
+      return { from: toIso(from), to: toIso(now) };
+    }
+    if (period === "month") {
+      const from = new Date(now); from.setDate(from.getDate() - 29);
+      return { from: toIso(from), to: toIso(now) };
+    }
+    if (period === "year") {
+      const from = new Date(now); from.setFullYear(from.getFullYear() - 1);
+      return { from: toIso(from), to: toIso(now) };
+    }
+    return { from: customFrom || undefined, to: customTo || undefined };
+  }
+
+  async function loadHistory() {
+    setHistoryError(null);
+    try {
+      const range = periodToRange(historyPeriod);
+      const data = await api.getGuestHistory(token, clubId, guestId, range);
+      setHistory(data);
+    } catch (err) {
+      setHistoryError(err instanceof ApiError ? err.message : String(err));
+    }
+  }
+
+  useEffect(() => {
+    if (historyOpen) loadHistory();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [historyOpen, historyPeriod, customFrom, customTo]);
+
   return (
     <div className="guest-card">
       <button type="button" className="btn-link" onClick={onBack}>← К списку гостей</button>
@@ -2053,6 +2158,92 @@ function GuestCard({ token, clubId, guestId, onBack, onChanged }) {
               </button>
             )}
           </div>
+
+          <div className="guest-card__identity-edit" style={{ marginTop: 12 }}>
+            {guest.photo_data_url ? (
+              <img src={guest.photo_data_url} alt="" className="vip-row__photo" />
+            ) : (
+              <span className="vip-row__photo vip-row__photo--placeholder">👤</span>
+            )}
+            <label className="btn-link vip-photo-upload">
+              {photoBusy ? "Загружаем…" : "📷 Фото"}
+              <input
+                type="file" accept="image/*" disabled={photoBusy}
+                onChange={(e) => {
+                  const file = e.target.files[0];
+                  e.target.value = "";
+                  if (file) handleUploadPhoto(file);
+                }}
+              />
+            </label>
+            <input
+              type="text" className="vip-amount-input" placeholder="Имя гостя"
+              value={nameDraft} onChange={(e) => setNameDraft(e.target.value)} disabled={nameBusy}
+            />
+            <button type="button" className="btn-link" disabled={nameBusy || !nameDraft.trim()} onClick={handleSaveName}>
+              💾 Сохранить имя
+            </button>
+          </div>
+
+          <h3 style={{ marginTop: 16 }}>
+            <button type="button" className="btn-link" onClick={() => setHistoryOpen((v) => !v)}>
+              {historyOpen ? "▾" : "▸"} История спетых песен
+            </button>
+          </h3>
+          {historyOpen && (
+            <div className="guest-history">
+              <div className="order-history-periods">
+                {[
+                  { key: "today", label: "Сегодня" },
+                  { key: "week", label: "Неделя" },
+                  { key: "month", label: "Месяц" },
+                  { key: "year", label: "Год" },
+                  { key: "custom", label: "Свой период" },
+                ].map((p) => (
+                  <button
+                    key={p.key} type="button"
+                    className={`link-btn${historyPeriod === p.key ? " order-history-periods__active" : ""}`}
+                    onClick={() => setHistoryPeriod(p.key)}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+              {historyPeriod === "custom" && (
+                <div className="guest-history__calendar">
+                  <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} />
+                  <span> — </span>
+                  <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} />
+                </div>
+              )}
+              {historyError && <div className="banner banner--error">{historyError}</div>}
+              {!history && !historyError && <p className="empty-hint">Загрузка…</p>}
+              {history && (
+                <>
+                  <p className="empty-hint">
+                    Всего песен за период: <strong>{history.song_count}</strong>
+                    {history.total_amount > 0 && <> · на сумму {history.total_amount} MDL</>}
+                  </p>
+                  {history.days.length === 0 && <p className="empty-hint">За этот период ничего не спето.</p>}
+                  {history.days.map((day) => (
+                    <div key={day.date} className="guest-history__day">
+                      <div className="guest-history__day-header">
+                        {new Date(day.date).toLocaleDateString()} — {day.count} песен, {day.sum} MDL
+                      </div>
+                      <ul className="song-search__results">
+                        {day.songs.map((s) => (
+                          <li key={s.order_id} style={{ padding: "6px 12px" }}>
+                            🎵 {s.artist ? `${s.artist} — ${s.song_title}` : s.song_title}
+                            {s.category ? ` · ${s.category}` : ""} · стол {s.table_no ?? "—"}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </>
+              )}
+            </div>
+          )}
 
           <h3 style={{ marginTop: 16 }}>Избранные песни ({guest.favorites.length})</h3>
           {guest.favorites.length === 0 && <p className="empty-hint">Пока ничего не добавлено.</p>}
@@ -3017,6 +3208,15 @@ export default function App() {
   // собранных на экране "Сообщения"; сбрасывается в false, когда KJ
   // открывает этот экран (см. onClick кнопки ниже).
   const [hasNewMessages, setHasNewMessages] = useState(false);
+  // Мигание заголовка вкладки браузера, если KJ сейчас не смотрит в панель
+  // (другая вкладка браузера или свёрнуто — запрос пользователя 2026-10:
+  // "можно чтоб новое сообщение или новый заказ моргали в браузере если
+  // KJ находится на другой вкладке") — отдельно от мигания кнопки
+  // "Сообщения" выше: та кнопка про заявки/чат, эта про ЛЮБОЙ новый заказ
+  // тоже, и реагирует на видимость вкладки браузера (Page Visibility API),
+  // а не на то, какой экран открыт внутри самой панели.
+  const [hasNewOrder, setHasNewOrder] = useState(false);
+  const pageTitleRef = useRef(typeof document !== "undefined" ? document.title : "KJ Panel");
   // 'orders' | 'vip' | 'categories' | 'tables' | 'guests' | 'manual' —
   // переключение верхнеуровневых экранов (Block D KJ Pro; 'categories'/
   // 'tables' добавлены доп. ТЗ "KJ Pro", KJ-01/03/07 и KJ-04 соответственно;
@@ -3143,6 +3343,7 @@ export default function App() {
     // Мигание кнопки "Сообщения" (запрос пользователя 2026-10-01) — любое из
     // этих событий означает новую заявку/сообщение на экране "Сообщения";
     // гасится кликом по самой кнопке (сброс hasNewMessages в onClick ниже).
+    socket.on("order_created", () => setHasNewOrder(true));
     socket.on("order_change_request_created", () => setHasNewMessages(true));
     socket.on("table_close_request_created", () => setHasNewMessages(true));
     socket.on("vip_request_created", () => setHasNewMessages(true));
@@ -3160,6 +3361,32 @@ export default function App() {
       setSocketInstance(null);
     };
   }, [token]);
+
+  useEffect(() => {
+    if (!(hasNewMessages || hasNewOrder)) return undefined;
+    const base = pageTitleRef.current;
+    let flip = false;
+    const id = setInterval(() => {
+      if (!document.hidden) {
+        document.title = base;
+        return;
+      }
+      document.title = flip ? base : "🔔 Новое — KJ Panel";
+      flip = !flip;
+    }, 1000);
+    return () => {
+      clearInterval(id);
+      document.title = base;
+    };
+  }, [hasNewMessages, hasNewOrder]);
+
+  useEffect(() => {
+    function handleVisibility() {
+      if (!document.hidden) setHasNewOrder(false);
+    }
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, []);
 
   const refreshQueue = useCallback(async () => {
     if (!me) return;
