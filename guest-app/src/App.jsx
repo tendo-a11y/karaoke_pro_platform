@@ -1365,18 +1365,29 @@ function TableGroupPanel({ token, guestId, hasTable, status, onGroupChanged }) {
                     {m.is_admin && m.guest_id === guestId && (
                       <button
                         type="button"
-                        className="btn-link"
+                        className="service-picker__info table-admin-info"
                         title="Что значит админ стола"
-                        onClick={() => setShowAdminInfo((v) => !v)}
+                        onClick={() => setShowAdminInfo(true)}
                       >
                         ❓
                       </button>
                     )}
                   </span>
+                  {/* Та же карточка поверх экрана, что и у "❓" в категориях. */}
                   {m.is_admin && m.guest_id === guestId && showAdminInfo && (
-                    <p className="empty-hint">
-                      Вы — админ стола. Только вы разрешаете, кому сесть за стол. Чужие сесть не могут.
-                    </p>
+                    <div className="service-card-overlay" onClick={() => setShowAdminInfo(false)}>
+                      <div className="service-card" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+                        <h3 className="service-card__title">👑 Админ стола</h3>
+                        <p className="service-card__desc">
+                          Вы — админ стола. Только вы разрешаете, кому сесть за стол. Чужие сесть не могут.
+                        </p>
+                        <div className="service-card__buttons">
+                          <button type="button" className="service-card__close" onClick={() => setShowAdminInfo(false)}>
+                            Закрыть
+                          </button>
+                        </div>
+                      </div>
+                    </div>
                   )}
                   {view.is_admin && !m.is_admin && (
                     <div className="favorite-actions">
