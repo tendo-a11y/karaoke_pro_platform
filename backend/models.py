@@ -775,6 +775,12 @@ class ChatMessage(db.Model):
             "id": self.id,
             "club_id": self.club_id,
             "telegram_user_id": self.telegram_user_id,
+            # ДОБАВЛЕНО (2026-10): тот же номер гостя строкой. Номера гостей
+            # Guest App — до 62 бит (routes/guest.py::_new_guest_id), а
+            # JavaScript в браузере точно хранит числа только до 2^53, так что
+            # числовое поле выше в KJ Panel округлялось и ответ KJ уходил
+            # "не тому" гостю. Фронтенд должен пользоваться этим полем.
+            "guest_id": str(self.telegram_user_id),
             "table_no": self.table_no,
             "from_guest": self.from_guest,
             "message_text": self.message_text,
