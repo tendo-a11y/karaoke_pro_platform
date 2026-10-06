@@ -171,6 +171,20 @@ export const api = {
     request(`/api/kj/guests/${guestId}/photo`, {
       method: "PUT", token, body: { photo_data_url: photoDataUrl },
     }),
+  renameGuest: (token, guestId, displayName) =>
+    request(`/api/kj/guests/${encodeURIComponent(guestId)}/name`, {
+      method: "PUT", token, body: { display_name: displayName },
+    }),
+  getGuestHistory: (token, clubId, guestId, { from, to } = {}) => {
+    const params = new URLSearchParams();
+    if (from) params.set("from", from);
+    if (to) params.set("to", to);
+    const qs = params.toString();
+    return request(
+      `/api/kj/guests/${clubId}/${encodeURIComponent(guestId)}/history${qs ? `?${qs}` : ""}`,
+      { token },
+    );
+  },
   updateVipCashback: (token, vipClientId, cashbackPercent) =>
     request(`/api/kj/vip-clients/${vipClientId}/cashback`, {
       method: "PUT", token, body: { cashback_percent: cashbackPercent },
