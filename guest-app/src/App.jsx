@@ -314,52 +314,72 @@ function LegalPageScreen({ page }) {
 // главной форме заказа, теперь и в "Заказать снова", "Заменить песню" и
 // "Заказ через скриншот", чтобы предупреждение о цене нельзя было обойти.
 function ServiceSelect({ services, value, onChange, disabled }) {
-  const [showInfo, setShowInfo] = useState(false);
+  // ИЗМЕНЕНО (2026-10, запрос пользователя: "KARAOKE — 35 ?, KARAOKE BACK
+  // — 35 ?, а при нажатии на ? описание") — вместо системного выпадающего
+  // списка свой: в раскрытом списке у каждой категории своя кнопка "❓",
+  // которая показывает описание именно этой категории.
+  const [open, setOpen] = useState(false);
+  const [infoId, setInfoId] = useState(null);
   const [pendingCrazyId, setPendingCrazyId] = useState(null);
   const selected = services.find((s) => String(s.id) === String(value));
   const pendingCrazy = services.find((s) => String(s.id) === String(pendingCrazyId));
+  const labelOf = (s) => `${s.name}${s.is_free ? " (бесплатно)" : ` — ${s.price}`}`;
 
-  function handleChange(rawValue) {
-    const service = services.find((s) => String(s.id) === rawValue);
-    if (service && (service.name || "").trim().toUpperCase() === "CRAZY") {
-      setPendingCrazyId(rawValue);
+  function choose(service) {
+    setOpen(false);
+    setInfoId(null);
+    if ((service.name || "").trim().toUpperCase() === "CRAZY") {
+      setPendingCrazyId(String(service.id));
       return;
     }
-    onChange(rawValue);
+    onChange(String(service.id));
   }
 
   return (
-    <>
-      <span className="service-select-row">
-        <select value={value} onChange={(e) => handleChange(e.target.value)} disabled={disabled} required>
-          <option value="" disabled>Выберите категорию…</option>
+    <div className="service-picker">
+      {/* Невидимое обязательное поле — чтобы форму по-прежнему нельзя было
+      отправить без выбранной категории (раньше это делал required у select). */}
+      <input
+        className="service-picker__required"
+        tabIndex={-1}
+        aria-hidden="true"
+        required
+        value={value || ""}
+        onChange={() => {}}
+      />
+      <button
+        type="button"
+        className="service-picker__toggle"
+        disabled={disabled}
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+      >
+        <span>{selected ? labelOf(selected) : "Выберите категорию…"}</span>
+        <span>{open ? "▲" : "▼"}</span>
+      </button>
+      {open && (
+        <ul className="service-picker__list">
           {services.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name}{s.is_free ? " (бесплатно)" : ` — ${s.price}`}
-            </option>
+            <li key={s.id} className={selected && selected.id === s.id ? "service-picker__item--selected" : undefined}>
+              <div className="service-picker__row">
+                <button type="button" className="service-picker__option" onClick={() => choose(s)}>
+                  {labelOf(s)}
+                </button>
+                <button
+                  type="button"
+                  className="service-picker__info"
+                  title="Описание категории"
+                  onClick={() => setInfoId((prev) => (prev === s.id ? null : s.id))}
+                >
+                  ❓
+                </button>
+              </div>
+              {infoId === s.id && (
+                <p className="service-picker__desc">{s.description || "Описание пока не добавлено."}</p>
+              )}
+            </li>
           ))}
-        </select>
-        <button
-          type="button"
-          className="btn-link service-select-row__info"
-          onClick={() => setShowInfo((v) => !v)}
-          title="Описание категорий"
-        >
-          ❓
-        </button>
-      </span>
-      {/* ИЗМЕНЕНО (2026-10, жалоба пользователя "нет значка (?)"): кнопка
-      "❓" видна всегда, а не только после выбора категории; пока категория
-      не выбрана — показывает описания всех категорий сразу. */}
-      {showInfo && (
-        <div className="service-select-info">
-          {(selected ? [selected] : services).map((s) => (
-            <p key={s.id} className="empty-hint">
-              <strong>{s.name}{s.is_free ? " (бесплатно)" : ` — ${s.price}`}</strong>
-              {": "}{s.description || "описание пока не добавлено"}
-            </p>
-          ))}
-        </div>
+        </ul>
       )}
       {pendingCrazy && (
         <div className="banner banner--error" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -379,7 +399,7 @@ function ServiceSelect({ services, value, onChange, disabled }) {
           </span>
         </div>
       )}
-    </>
+    </div>
   );
 }
 
