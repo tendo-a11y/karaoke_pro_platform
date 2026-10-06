@@ -184,7 +184,8 @@ export const api = {
   // и docstring backend/services/table_close_service.py. Только заявка;
   // реальное закрытие стола происходит после подтверждения KJ в KJ Panel.
   requestTableClose: (token) => request("/api/guest/table-group/request-close", { method: "POST", token }),
-  listVipTransactions: (token) => request("/api/guest/vip/transactions", { token }),
+  listVipTransactions: (token, days) =>
+    request(`/api/guest/vip/transactions${days ? `?days=${days}` : ""}`, { token }),
 };
 
 export { ApiError, BACKEND_URL };
