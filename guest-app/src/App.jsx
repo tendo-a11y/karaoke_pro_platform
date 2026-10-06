@@ -339,27 +339,19 @@ function ServiceSelect({ services, value, onChange, disabled }) {
             </option>
           ))}
         </select>
-        <button
-          type="button"
-          className="btn-link service-select-row__info"
-          onClick={() => setShowInfo((v) => !v)}
-          title="Описание категорий"
-        >
-          ❓
-        </button>
+        {selected && (
+          <button
+            type="button"
+            className="btn-link service-select-row__info"
+            onClick={() => setShowInfo((v) => !v)}
+            title="Описание категории"
+          >
+            ❓
+          </button>
+        )}
       </span>
-      {/* ИЗМЕНЕНО (2026-10, жалоба пользователя "нет значка (?)"): кнопка
-      "❓" видна всегда, а не только после выбора категории; пока категория
-      не выбрана — показывает описания всех категорий сразу. */}
-      {showInfo && (
-        <div className="service-select-info">
-          {(selected ? [selected] : services).map((s) => (
-            <p key={s.id} className="empty-hint">
-              <strong>{s.name}{s.is_free ? " (бесплатно)" : ` — ${s.price}`}</strong>
-              {": "}{s.description || "описание пока не добавлено"}
-            </p>
-          ))}
-        </div>
+      {showInfo && selected && (
+        <p className="empty-hint">{selected.description || "Описание пока не добавлено."}</p>
       )}
       {pendingCrazy && (
         <div className="banner banner--error" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -674,6 +666,11 @@ function FavoritesPanel({ token, services, onOrdered, orderingDisabled }) {
   const [error, setError] = useState(null);
   const [busyId, setBusyId] = useState(null);
   const [serviceSelections, setServiceSelections] = useState({});
+  // ДОБАВЛЕНО (2026-10, запрос пользователя "раздел избранное должен
+  // открываться, там может быть много песен") — раздел свёрнут по
+  // умолчанию и раскрывается по нажатию на заголовок (тот же приём, что и
+  // у "Финансы" ниже, .collapsible-header).
+  const [open, setOpen] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -730,9 +727,24 @@ function FavoritesPanel({ token, services, onOrdered, orderingDisabled }) {
 
   return (
     <section className="panel">
-      <h2>☆ Избранное</h2>
+      <h2
+        className="collapsible-header"
+        role="button"
+        tabIndex={0}
+        aria-expanded={open}
+        onClick={() => setOpen((prev) => !prev)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            setOpen((prev) => !prev);
+          }
+        }}
+      >
+        ☆ Избранное ({favorites.length})
+        <span className="collapsible-caret">{open ? "▲" : "▼"}</span>
+      </h2>
       {error && <div className="banner banner--error">{error}</div>}
-      {favorites.length === 0 ? (
+      {!open ? null : favorites.length === 0 ? (
         <p className="empty-hint">Пока пусто — добавляйте песни из "Моих заказов".</p>
       ) : (
         <ul className="order-list">
@@ -2722,7 +2734,47 @@ export default function App() {
                 // плейсхолдер-опция ниже недоступна для повторного выбора
                 // (disabled), поэтому required реально не даёт отправить
                 // заказ без осознанного выбора категории каждый раз.
-                <ServiceSelect services={services} value={serviceId} onChange={setServiceId} />
+                <span className="service-select-row">
+                  <select
+                    value={serviceId}
+                    onChange={(e) => handleSelectService(e.target.value)}
+                    required
+                  >
+                    <option value="" disabled>Выберите категорию…</option>
+                    {services.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}{s.is_free ? " (бесплатно)" : ` — ${s.price}`}
+                      </option>
+                    ))}
+                  </select>
+                  {serviceId && (
+                    <button
+                      type="button"
+                      className="btn-link service-select-row__info"
+                      onClick={() => setShowCategoryInfo((v) => !v)}
+                      title="Описание категории"
+                    >
+                      ❓
+                    </button>
+                  )}
+                </span>
+              )}
+              {showCategoryInfo && serviceId && (
+                <p className="empty-hint">
+                  {services.find((s) => String(s.id) === serviceId)?.description || "Описание пока не добавлено."}
+                </p>
+              )}
+              {pendingCrazyServiceId && (
+                <div className="banner banner--error" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  <span>
+                    Категория «Crazy» — песня вне очереди, стоит{" "}
+                    {services.find((s) => String(s.id) === pendingCrazyServiceId)?.price} лей. Подтвердить выбор?
+                  </span>
+                  <span>
+                    <button type="button" className="btn btn--accent" onClick={confirmCrazySelection}>Да, выбрать</button>{" "}
+                    <button type="button" className="btn-link" onClick={cancelCrazySelection}>Отмена</button>
+                  </span>
+                </div>
               )}
               <button type="submit" disabled={submitting || !songTitle.trim()}>
                 {submitting ? "Отправляем…" : "🎶 Заказать"}
