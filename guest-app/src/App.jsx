@@ -1248,6 +1248,9 @@ function TableGroupPanel({ token, guestId, hasTable, status, onGroupChanged }) {
   const [error, setError] = useState(null);
   const [busyKey, setBusyKey] = useState(null);
   const [requestingJoin, setRequestingJoin] = useState(false);
+  // ДОБАВЛЕНО (2026-10, запрос пользователя): кнопка "❓" с пояснением
+  // для админа стола — что значит быть админом.
+  const [showAdminInfo, setShowAdminInfo] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -1333,7 +1336,24 @@ function TableGroupPanel({ token, guestId, hasTable, status, onGroupChanged }) {
 
   return (
     <section className="panel table-group-panel">
-      <h2>👥 Групповой стол</h2>
+      <h2>
+        👥 Групповой стол
+        {status === "admin" && (
+          <button
+            type="button"
+            className="btn-link"
+            title="Что значит админ стола"
+            onClick={() => setShowAdminInfo((v) => !v)}
+          >
+            ❓
+          </button>
+        )}
+      </h2>
+      {status === "admin" && showAdminInfo && (
+        <p className="empty-hint">
+          Вы — админ стола. Только вы разрешаете, кому сесть за стол. Чужие сесть не могут.
+        </p>
+      )}
       {error && <div className="banner banner--error">{error}</div>}
 
       {status === "pending" && (
