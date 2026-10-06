@@ -37,7 +37,7 @@ STATUS_QUEUED теперь означает не "реально стоит в �
 сознательно игнорирует такие заказы — у них никогда не будет vdj_item_id).
 """
 from extensions import db
-from models import STATUS_ERROR, STATUS_PENDING, STATUS_PROCESSING, STATUS_QUEUED, Club, Order, Service
+from models import STATUS_ERROR, STATUS_PENDING, STATUS_PROCESSING, STATUS_QUEUED, Club, Order, Service, TableGroup
 from services.vdj_service import get_kj_queue_view
 
 # Заказ занимает место на карточке, пока не отклонён и не ушёл из очереди —
@@ -331,12 +331,22 @@ def get_orders_board(club_id: int) -> list[dict]:
         ordered = compute_queue_order(club_id)
         queue_positions = {order.id: index for index, order in enumerate(ordered, start=1)}
 
+    # ДОБАВЛЕНО (2026-10, запрос пользователя: "все занятые столы — зелёная
+    # надпись Стол N, в том числе занятые, но без заказов"): стол занят, если
+    # за ним сидит компания (TableGroup) или на нём есть активный заказ.
+    group_table_nos = {
+        row[0] for row in TableGroup.query.filter_by(club_id=club_id).with_entities(TableGroup.table_no).all()
+    }
+
     board = []
     for table_no in range(1, club.table_count + 1):
         active, _waiting = partition_table_orders(club_id, table_no, capacity)
         slots = [_slot_dict(order, queue_positions) for order in active]
         slots += [None] * (capacity - len(slots))
-        board.append({"table_no": table_no, "capacity": capacity, "queue_mode": mode, "slots": slots})
+        occupied = table_no in group_table_nos or bool(active)
+        board.append({
+            "table_no": table_no, "capacity": capacity, "queue_mode": mode, "slots": slots, "occupied": occupied,
+        })
     return board
 
 
