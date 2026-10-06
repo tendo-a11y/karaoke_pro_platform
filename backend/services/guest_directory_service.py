@@ -21,7 +21,8 @@ club_service.py про это решение.
 """
 from datetime import date, datetime, time, timedelta, timezone
 
-from models import Favorite, GuestAccount, GuestStatus, Order, STATUS_COMPLETED, Service, VipClient
+from auth import is_guest_app_open
+from models import Favorite, GuestAccount, GuestStatus, Order, STATUS_COMPLETED, Service, TableGroupMember, VipClient
 
 WINDOW_EVENING_DAYS = 1
 WINDOW_WEEK_DAYS = 7
@@ -120,7 +121,13 @@ def list_guests(club_id: int, guest_type_filter: str | None = None) -> list[dict
     # VIP без единого заказа (только что одобрен) и гости, над которыми KJ
     # уже что-то делал (блок/снятие со стола), должны быть в списке тоже —
     # иначе их не найти и не разблокировать позже.
-    for gid in set(vip_clients) | set(statuses):
+    # ДОБАВЛЕНО (2026-10, "Гости: разделение на тех, кто онлайн, сейчас в
+    # клубе, и остальных"): гость "онлайн", если он сейчас участник живого
+    # стола (TableGroupMember — запись исчезает при закрытии стола) ИЛИ у
+    # него в последние пару минут открыто приложение (auth.is_guest_app_open).
+    table_members = {m.guest_id: m.table_no for m in TableGroupMember.query.filter_by(club_id=club_id).all()}
+
+    for gid in set(vip_clients) | set(statuses) | set(table_members):
         guests.setdefault(gid, _empty_entry(gid))
 
     result = []
@@ -135,11 +142,17 @@ def list_guests(club_id: int, guest_type_filter: str | None = None) -> list[dict
         if guest_type_filter and guest_type != guest_type_filter:
             continue
 
+        at_table = gid in table_members
+        app_open = is_guest_app_open(club_id, gid)
+
         result.append({
             "guest_id": str(gid),
             "guest_type": guest_type,
             "table_no": current_table_no,
             "is_blocked": is_blocked,
+            "at_table": at_table,
+            "app_open": app_open,
+            "is_online": at_table or app_open,
             "email": account.email if account else None,
             # Имя, которое гость сам себе задал (запрос пользователя
             # 2026-09, "самопереименование гостя") — null, если гость ещё
