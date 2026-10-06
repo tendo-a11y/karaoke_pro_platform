@@ -729,3 +729,7 @@ select {
   background: #8f3a3f;
   color: #ffffff;
 }
+
+/* Значок "?" у админа стола — тот же вид, что у "?" в списке категорий,
+   только без разделительной линии слева. */
+.table-admin-info { border-left: none; padding: 4px 10px; vertical-align: middle; }
