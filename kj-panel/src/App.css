@@ -730,3 +730,46 @@ OrderChangeRequestsPanel), а не терялась среди обычных к
   border-radius: 10px;
   padding: 14px;
 }
+
+/* ДОБАВЛЕНО (2026-10, карточка гостя: имя/фото и история спетых песен). */
+.guest-card__identity-edit {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.guest-history { margin-top: 8px; }
+.order-history-periods {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+.order-history-periods .link-btn {
+  background: none;
+  color: var(--accent);
+  cursor: pointer;
+  font-weight: 600;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  font-size: 12px;
+}
+.order-history-periods .order-history-periods__active {
+  background: var(--accent);
+  color: #1a1400;
+  border-color: var(--accent);
+}
+.guest-history__calendar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.guest-history__day { margin-top: 10px; }
+.guest-history__day-header {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
