@@ -373,7 +373,12 @@ def reply_chat(club_id):
     telegram_user_id = payload.get("telegram_user_id")
     message_text = payload.get("message_text")
 
-    if not isinstance(telegram_user_id, int):
+    # ИЗМЕНЕНО (2026-10): номер гостя принимается и строкой из цифр — так
+    # его теперь присылает KJ Panel, чтобы большие номера не округлялись в
+    # браузере (см. "guest_id" в ChatMessage.to_dict).
+    if isinstance(telegram_user_id, str) and telegram_user_id.strip().lstrip("-").isdigit():
+        telegram_user_id = int(telegram_user_id.strip())
+    if isinstance(telegram_user_id, bool) or not isinstance(telegram_user_id, int):
         return api_error(400, "VALIDATION_ERROR", "telegram_user_id обязателен и должен быть числом")
     if not message_text or not isinstance(message_text, str):
         return api_error(400, "VALIDATION_ERROR", "message_text обязателен")
