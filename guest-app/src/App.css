@@ -639,3 +639,9 @@ select {
   gap: 6px;
 }
 .service-select-row select { flex: 1; min-width: 0; }
+
+/* ДОБАВЛЕНО (2026-10): песни, которые сегодня уже кто-то заказал в клубе,
+   выделяются другим цветом в результатах поиска (только подсказка). */
+.song-search__results li.song-search__item--ordered { background: rgba(94, 200, 255, 0.10); }
+.song-search__results li.song-search__item--ordered .link-btn { color: #5ec8ff; }
+.song-search__ordered-badge { font-weight: 400; font-size: 12px; opacity: 0.85; }
