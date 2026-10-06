@@ -770,7 +770,7 @@ function SongSearch({ token, onPick }) {
       {results.length > 0 && (
         <ul className="song-search__results">
           {results.map((s) => (
-            <li key={s.id}>
+            <li key={s.id} className={s.ordered_today ? "song-search__item--ordered" : undefined}>
               <button
                 type="button"
                 className="link-btn"
@@ -781,6 +781,7 @@ function SongSearch({ token, onPick }) {
                 }}
               >
                 🎵 {s.artist ? `${s.artist} — ${s.title}` : s.title}
+                {s.ordered_today && <span className="song-search__ordered-badge"> · уже заказана сегодня</span>}
               </button>
             </li>
           ))}
@@ -951,7 +952,7 @@ function AiSearch({ token, onPick, onScreenshotHelp }) {
           {results.length > 0 && (
             <ul className="song-search__results">
               {results.map((s, idx) => (
-                <li key={idx}>
+                <li key={idx} className={s.ordered_today ? "song-search__item--ordered" : undefined}>
                   <button
                     type="button"
                     className="link-btn"
@@ -963,6 +964,7 @@ function AiSearch({ token, onPick, onScreenshotHelp }) {
                     }}
                   >
                     🎵 {s.artist ? `undefined — undefined` : s.title}
+                    {s.ordered_today && <span className="song-search__ordered-badge"> · уже заказана сегодня</span>}
                   </button>
                 </li>
               ))}
@@ -990,7 +992,7 @@ function AiSearch({ token, onPick, onScreenshotHelp }) {
           {results.length > 0 && (
             <ul className="song-search__results">
               {results.map((s, idx) => (
-                <li key={idx}>
+                <li key={idx} className={s.ordered_today ? "song-search__item--ordered" : undefined}>
                   <button
                     type="button"
                     className="link-btn"
@@ -1002,6 +1004,7 @@ function AiSearch({ token, onPick, onScreenshotHelp }) {
                     }}
                   >
                     🎵 {s.artist ? `${s.artist} — ${s.title}` : s.title}
+                    {s.ordered_today && <span className="song-search__ordered-badge"> · уже заказана сегодня</span>}
                   </button>
                 </li>
               ))}
