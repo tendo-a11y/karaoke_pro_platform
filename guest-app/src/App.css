@@ -630,3 +630,12 @@ select {
   font-size: 14px;
   text-decoration: underline;
 }
+
+/* ДОБАВЛЕНО (2026-10): кнопка "?" с описанием категории рядом с выбором
+   категории в главной форме заказа. */
+.service-select-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.service-select-row select { flex: 1; min-width: 0; }
