@@ -773,3 +773,9 @@ OrderChangeRequestsPanel), а не терялась среди обычных к
   color: var(--muted);
   margin-bottom: 4px;
 }
+
+/* ДОБАВЛЕНО (2026-10): список гостей делится на "Онлайн" и "Остальные";
+   на доске заказов название занятого стола — зелёное. */
+.guests-section-title { margin: 18px 0 8px; font-size: 14px; color: var(--muted); }
+.guests-section-title--online { color: var(--ok); }
+.table-card .table-card__title.table-card__title--occupied { color: var(--ok); }
