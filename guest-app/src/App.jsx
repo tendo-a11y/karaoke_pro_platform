@@ -2112,6 +2112,8 @@ export default function App() {
   const [songTitle, setSongTitle] = useState("");
   const [artist, setArtist] = useState("");
   const [serviceId, setServiceId] = useState("");
+  const [showCategoryInfo, setShowCategoryInfo] = useState(false);
+  const [pendingCrazyServiceId, setPendingCrazyServiceId] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
   // ДОБАВЛЕНО (2026-09-19, запрос пользователя): держим не просто "успех
@@ -2337,6 +2339,28 @@ export default function App() {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  function isCrazyService(service) {
+    return !!service && (service.name || "").trim().toUpperCase() === "CRAZY";
+  }
+
+  function handleSelectService(rawValue) {
+    const service = services.find((s) => String(s.id) === rawValue);
+    if (isCrazyService(service)) {
+      setPendingCrazyServiceId(rawValue);
+      return; // подтверждение в модалке ниже решит, применять ли выбор
+    }
+    setServiceId(rawValue);
+  }
+
+  function confirmCrazySelection() {
+    setServiceId(pendingCrazyServiceId);
+    setPendingCrazyServiceId(null);
+  }
+
+  function cancelCrazySelection() {
+    setPendingCrazyServiceId(null);
   }
 
   async function handleSubmitOrder(event) {
@@ -2640,18 +2664,47 @@ export default function App() {
                 // плейсхолдер-опция ниже недоступна для повторного выбора
                 // (disabled), поэтому required реально не даёт отправить
                 // заказ без осознанного выбора категории каждый раз.
-                <select
-                  value={serviceId}
-                  onChange={(e) => setServiceId(e.target.value)}
-                  required
-                >
-                  <option value="" disabled>Выберите категорию…</option>
-                  {services.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}{s.is_free ? " (бесплатно)" : ` — ${s.price}`}
-                    </option>
-                  ))}
-                </select>
+                <span className="service-select-row">
+                  <select
+                    value={serviceId}
+                    onChange={(e) => handleSelectService(e.target.value)}
+                    required
+                  >
+                    <option value="" disabled>Выберите категорию…</option>
+                    {services.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}{s.is_free ? " (бесплатно)" : ` — ${s.price}`}
+                      </option>
+                    ))}
+                  </select>
+                  {serviceId && (
+                    <button
+                      type="button"
+                      className="btn-link service-select-row__info"
+                      onClick={() => setShowCategoryInfo((v) => !v)}
+                      title="Описание категории"
+                    >
+                      ❓
+                    </button>
+                  )}
+                </span>
+              )}
+              {showCategoryInfo && serviceId && (
+                <p className="empty-hint">
+                  {services.find((s) => String(s.id) === serviceId)?.description || "Описание пока не добавлено."}
+                </p>
+              )}
+              {pendingCrazyServiceId && (
+                <div className="banner banner--error" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  <span>
+                    Категория «Crazy» — песня вне очереди, стоит{" "}
+                    {services.find((s) => String(s.id) === pendingCrazyServiceId)?.price} лей. Подтвердить выбор?
+                  </span>
+                  <span>
+                    <button type="button" className="btn btn--accent" onClick={confirmCrazySelection}>Да, выбрать</button>{" "}
+                    <button type="button" className="btn-link" onClick={cancelCrazySelection}>Отмена</button>
+                  </span>
+                </div>
               )}
               <button type="submit" disabled={submitting || !songTitle.trim()}>
                 {submitting ? "Отправляем…" : "🎶 Заказать"}
