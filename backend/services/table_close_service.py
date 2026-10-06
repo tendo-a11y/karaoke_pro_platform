@@ -54,7 +54,7 @@ from models import (
     TX_TYPE_ORDER_PAYMENT,
 )
 from services import billing_service, guest_status_service, table_group_service
-from services.table_board_service import ACTIVE_TABLE_STATUSES
+from services.table_board_service import ACTIVE_TABLE_STATUSES, get_table_capacity, partition_table_orders
 from sockets import emit_table_close_request_created, emit_table_close_request_decided
 
 
@@ -252,6 +252,22 @@ def complete_table_orders(club_id: int, table_no: int, since) -> list[Order]:
     заказам одного гостя мешать друг другу, а сбой на одном заказе не
     оставляет остальные непомеченными сыгранными.
     """
+    # ДОБАВЛЕНО (2026-10, вместе с подъёмом лимита заказов гостя до 12 —
+    # см. config.py::MAX_ACTIVE_SONGS_PER_GUEST): заказы, которые к моменту
+    # закрытия стола всё ещё ждали места сверх вместимости стола (KJ их
+    # вообще не видел на карточке и не мог ни спеть, ни удалить), в чек не
+    # попадают — они отклоняются, а не засчитываются сыгранными. Иначе
+    # гость заплатил бы за песни, до которых очередь так и не дошла.
+    waiting_ids = set()
+    club = db.session.get(Club, club_id)
+    if club is not None:
+        _visible, waiting = partition_table_orders(club_id, table_no, get_table_capacity(club))
+        rejected_at = datetime.now(timezone.utc)
+        for waiting_order in waiting:
+            waiting_order.status = STATUS_REJECTED
+            waiting_order.rejected_at = rejected_at
+            waiting_ids.add(waiting_order.id)
+
     orders = (
         Order.query
         .filter(
@@ -263,6 +279,7 @@ def complete_table_orders(club_id: int, table_no: int, since) -> list[Order]:
         )
         .all()
     )
+    orders = [order for order in orders if order.id not in waiting_ids]
     for order in orders:
         order.status = STATUS_COMPLETED
     db.session.commit()
