@@ -1863,7 +1863,7 @@ function ProfileNamePanel({ token, meInfo, onNameChanged }) {
             }
           }}
         >
-          👤 {meInfo.display_name || "Ваше имя и фото"}
+          👤 Профиль{meInfo.display_name ? ` · ${meInfo.display_name}` : ""}
           <span className="collapsible-caret">{profileOpen ? "▲" : "▼"}</span>
         </h2>
         {profileOpen && (
