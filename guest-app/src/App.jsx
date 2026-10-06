@@ -1745,6 +1745,10 @@ function ProfileNamePanel({ token, meInfo, onNameChanged }) {
   // кнопке не блокировала другую.
   const [photoBusy, setPhotoBusy] = useState(false);
   const [photoError, setPhotoError] = useState(null);
+  // ДОБАВЛЕНО (2026-10, запрос пользователя: "раздел Имя Фото сделаем
+  // раскрывающимся, по умолчанию свёрнут") — тот же приём, что и у
+  // "Избранное"/"Финансы" (.collapsible-header).
+  const [profileOpen, setProfileOpen] = useState(false);
   // "Удалить мои данные" (запрос пользователя 2026-10-04, право на
   // удаление персональных данных) — сразу и полностью, без отдельного
   // экрана, с одним окном подтверждения (window.confirm).
@@ -1846,7 +1850,24 @@ function ProfileNamePanel({ token, meInfo, onNameChanged }) {
   if (!editing) {
     return (
       <section className="panel profile-panel">
-        <h2>👤 Ваше имя</h2>
+        <h2
+          className="collapsible-header"
+          role="button"
+          tabIndex={0}
+          aria-expanded={profileOpen}
+          onClick={() => setProfileOpen((prev) => !prev)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              setProfileOpen((prev) => !prev);
+            }
+          }}
+        >
+          👤 {meInfo.display_name || "Ваше имя и фото"}
+          <span className="collapsible-caret">{profileOpen ? "▲" : "▼"}</span>
+        </h2>
+        {profileOpen && (
+        <>
         <p className="empty-hint">
           {meInfo.display_name
             ? <>Ведущий видит вас как «{meInfo.display_name}».</>
@@ -1908,6 +1929,8 @@ function ProfileNamePanel({ token, meInfo, onNameChanged }) {
               {deleteBusy ? "Удаляем…" : "🗑 Удалить мои данные"}
             </button>
           </div>
+        )}
+        </>
         )}
       </section>
     );
