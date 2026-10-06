@@ -1,3 +1,4 @@
+from datetime import date
 from decimal import Decimal, InvalidOperation
 
 from flask import Blueprint, current_app, g, jsonify, request
@@ -6,7 +7,7 @@ from auth import issue_kj_google_token, require_kj
 from errors import api_error, api_ok
 from extensions import db
 from models import AdminKjMessage, ChatMessage, Club, GuestAccount, KJOperator, Order, STATUS_PLAYING, TableGroupMember, VipClient, VipRequest
-from services import category_service, guest_directory_service, guest_status_service, song_service, table_close_service, table_group_service, vip_service, vip_topup_request_service
+from services import category_service, guest_account_service, guest_directory_service, guest_status_service, song_service, table_close_service, table_group_service, vip_service, vip_topup_request_service
 from services.guest_directory_service import GUEST_TYPES, GuestDirectoryError
 from services.category_service import CategoryServiceError
 from services.google_auth_service import GoogleAuthError, verify_google_credential
@@ -1216,6 +1217,40 @@ def get_guest(club_id, guest_id):
         return api_error(exc.status_code, exc.code, exc.message)
 
 
+@bp.get("/guests/<int:club_id>/<guest_id>/history")
+@require_kj
+def get_guest_history(club_id, guest_id):
+    """
+    История спетых песен гостя по дням, с выбором периода (запрос
+    пользователя 2026-10) — см. docstring guest_directory_service.py::
+    get_guest_song_history. from/to — YYYY-MM-DD, оба необязательны
+    (без них — вся история целиком).
+    """
+    denied = _ensure_own_club(club_id)
+    if denied:
+        return denied
+    parsed_id = _parse_guest_id(guest_id)
+    if parsed_id is None:
+        return api_error(400, "VALIDATION_ERROR", "guest_id должен быть числом")
+
+    def _parse_date(raw):
+        if not raw:
+            return None, None
+        try:
+            return date.fromisoformat(raw), None
+        except ValueError:
+            return None, api_error(400, "VALIDATION_ERROR", "Дата должна быть в формате YYYY-MM-DD")
+
+    date_from, err = _parse_date(request.args.get("from"))
+    if err:
+        return err
+    date_to, err = _parse_date(request.args.get("to"))
+    if err:
+        return err
+
+    return api_ok(guest_directory_service.get_guest_song_history(club_id, parsed_id, date_from, date_to))
+
+
 @bp.post("/guests/<guest_id>/block")
 @require_kj
 def block_guest(guest_id):
@@ -1253,6 +1288,40 @@ def set_guest_photo(guest_id):
         return api_error(404, "GUEST_ACCOUNT_NOT_FOUND", "Профиль гостя не найден")
     account.photo_data_url = photo_data_url
     db.session.commit()
+    return api_ok(account.to_dict())
+
+
+@bp.put("/guests/<guest_id>/name")
+@require_kj
+def rename_guest(guest_id):
+    """
+    KJ переименовывает гостя из своей панели (запрос пользователя 2026-10:
+    "Kj должен иметь возможность сам переименовать гостя") — то же самое
+    поле GuestAccount.display_name, которое гость обычно меняет себе сам
+    (routes/guest.py::set_display_name) — здесь делает роль 2, той же
+    функцией сервиса и тем же ограничением длины.
+    """
+    parsed_id = _parse_guest_id(guest_id)
+    if parsed_id is None:
+        return api_error(400, "VALIDATION_ERROR", "guest_id должен быть числом")
+    payload = request.get_json(silent=True) or {}
+    raw_name = payload.get("display_name")
+    if not isinstance(raw_name, str):
+        return api_error(400, "VALIDATION_ERROR", "display_name обязателен и должен быть строкой")
+    name = raw_name.strip()
+    if not name:
+        return api_error(400, "VALIDATION_ERROR", "Имя не может быть пустым")
+    if len(name) > guest_account_service.MAX_DISPLAY_NAME_LEN:
+        return api_error(
+            400, "VALIDATION_ERROR",
+            f"Имя не должно быть длиннее {guest_account_service.MAX_DISPLAY_NAME_LEN} символов",
+        )
+    account = guest_account_service.set_display_name(g.club_id, parsed_id, name)
+    if account is None:
+        return api_error(
+            404, "GUEST_ACCOUNT_NOT_FOUND",
+            "У гостя ещё нет постоянного профиля — он ни разу не входил через Google",
+        )
     return api_ok(account.to_dict())
 
 
