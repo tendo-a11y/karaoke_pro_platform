@@ -246,6 +246,25 @@ def require_admin(view):
     return wrapper
 
 
+# ДОБАВЛЕНО (2026-10, запрос пользователя: в списке гостей KJ Panel нужно
+# разделение "онлайн, сейчас в клубе" / "остальные"): когда гость последний
+# раз обращался к серверу. Guest App опрашивает сервер каждые несколько
+# секунд, пока открыт, — значит свежая отметка = приложение у гостя открыто.
+# Хранится в памяти процесса (без таблицы в БД): после перезапуска сервера
+# отметки просто появляются заново при следующем же опросе.
+GUEST_ONLINE_WINDOW_SECONDS = 120
+_GUEST_LAST_SEEN: dict = {}
+
+
+def touch_guest_presence(club_id: int, guest_id: int) -> None:
+    _GUEST_LAST_SEEN[(club_id, guest_id)] = time.time()
+
+
+def is_guest_app_open(club_id: int, guest_id: int) -> bool:
+    seen_at = _GUEST_LAST_SEEN.get((club_id, guest_id))
+    return seen_at is not None and (time.time() - seen_at) <= GUEST_ONLINE_WINDOW_SECONDS
+
+
 def require_guest(view):
     """
     Декоратор для эндпоинтов Guest App. В отличие от require_kj/require_admin,
@@ -304,6 +323,7 @@ def require_guest(view):
         g.guest_id = guest_id
         g.club_id = club_id
         g.table_no = table_no
+        touch_guest_presence(club_id, guest_id)
         # ДОБАВЛЕНО (2026-09-24, запрос пользователя "правильно разделить на
         # две вкладки история и мои заказы. Мои заказы это то что происходит
         # в рамках одной сессии") — момент выпуска ЭТОГО токена (не момент
