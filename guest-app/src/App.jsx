@@ -309,6 +309,72 @@ function LegalPageScreen({ page }) {
   );
 }
 
+// ДОБАВЛЕНО (2026-10): общий выбор категории с кнопкой "❓" (описание
+// категории) и подтверждением цены для Crazy — то же, что уже есть в
+// главной форме заказа, теперь и в "Заказать снова", "Заменить песню" и
+// "Заказ через скриншот", чтобы предупреждение о цене нельзя было обойти.
+function ServiceSelect({ services, value, onChange, disabled }) {
+  const [showInfo, setShowInfo] = useState(false);
+  const [pendingCrazyId, setPendingCrazyId] = useState(null);
+  const selected = services.find((s) => String(s.id) === String(value));
+  const pendingCrazy = services.find((s) => String(s.id) === String(pendingCrazyId));
+
+  function handleChange(rawValue) {
+    const service = services.find((s) => String(s.id) === rawValue);
+    if (service && (service.name || "").trim().toUpperCase() === "CRAZY") {
+      setPendingCrazyId(rawValue);
+      return;
+    }
+    onChange(rawValue);
+  }
+
+  return (
+    <>
+      <span className="service-select-row">
+        <select value={value} onChange={(e) => handleChange(e.target.value)} disabled={disabled} required>
+          <option value="" disabled>Выберите категорию…</option>
+          {services.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.name}{s.is_free ? " (бесплатно)" : ` — ${s.price}`}
+            </option>
+          ))}
+        </select>
+        {selected && (
+          <button
+            type="button"
+            className="btn-link service-select-row__info"
+            onClick={() => setShowInfo((v) => !v)}
+            title="Описание категории"
+          >
+            ❓
+          </button>
+        )}
+      </span>
+      {showInfo && selected && (
+        <p className="empty-hint">{selected.description || "Описание пока не добавлено."}</p>
+      )}
+      {pendingCrazy && (
+        <div className="banner banner--error" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <span>Категория «Crazy» — песня вне очереди, стоит {pendingCrazy.price} лей. Подтвердить выбор?</span>
+          <span>
+            <button
+              type="button"
+              className="btn btn--accent"
+              onClick={() => {
+                onChange(String(pendingCrazy.id));
+                setPendingCrazyId(null);
+              }}
+            >
+              Да, выбрать
+            </button>{" "}
+            <button type="button" className="btn-link" onClick={() => setPendingCrazyId(null)}>Отмена</button>
+          </span>
+        </div>
+      )}
+    </>
+  );
+}
+
 function OrderRow({
   order, onFavorite, favoriteBusy,
   token, services, isReplacing, onToggleReplace, onReplace, replaceBusy,
@@ -667,21 +733,12 @@ function FavoritesPanel({ token, services, onOrdered, orderingDisabled }) {
               <div className="order-row__song">🎵 {f.song_title}</div>
               {f.artist && <div className="order-row__artist">🎤 {f.artist}</div>}
               {services.length > 0 && (
-                <select
+                <ServiceSelect
+                  services={services}
                   value={serviceSelections[f.id] || ""}
-                  onChange={(e) =>
-                    setServiceSelections((prev) => ({ ...prev, [f.id]: e.target.value }))
-                  }
+                  onChange={(v) => setServiceSelections((prev) => ({ ...prev, [f.id]: v }))}
                   disabled={busyId === f.id || orderingDisabled}
-                  required
-                >
-                  <option value="" disabled>Выберите категорию…</option>
-                  {services.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}{s.is_free ? " (бесплатно)" : ` — ${s.price}`}
-                    </option>
-                  ))}
-                </select>
+                />
               )}
               <div className="favorite-actions">
                 <button
@@ -971,7 +1028,7 @@ function AiSearch({ token, onPick, onScreenshotHelp }) {
                       if (screenshotInputRef.current) screenshotInputRef.current.value = "";
                     }}
                   >
-                    🎵 {s.artist ? `undefined — undefined` : s.title}
+                    🎵 {s.artist ? `${s.artist} — ${s.title}` : s.title}
                     {s.ordered_today && <span className="song-search__ordered-badge"> · уже заказана сегодня</span>}
                   </button>
                 </li>
@@ -1085,18 +1142,7 @@ function ReplaceForm({ order, token, services, busy, onSubmit, onCancel }) {
           maxLength={200}
         />
         {services.length > 0 && (
-          <select
-            value={serviceId}
-            onChange={(e) => setServiceId(e.target.value)}
-            required
-          >
-            <option value="" disabled>Выберите категорию…</option>
-            {services.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}{s.is_free ? " (бесплатно)" : ` — ${s.price}`}
-              </option>
-            ))}
-          </select>
+          <ServiceSelect services={services} value={serviceId} onChange={setServiceId} />
         )}
         <div className="replace-form__buttons">
           <button type="submit" disabled={busy || !songTitle.trim()}>
@@ -1606,14 +1652,7 @@ function ScreenshotOrderPanel({ token, services, autoFocus, onFocused }) {
         />
       </label>
       {services.length > 0 && (
-        <select value={serviceId} onChange={(e) => setServiceId(e.target.value)} required>
-          <option value="" disabled>Выберите категорию…</option>
-          {services.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name}{s.is_free ? " (бесплатно)" : ` — ${s.price}`}
-            </option>
-          ))}
-        </select>
+        <ServiceSelect services={services} value={serviceId} onChange={setServiceId} />
       )}
       <input
         type="text"
