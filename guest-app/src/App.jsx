@@ -624,10 +624,13 @@ function VipHistoryPanel({ token }) {
   // много места без необходимости. Теперь список свёрнут по умолчанию и
   // раскрывается только по клику на сам заголовок "Финансы".
   const [open, setOpen] = useState(false);
+  // ДОБАВЛЕНО (2026-10, запрос пользователя: "Финансы: Сегодня / Неделя /
+  // Месяц / Год") — период, за который показываются операции.
+  const [periodDays, setPeriodDays] = useState(7);
 
   const refresh = useCallback(async () => {
     try {
-      const data = await api.listVipTransactions(token);
+      const data = await api.listVipTransactions(token, periodDays);
       setTransactions(data);
       setError(null);
     } catch (err) {
@@ -635,7 +638,7 @@ function VipHistoryPanel({ token }) {
     } finally {
       setLoaded(true);
     }
-  }, [token]);
+  }, [token, periodDays]);
 
   // Поллинг, а не разовая загрузка — баланс/история меняются асинхронно
   // (ручная корректировка KJ, завершение песни с кэшбэком), у Guest App
@@ -670,9 +673,26 @@ function VipHistoryPanel({ token }) {
       </h2>
       {open && (
         <>
+          <div className="order-history-periods">
+            {[
+              { label: "Сегодня", days: 1 },
+              { label: "Неделя", days: 7 },
+              { label: "Месяц", days: 30 },
+              { label: "Год", days: 365 },
+            ].map((p) => (
+              <button
+                key={p.days}
+                type="button"
+                className={`link-btn${periodDays === p.days ? " order-history-periods__active" : ""}`}
+                onClick={() => setPeriodDays(p.days)}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
           {error && <div className="banner banner--error">{error}</div>}
           {transactions.length === 0 ? (
-            <p className="empty-hint">Пока нет операций по счёту.</p>
+            <p className="empty-hint">За этот период операций по счёту нет.</p>
           ) : (
             <ul className="order-list">
               {transactions.map((tx) => {
