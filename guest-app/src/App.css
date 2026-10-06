@@ -722,3 +722,10 @@ select {
 @media (prefers-reduced-motion: reduce) {
   .order-form-panel .ai-search { animation: none; border-color: var(--accent); }
 }
+
+/* ДОБАВЛЕНО (2026-10, запрос пользователя: кнопка "Закрыть стол" —
+   красная, но не яркая). */
+.table-group-close button {
+  background: #8f3a3f;
+  color: #ffffff;
+}
