@@ -1123,7 +1123,7 @@ function AiSearch({ token, onPick, onScreenshotHelp }) {
               placeholder={placeholder}
               maxLength={300}
             />
-            <button type="submit" disabled={searching || !text.trim()}>
+            <button type="submit" className={searching ? "is-searching" : undefined} disabled={searching || !text.trim()}>
               {searching ? "Ищем…" : "Найти"}
             </button>
           </form>
@@ -1337,6 +1337,11 @@ function TableGroupPanel({ token, guestId, hasTable, status, onGroupChanged }) {
   return (
     <section className="panel table-group-panel">
       <h2>👥 Групповой стол</h2>
+      {status === "admin" && (
+        <p className="empty-hint">
+          Вы — админ стола. Только вы разрешаете, кому сесть за стол. Чужие сесть не могут.
+        </p>
+      )}
       {error && <div className="banner banner--error">{error}</div>}
 
       {status === "pending" && (
