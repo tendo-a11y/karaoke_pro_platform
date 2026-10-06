@@ -828,7 +828,7 @@ function KjChatPanel({ token, clubId, socket }) {
     setSendError(null);
     try {
       await api.clearChat(token, clubId, selectedGuestId);
-      setMessages((prev) => (prev || []).filter((m) => m.telegram_user_id !== selectedGuestId));
+      setMessages((prev) => (prev || []).filter((m) => (m.guest_id ?? String(m.telegram_user_id)) !== selectedGuestId));
       setSelectedGuestId(null);
     } catch (err) {
       setSendError(err instanceof ApiError ? err.message : String(err));
@@ -845,7 +845,9 @@ function KjChatPanel({ token, clubId, socket }) {
   // достаточно: telegram_user_id/table_no).
   const threads = new Map();
   for (const m of messages) {
-    const key = m.telegram_user_id;
+    // guest_id — номер гостя строкой (см. ChatMessage.to_dict): числовой
+    // telegram_user_id у больших номеров округляется в браузере.
+    const key = m.guest_id ?? String(m.telegram_user_id);
     const existing = threads.get(key);
     if (!existing || m.created_at > existing.lastMessage.created_at) {
       threads.set(key, { guestId: key, tableNo: m.table_no, lastMessage: m });
@@ -882,7 +884,7 @@ function KjChatPanel({ token, clubId, socket }) {
   }
 
   const thread = messages
-    .filter((m) => m.telegram_user_id === selectedGuestId)
+    .filter((m) => (m.guest_id ?? String(m.telegram_user_id)) === selectedGuestId)
     .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
 
   return (
@@ -1964,6 +1966,14 @@ function GuestCard({ token, clubId, guestId, onBack, onChanged }) {
   const [historyPeriod, setHistoryPeriod] = useState("week"); // today|week|month|year|custom
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
+  // ДОБАВЛЕНО (2026-10, запрос пользователя: "нет кнопки Написать гостю,
+  // KJ должен иметь возможность связи с гостем") — переписка с этим гостем
+  // прямо в его карточке; та же переписка, что и на экране "Сообщения".
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatMessages, setChatMessages] = useState(null);
+  const [chatDraft, setChatDraft] = useState("");
+  const [chatBusy, setChatBusy] = useState(false);
+  const [chatError, setChatError] = useState(null);
 
   async function reload() {
     try {
@@ -2035,6 +2045,37 @@ function GuestCard({ token, clubId, guestId, onBack, onChanged }) {
       setActionError(err instanceof ApiError ? err.message : String(err));
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function loadChat() {
+    try {
+      const data = await api.listChat(token, clubId, guestId);
+      setChatMessages(data);
+      setChatError(null);
+    } catch (err) {
+      setChatError(err instanceof ApiError ? err.message : String(err));
+    }
+  }
+
+  useEffect(() => {
+    if (chatOpen) loadChat();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatOpen, guestId]);
+
+  async function handleSendChat() {
+    const text = chatDraft.trim();
+    if (!text) return;
+    setChatBusy(true);
+    setChatError(null);
+    try {
+      await api.replyChat(token, clubId, String(guestId), text);
+      setChatDraft("");
+      await loadChat();
+    } catch (err) {
+      setChatError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setChatBusy(false);
     }
   }
 
@@ -2156,6 +2197,52 @@ function GuestCard({ token, clubId, guestId, onBack, onChanged }) {
               <button type="button" className="btn btn--complete" disabled={busy} onClick={handleCloseTable}>
                 🚪 Закрыть стол
               </button>
+            )}
+          </div>
+
+          <div className="guest-card__chat" style={{ marginTop: 12 }}>
+            <button type="button" className="btn btn--accent" onClick={() => setChatOpen((v) => !v)}>
+              ✉️ Написать гостю
+            </button>
+            {chatOpen && (
+              <div className="guest-card__chat-box" style={{ marginTop: 10 }}>
+                {chatError && <div className="banner banner--error">{chatError}</div>}
+                {chatMessages === null && !chatError && <p className="empty-hint">Загрузка…</p>}
+                {chatMessages && chatMessages.length === 0 && (
+                  <p className="empty-hint">Переписки с этим гостем пока нет.</p>
+                )}
+                {chatMessages && chatMessages.length > 0 && (
+                  <ul className="vip-list">
+                    {chatMessages.slice(-10).map((m) => (
+                      <li key={m.id} className="vip-row chat-thread-row">
+                        <span>{m.from_guest ? "Гость" : "Вы"}:</span>
+                        {m.image_data_url && (
+                          <img src={m.image_data_url} alt="Скриншот от гостя" className="chat-thread-row__image" />
+                        )}
+                        {m.message_text && <span>{m.message_text}</span>}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <div className="vip-row__actions chat-reply-row">
+                  <input
+                    className="vip-amount-input chat-reply-input"
+                    type="text"
+                    placeholder="Сообщение гостю…"
+                    value={chatDraft}
+                    onChange={(e) => setChatDraft(e.target.value)}
+                    disabled={chatBusy}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn--accent chat-reply-send"
+                    disabled={chatBusy || !chatDraft.trim()}
+                    onClick={handleSendChat}
+                  >
+                    Отправить
+                  </button>
+                </div>
+              </div>
             )}
           </div>
 
