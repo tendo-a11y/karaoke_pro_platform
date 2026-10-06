@@ -2622,6 +2622,9 @@ function GuestsPanel({ token, clubId }) {
 
   const onlineGuests = (guests || []).filter((g) => g.is_online);
   const otherGuests = (guests || []).filter((g) => !g.is_online);
+  // "Остальные" свёрнуты по умолчанию (запрос пользователя 2026-10: "их
+  // может быть сотни и тысячи") — раскрываются нажатием на заголовок.
+  const [othersOpen, setOthersOpen] = useState(false);
 
   if (selectedGuestId != null) {
     return (
@@ -2688,8 +2691,12 @@ function GuestsPanel({ token, clubId }) {
             ))}
           </ul>
             )}
-            <h3 className="guests-section-title">Остальные ({otherGuests.length})</h3>
-            {otherGuests.length > 0 && (
+            <h3 className="guests-section-title">
+              <button type="button" className="btn-link" onClick={() => setOthersOpen((v) => !v)}>
+                {othersOpen ? "▾" : "▸"} Остальные ({otherGuests.length})
+              </button>
+            </h3>
+            {othersOpen && otherGuests.length > 0 && (
           <ul className="vip-list">
             {otherGuests.map((guest) => (
               <li key={guest.guest_id} className="vip-row vip-row--client">
