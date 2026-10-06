@@ -48,13 +48,19 @@ def cmd_add_club(args):
     with app.app_context():
         club = db.session.get(Club, args.club_id)
         if club:
-            club.name = args.name
+            # ИЗМЕНЕНО (2026-10, жалоба пользователя: "имя не сохраняется, я
+            # несколько раз переименовал его в Voice Vocal Club"): эта команда
+            # выполняется при каждом запуске сервера и раньше каждый раз
+            # затирала название клуба тем, что указано в команде запуска.
+            # Теперь у уже существующего клуба название не трогаем — оно
+            # меняется только из Admin App.
             club.is_active = True
         else:
             club = Club(club_id=args.club_id, name=args.name, is_active=True)
             db.session.add(club)
         db.session.commit()
-    print(f"OK: клуб {args.club_id} ({args.name})")
+        final_name = club.name
+    print(f"OK: клуб {args.club_id} ({final_name})")
 
 
 def cmd_add_kj(args):
