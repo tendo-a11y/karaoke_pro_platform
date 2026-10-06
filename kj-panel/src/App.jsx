@@ -2613,8 +2613,15 @@ function GuestsPanel({ token, clubId }) {
 
   useEffect(() => {
     reload();
+    // Статус "онлайн" меняется сам по себе (гость открыл/закрыл приложение) —
+    // обновляем список раз в 30 секунд, пока экран открыт.
+    const id = setInterval(reload, 30000);
+    return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clubId, typeFilter]);
+
+  const onlineGuests = (guests || []).filter((g) => g.is_online);
+  const otherGuests = (guests || []).filter((g) => !g.is_online);
 
   if (selectedGuestId != null) {
     return (
@@ -2652,8 +2659,14 @@ function GuestsPanel({ token, clubId }) {
         {guests && guests.length === 0 && <p className="empty-hint">Гостей пока нет.</p>}
 
         {guests && guests.length > 0 && (
+          <>
+            <h3 className="guests-section-title guests-section-title--online">
+              🟢 Онлайн — сейчас в клубе ({onlineGuests.length})
+            </h3>
+            {onlineGuests.length === 0 && <p className="empty-hint">Сейчас никого нет.</p>}
+            {onlineGuests.length > 0 && (
           <ul className="vip-list">
-            {guests.map((guest) => (
+            {onlineGuests.map((guest) => (
               <li key={guest.guest_id} className="vip-row vip-row--client">
                 <div>
                   {guest.display_name || `Гость #${guest.guest_id}`} · {GUEST_TYPE_BADGE[guest.guest_type] || guest.guest_type}
@@ -2663,6 +2676,7 @@ function GuestsPanel({ token, clubId }) {
                     {guest.display_name && <>ID {guest.guest_id} · </>}
                     Стол: {guest.table_no ?? "—"} · за вечер {guest.orders_evening} · за неделю {guest.orders_week} · за месяц {guest.orders_month}
                     {guest.vip_balance != null && <> · баланс {guest.vip_balance} MDL</>}
+                    {guest.app_open && <> · 📱 приложение открыто</>}
                   </span>
                 </div>
                 <div className="vip-row__actions">
@@ -2673,6 +2687,33 @@ function GuestsPanel({ token, clubId }) {
               </li>
             ))}
           </ul>
+            )}
+            <h3 className="guests-section-title">Остальные ({otherGuests.length})</h3>
+            {otherGuests.length > 0 && (
+          <ul className="vip-list">
+            {otherGuests.map((guest) => (
+              <li key={guest.guest_id} className="vip-row vip-row--client">
+                <div>
+                  {guest.display_name || `Гость #${guest.guest_id}`} · {GUEST_TYPE_BADGE[guest.guest_type] || guest.guest_type}
+                  {guest.is_blocked && <span className="guest-type-badge guest-type-badge--blocked"> 🚫 Заблокирован</span>}
+                  <br />
+                  <span className="empty-hint">
+                    {guest.display_name && <>ID {guest.guest_id} · </>}
+                    Стол: {guest.table_no ?? "—"} · за вечер {guest.orders_evening} · за неделю {guest.orders_week} · за месяц {guest.orders_month}
+                    {guest.vip_balance != null && <> · баланс {guest.vip_balance} MDL</>}
+                    {guest.app_open && <> · 📱 приложение открыто</>}
+                  </span>
+                </div>
+                <div className="vip-row__actions">
+                  <button type="button" className="btn-link" onClick={() => setSelectedGuestId(guest.guest_id)}>
+                    Открыть карточку →
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+            )}
+          </>
         )}
       </section>
     </div>
@@ -3091,7 +3132,7 @@ function OrdersBoard({ token, clubId, socket, onOpenGuest, onOpenTable }) {
           // по надписям в самих местах ("Свободен"/название песни) ниже.
           // "Занят хоть кем-то" = хотя бы одно место не пустое (slot !=
           // null — пустое место рендерится как null, см. OrdersBoardSlot).
-          const occupied = table.slots.some((slot) => slot != null);
+          const occupied = table.occupied ?? table.slots.some((slot) => slot != null);
           return (
           <div className="table-card" key={table.table_no}>
             <button
