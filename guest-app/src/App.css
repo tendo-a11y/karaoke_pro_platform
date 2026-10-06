@@ -678,3 +678,25 @@ select {
   border-left: 1px solid var(--border); padding: 12px 14px; font-size: 15px;
 }
 .service-picker__desc { margin: 0; padding: 0 14px 12px; font-size: 13px; color: var(--muted); }
+
+/* ДОБАВЛЕНО (2026-10): карточка категории поверх экрана (по кнопке "?"
+   и при выборе CRAZY) — см. ServiceSelect. */
+.service-card-overlay {
+  position: fixed; inset: 0; z-index: 1000;
+  background: rgba(0, 0, 0, 0.65);
+  display: flex; align-items: center; justify-content: center; padding: 16px;
+}
+.service-card {
+  width: 100%; max-width: 420px; max-height: 90vh; overflow-y: auto;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+  padding: 20px; display: flex; flex-direction: column; gap: 10px;
+}
+.service-card__title { margin: 0; font-size: 20px; color: var(--accent); }
+.service-card__price { margin: 0; font-size: 16px; font-weight: 700; color: var(--text); }
+.service-card__desc { margin: 0; font-size: 15px; line-height: 1.45; color: var(--text); white-space: pre-wrap; }
+.service-card__warning {
+  margin: 0; padding: 10px 12px; border-radius: 10px; font-size: 14px; line-height: 1.4;
+  border: 1px solid var(--danger); background: rgba(229, 72, 77, 0.12); color: var(--text);
+}
+.service-card__buttons { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+.service-card__close { background: none; color: var(--muted); border: 1px solid var(--border); font-weight: 600; }
