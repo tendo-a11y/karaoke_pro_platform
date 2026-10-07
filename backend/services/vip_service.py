@@ -204,6 +204,37 @@ def approve_vip_request(request_id: int, kj) -> VipRequestResult:
     return VipRequestResult(request=request, vip_client=vip_client, outcome="approved")
 
 
+def make_vip_directly(club_id: int, guest_id: int, kj):
+    """
+    ДОБАВЛЕНО (2026-10, запрос пользователя): KJ переводит гостя в VIP сам,
+    из вкладки "Гости", без заявки от гостя. Те же условия, что и при
+    одобрении заявки: у гостя должен быть постоянный профиль (вход через
+    Google). Если заявка от гостя уже висела — она закрывается как одобренная.
+    Возвращает (vip_client, outcome): guest_account_missing | already_vip | ok.
+    """
+    account = guest_account_service.get_by_guest_id(club_id, guest_id)
+    if account is None:
+        return None, "guest_account_missing"
+    existing = get_vip_client(club_id, account.telegram_user_id)
+    if existing is not None:
+        return existing, "already_vip"
+    from datetime import datetime, timezone
+    for pending in VipRequest.query.filter_by(
+        club_id=club_id, telegram_user_id=account.telegram_user_id, status=STATUS_VIP_REQUEST_PENDING,
+    ).all():
+        pending.status = STATUS_VIP_REQUEST_APPROVED
+        pending.decided_by = kj.id
+        pending.decided_at = datetime.now(timezone.utc)
+    vip_client = VipClient(
+        club_id=club_id,
+        telegram_user_id=account.telegram_user_id,
+        cashback_percent=0,
+    )
+    db.session.add(vip_client)
+    db.session.commit()
+    return vip_client, "ok"
+
+
 def reject_vip_request(request_id: int, kj) -> VipRequestResult:
     request = db.session.get(VipRequest, request_id)
     if request is None:
