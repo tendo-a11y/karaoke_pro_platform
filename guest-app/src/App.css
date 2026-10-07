@@ -743,3 +743,45 @@ select {
 .order-form-panel .ai-search .order-form button[type="submit"].is-searching {
   animation: find-button-pulse 2s ease-in-out infinite;
 }
+
+/* ДОБАВЛЕНО (2026-10, запрос пользователя): в живой очереди гостя его
+   песня мигает зелёным, песни его стола отмечены слабее, Crazy — красные. */
+.queue-item--crazy,
+.queue-item--vip.queue-item--crazy {
+  background: rgba(229, 72, 77, 0.22);
+  border: 1px solid var(--danger);
+  border-radius: 6px;
+  padding: 4px 6px;
+  color: #ff8589;
+  font-weight: 600;
+}
+@keyframes queue-mine-blink {
+  0%, 100% { background: rgba(47, 191, 113, 0.14); }
+  50% { background: rgba(47, 191, 113, 0.55); }
+}
+.queue-item--mine {
+  border: none;
+  border-left: 4px solid var(--ok);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-weight: 700;
+  color: var(--text);
+  background: rgba(47, 191, 113, 0.3);
+  animation: queue-mine-blink 1.2s ease-in-out infinite;
+}
+.queue-item__mine-badge { color: var(--ok); font-weight: 700; }
+.queue-item--my-table { border-left: 3px solid var(--ok); padding-left: 8px; }
+.queue-item__table-badge { color: var(--ok); font-size: 12px; }
+.queue-mine-summary {
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--ok);
+  background: rgba(47, 191, 113, 0.12);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+}
+@media (prefers-reduced-motion: reduce) {
+  .queue-item--mine { animation: none; }
+}
