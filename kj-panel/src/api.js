@@ -98,6 +98,16 @@ export const api = {
   pushOrderToVdj: (token, orderId) =>
     request(`/api/kj/order/${orderId}/push-to-vdj`, { method: "PUT", token }),
   getQueue: (token, clubId) => request(`/api/kj/queue/${clubId}`, { token }),
+  // Живая очередь (2026-10): исправить название заказа на точное из
+  // VirtualDJ и склеить заказ с позицией VirtualDJ ("это одна песня").
+  renameOrder: (token, orderId, songTitle, artist) =>
+    request(`/api/kj/order/${orderId}/rename`, {
+      method: "PUT", token, body: { song_title: songTitle, artist },
+    }),
+  linkOrderToVdj: (token, orderId, vdjItemId) =>
+    request(`/api/kj/order/${orderId}/link-vdj`, {
+      method: "PUT", token, body: { vdj_item_id: vdjItemId },
+    }),
   addManualOrder: (token, { songTitle, artist, tableNo }) =>
     request(`/api/kj/order/manual`, {
       method: "POST",
