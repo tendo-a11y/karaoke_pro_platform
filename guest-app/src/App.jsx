@@ -1342,7 +1342,7 @@ function ReplaceForm({ order, token, services, busy, onSubmit, onCancel }) {
 // его через props — это позволяет ему обновляться независимо от остальной
 // страницы, но onGroupChanged даёт родителю знать, когда стоит немедленно
 // перечитать /me (одобрили/выгнали/приняты права), не дожидаясь общего опроса.
-function TableGroupPanel({ token, guestId, hasTable, status, onGroupChanged }) {
+function TableGroupPanel({ token, guestId, hasTable, status, onGroupChanged, tableNo = null }) {
   const [view, setView] = useState(null);
   const [error, setError] = useState(null);
   const [busyKey, setBusyKey] = useState(null);
@@ -1444,13 +1444,17 @@ function TableGroupPanel({ token, guestId, hasTable, status, onGroupChanged }) {
       {error && <div className="banner banner--error">{error}</div>}
 
       {status === "pending" && (
-        <p className="empty-hint">⏳ Заявка отправлена — ждите одобрения админа стола.</p>
+        <p className="empty-hint">
+          ⏳ Заявка на стол{tableNo != null ? ` ${tableNo}` : ""} отправлена. Ждите — тот, кто первым сел за стол, должен подтвердить.
+        </p>
       )}
       {status === "not_joined" && (
         <>
-          <p className="empty-hint">Вы не состоите в группе этого стола.</p>
+          <p className="empty-hint">
+            Вы присоединяетесь к столу{tableNo != null ? ` ${tableNo}` : ""}. Тот, кто первым сел за стол, должен подтвердить.
+          </p>
           <button type="button" onClick={handleRequestJoin} disabled={requestingJoin}>
-            {requestingJoin ? "Отправляем…" : "🙋 Запросить присоединение"}
+            {requestingJoin ? "Отправляем…" : `🙋 Присоединиться к столу${tableNo != null ? ` ${tableNo}` : ""}`}
           </button>
         </>
       )}
@@ -3113,6 +3117,7 @@ export default function App() {
         guestId={session.guest_id}
         hasTable={hasTable}
         status={meInfo.table_group_status}
+        tableNo={meInfo.table_no}
         onGroupChanged={refreshMe}
       />
 
