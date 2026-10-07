@@ -1154,9 +1154,9 @@ function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra }) {
         {onExtra ? (
           <div className="finder-group finder-group--extra">
             {[
-              { key: "orders", label: "📋 Мои заказы" },
-              { key: "fav", label: "☆ Избранное" },
-              { key: "history", label: "🕘 История" },
+              { key: "orders", label: "Мои заказы" },
+              { key: "fav", label: "Избранное" },
+              { key: "history", label: "История" },
             ].map((b) => (
               <button
                 key={b.key}
