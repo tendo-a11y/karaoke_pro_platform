@@ -832,10 +832,14 @@ def _merged_live_queue(club_id: int, persist: bool):
     # table_close_service.complete_table_orders) и только 15 минут — за это
     # время KJ успевает убрать их из VirtualDJ. Прежнее правило (любой
     # завершённый заказ за сутки) прятало и заново поставленную ту же песню.
+    # ИЗМЕНЕНО (2026-10, запрос пользователя "Готово срабатывает сразу"):
+    # песня с меткой скрыта из очереди, пока она стоит в VirtualDJ — без
+    # ограничения по времени. Как только её убрали из VirtualDJ, метка
+    # снимается, и та же песня, поставленная позже заново, показывается.
     hidden_ids = []
-    now_ts = _utcnow().timestamp()
-    for (marked,) in (
-        db.session.query(Order.vdj_item_id)
+    released = False
+    for marked_order in (
+        db.session.query(Order)
         .filter(
             Order.club_id == club_id,
             Order.status.in_((STATUS_COMPLETED, STATUS_PLAYING)),
@@ -843,15 +847,19 @@ def _merged_live_queue(club_id: int, persist: bool):
         )
         .all()
     ):
-        parts = (marked or "").split(":", 2)
-        if len(parts) != 3 or not parts[2]:
-            continue
-        try:
-            closed_ts = float(parts[1])
-        except ValueError:
-            continue
-        if now_ts - closed_ts <= 900:
-            hidden_ids.append(parts[2])
+        parts = (marked_order.vdj_item_id or "").split(":", 2)
+        hid = parts[2] if len(parts) == 3 else ""
+        still_in_vdj = bool(hid) and any(
+            item.vdj_item_id and (item.vdj_item_id == hid or item.vdj_item_id.endswith(hid))
+            for item in live_queue
+        )
+        if still_in_vdj:
+            hidden_ids.append(hid)
+        elif persist:
+            marked_order.vdj_item_id = None
+            released = True
+    if released:
+        db.session.commit()
     if hidden_ids:
         live_queue = [
             item
