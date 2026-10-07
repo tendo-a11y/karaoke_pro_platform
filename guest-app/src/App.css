@@ -713,7 +713,7 @@ select {
   border-radius: 12px;
   padding: 12px;
   margin-bottom: 14px;
-  animation: ai-search-pulse 0.9s ease-in-out infinite;
+  animation: ai-search-pulse 1.8s ease-in-out infinite;
 }
 .order-form-panel .ai-search .order-form button[type="submit"] {
   background: var(--ok);
