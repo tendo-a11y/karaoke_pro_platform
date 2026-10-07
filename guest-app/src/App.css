@@ -880,7 +880,7 @@ img { max-width: 100%; }
   0%, 100% { box-shadow: 0 0 0 0 rgba(47, 191, 113, 0); }
   50% { box-shadow: 0 0 0 4px rgba(47, 191, 113, 0.6); border-color: var(--ok); }
 }
-.step-blink-item { animation: step-wave 0.9s ease-in-out infinite; }
+.step-blink-item { animation: step-wave 1.8s ease-in-out infinite; }
 @keyframes step-wave {
   0%, 60%, 100% { background: transparent; }
   30% { background: rgba(47, 191, 113, 0.38); }
