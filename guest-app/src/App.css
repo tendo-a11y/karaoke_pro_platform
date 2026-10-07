@@ -893,3 +893,10 @@ img { max-width: 100%; }
 }
 .song-confirm--yes { background: rgba(47, 191, 113, 0.18); color: var(--ok); border: 1px solid var(--ok); }
 .song-confirm--no { background: transparent; color: var(--muted); border: 1px solid var(--border); font-weight: 600; }
+
+/* Кнопка "Заказать" моргает целиком (сама кнопка, а не обводка). */
+button[type="submit"].step-blink { animation: button-fill-blink 0.9s ease-in-out infinite; }
+@keyframes button-fill-blink {
+  0%, 100% { opacity: 1; filter: brightness(1.15); }
+  50% { opacity: 0.4; filter: brightness(1); }
+}
