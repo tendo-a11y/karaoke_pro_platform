@@ -785,3 +785,19 @@ select {
 @media (prefers-reduced-motion: reduce) {
   .queue-item--mine { animation: none; }
 }
+
+/* ДОБАВЛЕНО (2026-10): адаптация под планшеты, ноутбуки и маленькие телефоны. */
+html { -webkit-text-size-adjust: 100%; }
+img { max-width: 100%; }
+
+@media (min-width: 768px) {
+  .app-shell { max-width: 640px; }
+}
+
+@media (min-width: 1200px) {
+  .app-shell { max-width: 720px; }
+}
+
+@media (max-width: 360px) {
+  .app-shell { padding-left: 10px; padding-right: 10px; }
+}
