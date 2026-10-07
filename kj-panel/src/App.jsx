@@ -2316,6 +2316,31 @@ function GuestCard({ token, clubId, guestId, onBack, onChanged }) {
             )}
           </div>
 
+          {guest.guest_type !== "vip" && (
+            <div style={{ marginTop: 12 }}>
+              <button
+                type="button"
+                className="btn btn--accept"
+                disabled={busy}
+                onClick={async () => {
+                  setBusy(true);
+                  setActionError(null);
+                  try {
+                    await api.makeGuestVip(token, guestId);
+                    await reload();
+                    if (onChanged) onChanged();
+                  } catch (err) {
+                    setActionError(err instanceof ApiError ? err.message : String(err));
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                ⭐ Сделать VIP
+              </button>
+            </div>
+          )}
+
           <div className="guest-card__chat" style={{ marginTop: 12 }}>
             <button type="button" className="btn btn--accent" onClick={() => setChatOpen((v) => !v)}>
               ✉️ Написать гостю
