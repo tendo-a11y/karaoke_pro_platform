@@ -288,6 +288,13 @@ def create_order():
             f"Можно иметь не более {max_active} заказов одновременно — дождитесь, пока сыграет текущий",
         )
 
+    # ДОБАВЛЕНО (2026-10): случайный повтор той же песни (в любой категории).
+    if vip_service.has_active_duplicate(g.club_id, g.guest_id, song_title, artist):
+        return api_error(
+            409, "DUPLICATE_SONG",
+            "Эта песня у вас уже заказана. Чтобы поменять категорию, откройте «Мои заказы» и нажмите «Заменить песню».",
+        )
+
     detected_guest_type, _vip = _guest_type_and_vip(g.club_id, g.guest_id)
     guest_type = detected_guest_type or ("no_table" if g.table_no is None else "client")
 
@@ -829,6 +836,11 @@ def reorder_favorite(favorite_id):
         return api_error(404, "FAVORITE_NOT_FOUND", "Не найдено")
     if result.outcome == "forbidden":
         return api_error(403, "FORBIDDEN", "Это не ваше избранное")
+    if result.outcome == "duplicate":
+        return api_error(
+            409, "DUPLICATE_SONG",
+            "Эта песня у вас уже заказана. Чтобы поменять категорию, откройте «Мои заказы» и нажмите «Заменить песню».",
+        )
     if result.outcome == "limit_reached":
         return api_error(
             409, "ACTIVE_SONGS_LIMIT",
