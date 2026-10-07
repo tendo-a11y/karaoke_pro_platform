@@ -2476,7 +2476,7 @@ function GuestCard({ token, clubId, guestId, onBack, onChanged }) {
 // новый номер (переезжают участники, их заказы за эту сессию и живая
 // очередь сама подхватит новый номер — см. докстринг table_group_service.
 // move_table на бэкенде).
-function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged }) {
+function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged, autoMove }) {
   const [group, setGroup] = useState(null);
   const [loadError, setLoadError] = useState(null);
   const [selectedGuestId, setSelectedGuestId] = useState(null);
@@ -2505,6 +2505,14 @@ function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged }) {
     setActionError(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tableNo]);
+
+  // Карточку открыли кнопкой "⇄ Переместить" прямо с доски заказов (autoMove)
+  // — сразу показываем выбор нового стола, как только компания загрузилась.
+  const groupLoaded = group != null;
+  useEffect(() => {
+    if (autoMove && groupLoaded) handleOpenMove();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoMove, groupLoaded]);
 
   async function handleOpenMove() {
     setMoveOpen(true);
@@ -3273,6 +3281,18 @@ function OrdersBoard({ token, clubId, socket, onOpenGuest, onOpenTable }) {
             >
               Стол {table.table_no}
             </button>
+            {/* ДОБАВЛЕНО (2026-10, запрос пользователя: кнопка "Переместить стол"
+            рядом с именем стола) — у занятого стола, прямо на доске. */}
+            {occupied && (
+              <button
+                type="button"
+                className="btn-link table-card__move"
+                title="Переместить стол на другой номер"
+                onClick={() => onOpenTable(table.table_no, true)}
+              >
+                ⇄ Переместить стол
+              </button>
+            )}
             <div className="table-card__slots">
               {table.slots.map((slot, index) => (
                 <OrdersBoardSlot
@@ -3491,6 +3511,8 @@ export default function App() {
   // закрытие/перенос стола (см. TableGroupCard выше) — отдельный от
   // boardGuestId стейт, т.к. это разные экраны и открываются независимо.
   const [boardTableNo, setBoardTableNo] = useState(null);
+  // true — карточку стола открыли кнопкой "⇄ Переместить стол" с доски.
+  const [boardTableMove, setBoardTableMove] = useState(false);
   // Реф нужен эффекту ниже (disconnect в cleanup без пересоздания подписок),
   // а socketInstance в state — чтобы VipPanel мог реагировать на появление
   // сокета как на обычный проп (читать socketRef.current прямо в JSX во
@@ -3807,8 +3829,15 @@ export default function App() {
             token={token}
             clubId={me.club_id}
             tableNo={boardTableNo}
-            onBack={() => setBoardTableNo(null)}
-            onTableNoChanged={setBoardTableNo}
+            autoMove={boardTableMove}
+            onBack={() => {
+              setBoardTableNo(null);
+              setBoardTableMove(false);
+            }}
+            onTableNoChanged={(n) => {
+              setBoardTableNo(n);
+              setBoardTableMove(false);
+            }}
           />
         </div>
       ) : (
@@ -3820,7 +3849,10 @@ export default function App() {
               clubId={me.club_id}
               socket={socketInstance}
               onOpenGuest={setBoardGuestId}
-              onOpenTable={setBoardTableNo}
+              onOpenTable={(n, move) => {
+                setBoardTableNo(n);
+                setBoardTableMove(Boolean(move));
+              }}
             />
           </section>
 
