@@ -1225,6 +1225,9 @@ def leave_table_group():
     result = table_group_service.leave_group(g.club_id, g.table_no, g.guest_id)
     if result.outcome == "not_a_member":
         return api_error(404, "NOT_A_MEMBER", "Вы не состоите в группе этого стола")
+    # ДОБАВЛЕНО (2026-10, запрос пользователя): встал из-за стола — значит
+    # статус "Без стола" (и для сидевшего, и для снявшего свою заявку).
+    guest_status_service.set_table(g.club_id, g.guest_id, None)
     return api_ok({"left": True})
 
 
