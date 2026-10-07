@@ -820,3 +820,17 @@ img { max-width: 100%; }
 }
 .panel .profile-finance h2 { margin: 0; }
 .profile-finance h2[aria-expanded="true"] { margin-bottom: 12px; }
+
+/* ДОБАВЛЕНО (2026-10): кнопка "Избранное / История" визуально отделена от режимов поиска. */
+.finder-modes .finder-modes__fav {
+  margin-left: auto; position: relative;
+  border-color: var(--ok); color: var(--ok); background: rgba(47, 191, 113, 0.12);
+}
+.finder-modes .finder-modes__fav::before {
+  content: ""; position: absolute; left: -8px; top: 3px; bottom: 3px;
+  border-left: 1px solid var(--border);
+}
+.finder-modes .finder-modes__fav.finder-modes__active {
+  background: var(--ok); color: #06210f; border-color: var(--ok);
+}
+.finder-modes { column-gap: 6px; row-gap: 8px; }
