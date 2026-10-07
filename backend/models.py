@@ -312,6 +312,10 @@ class Order(db.Model):
     vdj_item_id = db.Column(db.String(255), nullable=True)
     vdj_filepath = db.Column(db.Text, nullable=True)  # результат get_browsed_filepath — нужен для сопоставления с VirtualDJ History (новое ТЗ §37)
     error_message = db.Column(db.Text, nullable=True)
+    # ДОБАВЛЕНО (2026-10): то, что гость написал при заказе, до того как KJ
+    # исправил название на точное из VirtualDJ (см. vdj_service.rename_order /
+    # link_order_to_vdj_item). NULL — название не менялось.
+    guest_song_text = db.Column(db.String(1000), nullable=True)
     confirmed_by = db.Column(db.Integer, db.ForeignKey("kj_operators.id"), nullable=True)
 
     # automatic (по VirtualDJ History) | manual (KJ нажал вручную, fallback) — новое ТЗ §14
@@ -350,6 +354,7 @@ class Order(db.Model):
             "vdj_item_id": self.vdj_item_id,
             "vdj_filepath": self.vdj_filepath,
             "error_message": self.error_message,
+            "guest_song_text": self.guest_song_text,
             "completion_source": self.completion_source,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "confirmed_at": self.confirmed_at.isoformat() if self.confirmed_at else None,
