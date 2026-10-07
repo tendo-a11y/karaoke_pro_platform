@@ -44,3 +44,13 @@ class VirtualDJClient(ABC):
     @abstractmethod
     def get_current_song(self) -> Optional[VDJQueueItem]:
         """Трек, который сейчас играет, если есть."""
+
+    def get_history(self) -> list:
+        """
+        ДОБАВЛЕНО (2026-10): недавно сыгранные песни из истории VirtualDJ —
+        список словарей {"filepath": str, "played_at": int (unix-время)}.
+        По умолчанию пусто: умеет только мост на компьютере KJ (см.
+        vdj_bridge/agent.py::_read_history). Ошибку поднимает как
+        VirtualDJError — вызывающий код сам решает, как часто спрашивать.
+        """
+        return []
