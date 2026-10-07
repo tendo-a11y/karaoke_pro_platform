@@ -885,3 +885,11 @@ img { max-width: 100%; }
   0%, 60%, 100% { background: transparent; }
   30% { background: rgba(47, 191, 113, 0.38); }
 }
+
+/* ДОБАВЛЕНО (2026-10): "Эта?" / "Не эта" под найденной песней. */
+.song-confirm-row { display: flex; gap: 10px; padding: 4px 10px 10px; }
+.song-confirm {
+  flex: 1; padding: 8px 10px; border-radius: 10px; font-size: 14px; font-weight: 700; cursor: pointer;
+}
+.song-confirm--yes { background: rgba(47, 191, 113, 0.18); color: var(--ok); border: 1px solid var(--ok); }
+.song-confirm--no { background: transparent; color: var(--muted); border: 1px solid var(--border); font-weight: 600; }
