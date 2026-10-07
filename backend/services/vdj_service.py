@@ -801,6 +801,77 @@ def _remember_guest_song_text(order) -> None:
         order.guest_song_text = f"{order.artist} — {order.song_title}" if order.artist else order.song_title
 
 
+# ДОБАВЛЕНО (2026-10, запрос пользователя): автонажатие "Готово" по истории
+# VirtualDJ. Песня попадает в историю, когда проиграла столько, сколько задано
+# в настройках VirtualDJ (у клуба — 1 минута); мост на компьютере KJ читает
+# файл истории, а здесь заказ с тем же файлом отмечается сыгранным сам.
+_HISTORY_NEXT_CHECK: dict = {}
+_HISTORY_INTERVAL_OK = 10      # секунд между опросами истории
+_HISTORY_INTERVAL_FAIL = 120   # мост не ответил/старый — не дёргаем часто
+
+
+def _norm_path(value) -> str:
+    return (value or "").replace("/", "\\").strip().lower()
+
+
+def _auto_complete_from_history(club_id: int, vdj) -> None:
+    now = _utcnow()
+    next_check = _HISTORY_NEXT_CHECK.get(club_id)
+    if next_check is not None and now < next_check:
+        return
+    candidates = (
+        db.session.query(Order)
+        .filter(
+            Order.club_id == club_id,
+            Order.status == STATUS_QUEUED,
+            Order.vdj_item_id.isnot(None),
+        )
+        .all()
+    )
+    candidates = [o for o in candidates if not (o.vdj_item_id or "").startswith("closed:")]
+    if not candidates:
+        _HISTORY_NEXT_CHECK[club_id] = now + timedelta(seconds=_HISTORY_INTERVAL_OK)
+        return
+    try:
+        history = vdj.get_history()
+    except Exception:  # мост не обновлён или не ответил — это не ошибка для KJ
+        _HISTORY_NEXT_CHECK[club_id] = now + timedelta(seconds=_HISTORY_INTERVAL_FAIL)
+        return
+    _HISTORY_NEXT_CHECK[club_id] = now + timedelta(seconds=_HISTORY_INTERVAL_OK)
+
+    played = []
+    for entry in history or []:
+        if not isinstance(entry, dict):
+            continue
+        path = _norm_path(entry.get("filepath"))
+        try:
+            played_at = float(entry.get("played_at"))
+        except (TypeError, ValueError):
+            continue
+        if path:
+            played.append((path, played_at))
+    if not played:
+        return
+
+    changed = []
+    for order in candidates:
+        wanted = _norm_path(order.vdj_item_id)
+        if not wanted:
+            continue
+        accepted_at = order.queued_at or order.confirmed_at or order.created_at
+        accepted_ts = accepted_at.timestamp() if accepted_at else 0
+        if any((path == wanted or path.endswith(wanted)) and played_at >= accepted_ts for path, played_at in played):
+            order.status = STATUS_PLAYING
+            order.playing_at = now
+            order.completion_source = "history"
+            order.vdj_item_id = f"closed:{int(now.timestamp())}:{order.vdj_item_id}"[:255]
+            changed.append(order)
+    if changed:
+        db.session.commit()
+        for order in changed:
+            emit_order_updated(order)
+
+
 def _merged_live_queue(club_id: int, persist: bool):
     """
     Общая основа живой очереди для KJ Panel и Guest App (запрос пользователя
@@ -825,6 +896,11 @@ def _merged_live_queue(club_id: int, persist: bool):
     или не уберёт (иначе спетая песня пропадала бы из чека стола).
     """
     vdj = get_vdj_client(club_id)
+    if persist:
+        try:
+            _auto_complete_from_history(club_id, vdj)
+        except Exception:  # автонажатие не должно ломать показ очереди
+            db.session.rollback()
     live_queue = vdj.get_queue()
 
     # ИЗМЕНЕНО (2026-10): из живой очереди скрываются только песни ЗАКРЫТОГО
