@@ -3019,6 +3019,7 @@ export default function App() {
                   {item.is_crazy ? "🔥 " : ""}
                   🎵 {item.song_title}
                   {item.artist ? ` — ${item.artist}` : ""}
+                  {item.is_crazy ? " — CRAZY 🔥" : ""}
                   {item.is_mine ? (
                     <span className="queue-item__mine-badge"> — №{index + 1} в очереди · ваша песня 🎤</span>
                   ) : null}
