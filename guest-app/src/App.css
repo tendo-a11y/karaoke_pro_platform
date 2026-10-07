@@ -928,3 +928,21 @@ button.step-blink-fill { animation: button-fill-blink 0.9s ease-in-out infinite;
 .panel .vip-history-panel.profile-finance h2 {
   color: var(--accent); font-size: 17px; font-weight: 700;
 }
+
+/* ДОБАВЛЕНО (2026-10): выбор тональности при заказе песни. */
+.tone-picker { display: flex; flex-direction: column; gap: 8px; }
+.tone-picker__check { display: flex; align-items: center; gap: 8px; font-size: 15px; cursor: pointer; }
+.tone-picker__check input[type="checkbox"] { width: 20px; height: 20px; padding: 0; margin: 0; flex: none; accent-color: var(--ok); }
+.tone-picker__hint { color: var(--muted); font-size: 13px; }
+.tone-picker__row { display: flex; gap: 10px; flex-wrap: wrap; justify-content: space-between; }
+.tone-picker__side { display: flex; gap: 4px; flex-wrap: wrap; }
+.tone-picker__btn {
+  min-width: 40px; padding: 8px 6px; border-radius: 8px; font-size: 14px; font-weight: 700;
+  background: var(--panel-alt); color: var(--text); border: 1px solid var(--border);
+}
+.tone-picker__btn--active { background: var(--ok); color: #06210f; border-color: var(--ok); }
+.tone-badge {
+  display: inline-block; padding: 2px 8px; border-radius: 999px; font-weight: 700; font-size: 13px;
+  background: rgba(47, 191, 113, 0.2); color: var(--ok); border: 1px solid var(--ok);
+  animation: button-fill-blink 0.9s ease-in-out infinite;
+}
