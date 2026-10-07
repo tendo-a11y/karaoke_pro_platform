@@ -1448,6 +1448,16 @@ function TableGroupPanel({ token, guestId, hasTable, status, onGroupChanged, tab
           ⏳ Заявка на стол{tableNo != null ? ` ${tableNo}` : ""} отправлена. Ждите — тот, кто первым сел за стол, должен подтвердить.
         </p>
       )}
+      {status === "pending" && (
+        <button
+          type="button"
+          className="link-btn"
+          disabled={busyKey === "leave"}
+          onClick={() => runAction("leave", () => api.leaveTableGroup(token))}
+        >
+          🚪 Передумал — встать из-за стола
+        </button>
+      )}
       {status === "not_joined" && (
         <>
           <p className="empty-hint">
