@@ -411,6 +411,17 @@ def list_chat(club_id):
         return denied
 
     query = ChatMessage.query.filter_by(club_id=club_id)
+    # Автоуведомления гостю "скоро ваша очередь" KJ не показываем (запрос
+    # пользователя 2026-10) — это не переписка.
+    query = query.filter(
+        db.or_(
+            ChatMessage.from_guest.is_(True),
+            db.and_(
+                ~ChatMessage.message_text.like("🎤 Приготовьтесь! До вашей песни%"),
+                ~ChatMessage.message_text.like("🎤 Вы следующий! Ваша песня%"),
+            ),
+        )
+    )
     telegram_user_id = request.args.get("telegram_user_id", type=int)
     if telegram_user_id is not None:
         query = query.filter_by(telegram_user_id=telegram_user_id)
