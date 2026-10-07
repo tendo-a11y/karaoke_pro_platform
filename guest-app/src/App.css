@@ -910,3 +910,6 @@ button[type="submit"].step-blink { animation: button-fill-blink 0.9s ease-in-out
 }
 .table-group-who { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .table-group-who__photo { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
+
+/* Кнопка "Заказать снова" в избранном моргает целиком, когда категория выбрана. */
+button.step-blink-fill { animation: button-fill-blink 0.9s ease-in-out infinite; }
