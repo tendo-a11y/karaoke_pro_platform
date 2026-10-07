@@ -856,3 +856,7 @@ img { max-width: 100%; }
 .finder-modes .finder-group .link-btn { padding: 4px 7px; font-size: 11px; white-space: nowrap; }
 .finder-modes .finder-group--extra .finder-modes__fav { background: transparent; }
 .finder-modes .finder-group--extra .finder-modes__fav.finder-modes__active { background: var(--ok); }
+
+/* Больше воздуха: между рамками и между кнопками внутри рамок. */
+.finder-modes { column-gap: 14px; row-gap: 10px; margin-bottom: 14px; }
+.finder-group { gap: 7px; padding: 6px 8px; }
