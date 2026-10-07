@@ -3338,8 +3338,6 @@ export default function App() {
 
       {!activated && <VipPanel token={session.token} meInfo={meInfo} />}
 
-      {meInfo.is_vip && !activated && <VipHistoryPanel token={session.token} />}
-
       <TableGroupPanel
         token={session.token}
         guestId={session.guest_id}
