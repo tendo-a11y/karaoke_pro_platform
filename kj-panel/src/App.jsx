@@ -2917,7 +2917,6 @@ function OrdersBoardSlot({ slot, categories, busy, onAccept, onReject, onComplet
         <div className="table-slot__song">🎵 {slot.song_title}</div>
         {slot.artist && <div className="table-slot__artist">🎤 {slot.artist}</div>}
         {!canEditCategory && categoryName && <div className="table-slot__category">{categoryName}</div>}
-        {isQueued && <div className="table-slot__badge">✅ Принят</div>}
         {slot.status === "error" && slot.error_message && (
           <div className="table-slot__error">{slot.error_message}</div>
         )}
