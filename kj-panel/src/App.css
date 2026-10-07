@@ -884,3 +884,22 @@ img { max-width: 100%; }
 @media (pointer: coarse) {
   .table-slot__actions .btn { min-height: 34px; }
 }
+
+/* ДОБАВЛЕНО (2026-10): тональность заказа — моргающая метка у песни. */
+.tone-badge {
+  display: inline-block; align-self: flex-start; padding: 1px 8px; border-radius: 999px;
+  font-weight: 700; font-size: 12px; white-space: nowrap;
+  background: rgba(255, 176, 32, 0.2); color: var(--accent); border: 1px solid var(--accent);
+  animation: tone-badge-blink 0.9s ease-in-out infinite;
+}
+@keyframes tone-badge-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+/* ДОБАВЛЕНО (2026-10): выравнивание панели — текст по левому краю (раньше всё
+   центрировалось из-за базового стиля), читаемое название клуба в шапке,
+   поля настроек столов на одной линии с кнопкой. */
+#root { text-align: left; }
+.app-header h1 { color: var(--text); letter-spacing: normal; }
+.table-settings-form { align-items: flex-end; flex-wrap: wrap; gap: 12px; }
+.table-settings-field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+.table-settings-form .table-settings-field input { width: 150px; flex: none; }
+.table-settings-panel p, .categories-panel p { margin-top: 6px; }
