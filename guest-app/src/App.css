@@ -812,3 +812,11 @@ img { max-width: 100%; }
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5); cursor: pointer;
 }
 .turn-toast__close { font-size: 12px; font-weight: 400; opacity: 0.75; }
+
+/* ДОБАВЛЕНО (2026-10): блок "Финансы" внутри профиля. */
+.profile-finance {
+  margin: 14px 0; padding: 12px 14px;
+  border: 1px solid var(--border); border-radius: 10px; background: var(--panel-alt);
+}
+.panel .profile-finance h2 { margin: 0; }
+.profile-finance h2[aria-expanded="true"] { margin-bottom: 12px; }
