@@ -2961,7 +2961,7 @@ export default function App() {
               if (item.is_crazy) itemClasses.push("queue-item--crazy");
               if (item.is_mine) itemClasses.push("queue-item--mine");
               return (
-                <li key={item.vdj_item_id} className={itemClasses.join(" ")}>
+                <li key={item.key ?? item.vdj_item_id} className={itemClasses.join(" ")}>
                   {item.is_vip ? "👑 " : ""}
                   {item.is_crazy ? "🔥 " : ""}
                   🎵 {item.song_title}
