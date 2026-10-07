@@ -1132,12 +1132,38 @@ def get_guest_queue_view(club_id: int, guest_id: int) -> list[dict]:
     return result
 
 
+# Что уже отправляли (сообщение удаляется через 10 минут, а повторять его нельзя).
+_TURN_NOTICE_SENT: dict = {}
+
+
 def _notify_guest_turn_soon(club_id: int, guest_id: int, queue_view: list[dict]) -> None:
     """
     ДОБАВЛЕНО (2026-10, запрос пользователя): за две песни и за одну песню
     до выхода гостю приходит сообщение в чат с KJ. Каждое — один раз на
     песню (проверка по тексту сообщения за последние 6 часов).
     """
+    # Уведомления живут 10 минут, потом удаляются сами (запрос пользователя).
+    now = datetime.now(timezone.utc)
+    deleted = (
+        db.session.query(ChatMessage)
+        .filter(
+            ChatMessage.club_id == club_id,
+            ChatMessage.telegram_user_id == guest_id,
+            ChatMessage.from_guest.is_(False),
+            db.or_(
+                ChatMessage.message_text.like("🎤 Приготовьтесь! До вашей песни%"),
+                ChatMessage.message_text.like("🎤 Вы следующий! Ваша песня%"),
+            ),
+            ChatMessage.created_at < now - timedelta(minutes=10),
+        )
+        .delete(synchronize_session=False)
+    )
+    if deleted:
+        db.session.commit()
+    for key, sent_at in list(_TURN_NOTICE_SENT.items()):
+        if sent_at < now - timedelta(hours=6):
+            _TURN_NOTICE_SENT.pop(key, None)
+
     texts = []
     for index, item in enumerate(queue_view):
         if not item.get("is_mine") or index not in (1, 2):
@@ -1163,8 +1189,9 @@ def _notify_guest_turn_soon(club_id: int, guest_id: int, queue_view: list[dict])
             )
             .first()
         )
-        if exists:
+        if exists or (club_id, guest_id, text) in _TURN_NOTICE_SENT:
             continue
+        _TURN_NOTICE_SENT[(club_id, guest_id, text)] = now
         db.session.add(
             ChatMessage(
                 club_id=club_id,
