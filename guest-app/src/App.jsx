@@ -508,7 +508,7 @@ function OrderRow({
 // ещё не VIP-гостей. Баланс+пополнение переехали в экран "Сообщения" (см.
 // VipBalancePanel ниже) — эта панель остаётся на главном экране и теперь
 // только про "Стать VIP" (уже VIP-гостям ничего не показывает).
-function VipPanel({ token, meInfo }) {
+function VipPanel({ token, meInfo, embedded = false }) {
   const [requesting, setRequesting] = useState(false);
   const [requestSent, setRequestSent] = useState(false);
   const [error, setError] = useState(null);
@@ -529,7 +529,7 @@ function VipPanel({ token, meInfo }) {
   if (meInfo.is_vip) return null;
 
   return (
-    <section className="panel vip-panel">
+    <section className={embedded ? "vip-panel profile-finance" : "panel vip-panel"}>
       <h2>⭐ VIP-статус</h2>
       {/* ДОБАВЛЕНО (2026-10-04, запрос пользователя "бот и приложение —
       два отдельных инструмента, что в боте то и в приложении, во вкладку
@@ -1967,6 +1967,7 @@ function ProfileNamePanel({ token, meInfo, onNameChanged }) {
 
         {/* Финансы VIP-гостя — внутри профиля (запрос пользователя 2026-10). */}
         {meInfo.is_vip && <VipHistoryPanel token={token} embedded />}
+        <VipPanel token={token} meInfo={meInfo} embedded />
 
         {/* ДОБАВЛЕНО (запрос пользователя 2026-10-04) — ссылки на
         политику конфиденциальности/условия использования и кнопка
@@ -2904,7 +2905,7 @@ export default function App() {
         )}
       </section>
 
-      <VipPanel token={session.token} meInfo={meInfo} />
+      {!activated && <VipPanel token={session.token} meInfo={meInfo} />}
 
       {meInfo.is_vip && !activated && <VipHistoryPanel token={session.token} />}
 
