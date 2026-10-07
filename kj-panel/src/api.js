@@ -181,6 +181,8 @@ export const api = {
     request(`/api/kj/guests/${guestId}/photo`, {
       method: "PUT", token, body: { photo_data_url: photoDataUrl },
     }),
+  makeGuestVip: (token, guestId) =>
+    request(`/api/kj/guests/${encodeURIComponent(guestId)}/make-vip`, { method: "POST", token }),
   renameGuest: (token, guestId, displayName) =>
     request(`/api/kj/guests/${encodeURIComponent(guestId)}/name`, {
       method: "PUT", token, body: { display_name: displayName },
