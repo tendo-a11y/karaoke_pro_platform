@@ -857,3 +857,30 @@ img { max-width: 100%; }
 @media (max-width: 340px) {
   .orders-board__grid { grid-template-columns: 1fr; }
 }
+
+/* ДОБАВЛЕНО (2026-10): компактные карточки столов одинакового размера;
+   номер песни — просто цифра без заливки. */
+.orders-board__grid { grid-auto-rows: 1fr; gap: 10px; }
+.table-card { padding: 8px; gap: 6px; }
+.table-card__title { font-size: 14px; }
+.table-card__slots { flex: 1; gap: 6px; }
+.table-slot { position: relative; flex: 1; padding: 6px 8px; gap: 4px; justify-content: space-between; }
+.table-slot--empty { justify-content: center; font-size: 12px; padding: 6px; }
+.table-slot__body { gap: 2px; }
+.table-slot__queue-position {
+  position: absolute; top: 4px; right: 6px;
+  background: none; color: var(--muted); padding: 0; border-radius: 0;
+  font-size: 12px; font-weight: 700;
+}
+.table-slot__song {
+  font-size: 13px; line-height: 1.25; padding-right: 26px;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.table-slot__artist { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.table-slot__category { font-size: 11px; }
+.table-slot__category-select { padding: 3px 6px; font-size: 12px; }
+.table-slot__actions { gap: 4px; }
+.table-slot__actions .btn { padding: 5px 4px; font-size: 12px; min-height: 0; }
+@media (pointer: coarse) {
+  .table-slot__actions .btn { min-height: 34px; }
+}
