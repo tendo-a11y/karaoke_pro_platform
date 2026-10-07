@@ -81,7 +81,7 @@ def count_active_orders(club_id: int, guest_id: int) -> int:
     )
 
 
-def has_active_duplicate(club_id: int, guest_id: int, song_title, artist) -> bool:
+def has_active_duplicate(club_id: int, guest_id: int, song_title, artist, table_no=None) -> bool:
     """
     ДОБАВЛЕНО (2026-10, запрос пользователя "запрещать случайные повторы"):
     у гостя уже есть активный заказ на эту же песню? Категория не важна —
@@ -96,9 +96,14 @@ def has_active_duplicate(club_id: int, guest_id: int, song_title, artist) -> boo
     if not title:
         return False
     wanted_artist = _norm(artist)
+    # ДОПОЛНЕНО (2026-10): повтор считается и по столу — два гостя за одним
+    # столом не могут заказать одну и ту же песню.
+    owner = Order.telegram_user_id == guest_id
+    if table_no is not None:
+        owner = db.or_(owner, Order.table_no == table_no)
     active = Order.query.filter(
         Order.club_id == club_id,
-        Order.telegram_user_id == guest_id,
+        owner,
         Order.status.in_(_ACTIVE_ORDER_STATUSES),
     ).all()
     for order in active:
@@ -464,7 +469,7 @@ def reorder_favorite(club_id: int, guest_id: int, table_no, guest_type: str, fav
 
     if count_active_orders(club_id, guest_id) >= max_active:
         return FavoriteActionResult(favorite=favorite, outcome="limit_reached")
-    if has_active_duplicate(club_id, guest_id, favorite.song_title, favorite.artist):
+    if has_active_duplicate(club_id, guest_id, favorite.song_title, favorite.artist, table_no):
         return FavoriteActionResult(favorite=favorite, outcome="duplicate")
 
     order = Order(
