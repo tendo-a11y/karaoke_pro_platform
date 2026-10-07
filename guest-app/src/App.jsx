@@ -2775,6 +2775,20 @@ export default function App() {
   // месте пополнение VIP-баланса, чат с ведущим и ещё два пункта-заглушки
   // под будущие функции ("Общий чат", "Заказ новой песни"), вместо того
   // чтобы это было разбросано по главному экрану.
+  if (view === "screenshot") {
+    return (
+      <div className="app-shell">
+        <header className="app-header">
+          <h1>📷 Заказ через скриншот</h1>
+          <button type="button" className="btn-link" onClick={() => setView("home")}>
+            ← Назад
+          </button>
+        </header>
+        <ScreenshotOrderPanel token={session.token} services={services} />
+      </div>
+    );
+  }
+
   if (view === "messages") {
     return (
       <div className="app-shell">
@@ -2864,8 +2878,7 @@ export default function App() {
         <AiSearch
           token={session.token}
           onScreenshotHelp={() => {
-            setFocusScreenshotOrder(true);
-            setView("messages");
+            setView("screenshot");
           }}
           onPick={(song) => {
             setSongTitle(song.title);
