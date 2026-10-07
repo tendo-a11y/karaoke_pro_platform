@@ -1075,6 +1075,7 @@ def get_kj_queue_view(club_id: int) -> list[dict]:
                 "orphaned": False,
                 "in_vdj": True,
                 "guest_song_text": matched.guest_song_text if matched else None,
+                "tone": matched.tone if matched else None,
             }
         )
     for order in waiting:
@@ -1089,6 +1090,7 @@ def get_kj_queue_view(club_id: int) -> list[dict]:
                 "orphaned": False,
                 "in_vdj": False,
                 "guest_song_text": order.guest_song_text,
+                "tone": order.tone,
             }
         )
     return result
