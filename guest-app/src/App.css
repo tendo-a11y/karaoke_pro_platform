@@ -900,3 +900,13 @@ button[type="submit"].step-blink { animation: button-fill-blink 0.9s ease-in-out
   0%, 100% { opacity: 1; filter: brightness(1.15); }
   50% { opacity: 0.4; filter: brightness(1); }
 }
+
+/* ДОБАВЛЕНО (2026-10): заметное моргающее "заявка отправлена, ждите" и имя/фото гостя за столом. */
+.table-wait-notice {
+  margin: 0 0 10px; padding: 12px 14px; border-radius: 10px;
+  border: 2px solid var(--accent); background: rgba(255, 176, 32, 0.16);
+  color: var(--text); font-size: 15px; font-weight: 700; line-height: 1.35;
+  animation: button-fill-blink 0.9s ease-in-out infinite;
+}
+.table-group-who { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.table-group-who__photo { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
