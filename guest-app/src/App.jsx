@@ -426,7 +426,29 @@ function OrderRow({
   order, onFavorite, favoriteBusy,
   token, services, isReplacing, onToggleReplace, onReplace, replaceBusy,
   onCancel, cancelBusy,
+  reorder = false, onReordered,
 }) {
+  // ДОБАВЛЕНО (2026-10, запрос пользователя): заказ песни прямо из истории —
+  // выбор категории и "Заказать снова", с теми же подсказками-морганиями.
+  const [reorderServiceId, setReorderServiceId] = useState("");
+  const [reorderBusy, setReorderBusy] = useState(false);
+  const [reorderError, setReorderError] = useState(null);
+  const [reorderDone, setReorderDone] = useState(false);
+  async function handleReorderFromHistory() {
+    setReorderBusy(true);
+    setReorderError(null);
+    setReorderDone(false);
+    try {
+      await api.createOrder(token, order.song_title, order.artist || null, Number(reorderServiceId));
+      setReorderServiceId("");
+      setReorderDone(true);
+      if (onReordered) await onReordered();
+    } catch (err) {
+      setReorderError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setReorderBusy(false);
+    }
+  }
   const label = orderStatusLabel(order);
   // ИЗМЕНЕНО (2026-09-20, решение пользователя "Нужно одобрение KJ (запрос
   // → Одобрить/Отклонить)"): "❌ Отменить заказ"/"🔁 Заменить песню" больше
@@ -485,6 +507,32 @@ function OrderRow({
           </button>
         )}
       </div>
+      {reorder && services.length > 0 && (
+        <>
+          <ServiceSelect
+            services={services}
+            value={reorderServiceId}
+            onChange={(v) => {
+              setReorderServiceId(v);
+              setReorderDone(false);
+            }}
+            disabled={reorderBusy}
+            highlight
+          />
+          <div className="favorite-actions">
+            <button
+              type="button"
+              disabled={reorderBusy || !reorderServiceId}
+              className={!reorderBusy && reorderServiceId ? "step-blink-fill" : undefined}
+              onClick={handleReorderFromHistory}
+            >
+              {reorderBusy ? "Отправляем…" : "🔁 Заказать снова"}
+            </button>
+          </div>
+          {reorderError && <div className="banner banner--error">{reorderError}</div>}
+          {reorderDone && <div className="banner banner--ok">Заказ отправлен ✅</div>}
+        </>
+      )}
       {pendingRequest && (
         <p className="empty-hint order-row__pending-request">
           {pendingRequest.kind === "cancel"
@@ -3090,6 +3138,8 @@ export default function App() {
                 // Показывается у каждой песни без исключений.
                 onFavorite={handleAddFavorite}
                 favoriteBusy={favoriteBusyOrderId === o.id}
+                reorder={ordersTab === "history" && canOrder}
+                onReordered={refreshOrders}
               />
             ))}
           </ul>
