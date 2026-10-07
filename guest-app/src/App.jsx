@@ -848,7 +848,7 @@ function FavoritesPanel({ token, services, onOrdered, orderingDisabled, embedded
   return (
     <section className={embedded ? "profile-finance" : "panel"}>
       {embedded ? (
-        <h2>☆ Избранное ({favorites.length})</h2>
+        <h2>Избранное ({favorites.length})</h2>
       ) : (
       <h2
         className="collapsible-header"
@@ -863,7 +863,7 @@ function FavoritesPanel({ token, services, onOrdered, orderingDisabled, embedded
           }
         }}
       >
-        ☆ Избранное ({favorites.length})
+        Избранное ({favorites.length})
         <span className="collapsible-caret">{open ? "▲" : "▼"}</span>
       </h2>
       )}
@@ -3162,7 +3162,7 @@ export default function App() {
         ) : null}
         {orderExtra === "orders" || orderExtra === "history" ? (
           <div className="profile-finance">
-          <h2>{ordersTab === "history" ? "🕘 История" : "📋 Мои заказы"}</h2>
+          <h2>{ordersTab === "history" ? "История" : "Мои заказы"}</h2>
         {ordersTab === "history" && (
           <div className="order-history-periods">
             {ORDER_HISTORY_PERIODS.map((p) => (
