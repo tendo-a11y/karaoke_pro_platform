@@ -3387,8 +3387,8 @@ export default function App() {
                 <li key={item.key ?? item.vdj_item_id} className={itemClasses.join(" ")}>
                   {item.is_vip ? "👑 " : ""}
                   {item.is_crazy ? "🔥 " : ""}
-                  🎵 {item.song_title}
-                  {item.artist ? ` — ${item.artist}` : ""}
+                  🎵 {item.artist ? `${item.artist} — ` : ""}
+                  {item.song_title}
                   {item.is_crazy ? " — CRAZY 🔥" : ""}
                   {item.is_mine ? (
                     <span className="queue-item__mine-badge"> — №{index + 1} в очереди · ваша песня 🎤</span>
