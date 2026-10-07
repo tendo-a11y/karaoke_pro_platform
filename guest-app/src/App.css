@@ -966,3 +966,6 @@ button.step-blink-fill { animation: button-fill-blink 0.9s ease-in-out infinite;
 @media (max-width: 520px) {
   .finder-modes .finder-group .link-btn { font-size: 11px; padding: 6px 2px; letter-spacing: -0.2px; }
 }
+
+/* У ряда "Мои заказы / Избранное / История" общей рамки и подложки нет. */
+.finder-group.finder-group--extra { border: none; background: none; padding: 0; }
