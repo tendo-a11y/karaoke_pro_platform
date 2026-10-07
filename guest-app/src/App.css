@@ -972,3 +972,9 @@ button.step-blink-fill { animation: button-fill-blink 0.9s ease-in-out infinite;
 
 /* Надпись "Тон" — жёлтая и жирная, чтобы отличалась от остального текста формы. */
 .tone-picker__check { color: var(--accent); font-weight: 700; }
+
+/* Подпись в самом низу приложения гостя. */
+.app-shell::after {
+  content: "By Absolutis"; display: block; margin-top: auto; padding-top: 24px;
+  text-align: center; font-size: 12px; letter-spacing: 0.04em; color: var(--muted); opacity: 0.8;
+}
