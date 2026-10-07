@@ -81,6 +81,36 @@ def count_active_orders(club_id: int, guest_id: int) -> int:
     )
 
 
+def has_active_duplicate(club_id: int, guest_id: int, song_title, artist) -> bool:
+    """
+    ДОБАВЛЕНО (2026-10, запрос пользователя "запрещать случайные повторы"):
+    у гостя уже есть активный заказ на эту же песню? Категория не важна —
+    одна и та же песня в двух категориях считается повтором. Сравнение без
+    учёта регистра, лишних пробелов и "ё/е"; исполнитель сравнивается,
+    только если указан в обоих заказах.
+    """
+    def _norm(value):
+        return " ".join((value or "").lower().replace("ё", "е").split())
+
+    title = _norm(song_title)
+    if not title:
+        return False
+    wanted_artist = _norm(artist)
+    active = Order.query.filter(
+        Order.club_id == club_id,
+        Order.telegram_user_id == guest_id,
+        Order.status.in_(_ACTIVE_ORDER_STATUSES),
+    ).all()
+    for order in active:
+        if _norm(order.song_title) != title:
+            continue
+        other_artist = _norm(order.artist)
+        if wanted_artist and other_artist and wanted_artist != other_artist:
+            continue
+        return True
+    return False
+
+
 # --- Заявка на VIP (старое: handlers/client.py::request_vip_status, п.8А) ---
 
 class VipRequestCreateResult:
@@ -434,6 +464,8 @@ def reorder_favorite(club_id: int, guest_id: int, table_no, guest_type: str, fav
 
     if count_active_orders(club_id, guest_id) >= max_active:
         return FavoriteActionResult(favorite=favorite, outcome="limit_reached")
+    if has_active_duplicate(club_id, guest_id, favorite.song_title, favorite.artist):
+        return FavoriteActionResult(favorite=favorite, outcome="duplicate")
 
     order = Order(
         telegram_user_id=guest_id,
