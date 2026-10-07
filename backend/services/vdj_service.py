@@ -820,28 +820,38 @@ def _merged_live_queue(club_id: int, persist: bool):
     vdj = get_vdj_client(club_id)
     live_queue = vdj.get_queue()
 
-    # ДОБАВЛЕНО (2026-10, запрос пользователя): стол закрыт (или песня
-    # убрана/отмечена сыгранной) — её позиция пропадает из живой очереди
-    # сразу, даже если в самом VirtualDJ она ещё стоит.
-    finished_ids = [
-        row[0]
-        for row in db.session.query(Order.vdj_item_id)
+    # ИЗМЕНЕНО (2026-10): из живой очереди скрываются только песни ЗАКРЫТОГО
+    # стола (метка "closed:<время>:<id>" ставится при закрытии стола, см.
+    # table_close_service.complete_table_orders) и только 15 минут — за это
+    # время KJ успевает убрать их из VirtualDJ. Прежнее правило (любой
+    # завершённый заказ за сутки) прятало и заново поставленную ту же песню.
+    hidden_ids = []
+    now_ts = _utcnow().timestamp()
+    for (marked,) in (
+        db.session.query(Order.vdj_item_id)
         .filter(
             Order.club_id == club_id,
-            Order.status.in_((STATUS_COMPLETED, STATUS_REJECTED)),
-            Order.vdj_item_id.isnot(None),
-            Order.created_at >= _utcnow() - timedelta(hours=24),
+            Order.status == STATUS_COMPLETED,
+            Order.vdj_item_id.like("closed:%"),
         )
         .all()
-        if row[0]
-    ]
-    if finished_ids:
+    ):
+        parts = (marked or "").split(":", 2)
+        if len(parts) != 3 or not parts[2]:
+            continue
+        try:
+            closed_ts = float(parts[1])
+        except ValueError:
+            continue
+        if now_ts - closed_ts <= 900:
+            hidden_ids.append(parts[2])
+    if hidden_ids:
         live_queue = [
             item
             for item in live_queue
             if not (
                 item.vdj_item_id
-                and any(item.vdj_item_id == fid or item.vdj_item_id.endswith(fid) for fid in finished_ids)
+                and any(item.vdj_item_id == hid or item.vdj_item_id.endswith(hid) for hid in hidden_ids)
             )
         ]
 
