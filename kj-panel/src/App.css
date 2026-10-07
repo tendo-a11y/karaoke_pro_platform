@@ -789,3 +789,7 @@ OrderChangeRequestsPanel), а не терялась среди обычных к
 }
 .queue-row__rename { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .queue-row__rename-input { flex: 1 1 180px; min-width: 0; }
+
+/* Кнопка "Переместить стол" в одной строке с названием стола. */
+.table-group-card__title { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.table-group-card__title .btn { font-size: 13px; }
