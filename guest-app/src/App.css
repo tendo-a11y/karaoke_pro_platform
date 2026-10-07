@@ -916,3 +916,15 @@ button.step-blink-fill { animation: button-fill-blink 0.9s ease-in-out infinite;
 
 /* Треугольник раскрытого профиля моргает — подсказка, что блок можно закрыть. */
 .collapsible-caret--blink { color: var(--ok); font-size: 1.25em; animation: button-fill-blink 0.9s ease-in-out infinite; }
+
+/* "Удалить мои данные" — неброско; "Финансы" в профиле — заметнее. */
+.profile-legal-row button.btn-link {
+  font-size: 12px; font-weight: 400; color: var(--muted); opacity: 0.7; padding: 2px 0;
+  background: none; border: none;
+}
+.vip-history-panel.profile-finance {
+  border: 2px solid var(--accent); background: rgba(255, 176, 32, 0.12);
+}
+.panel .vip-history-panel.profile-finance h2 {
+  color: var(--accent); font-size: 17px; font-weight: 700;
+}
