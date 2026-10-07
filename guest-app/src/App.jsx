@@ -2905,6 +2905,8 @@ export default function App() {
         )}
       </section>
 
+      <FavoritesPanel token={session.token} services={services} onOrdered={refreshOrders} orderingDisabled={!canOrder} />
+
       {!activated && <VipPanel token={session.token} meInfo={meInfo} />}
 
       {meInfo.is_vip && !activated && <VipHistoryPanel token={session.token} />}
@@ -2985,8 +2987,6 @@ export default function App() {
           </ul>
         )}
       </section>
-
-      <FavoritesPanel token={session.token} services={services} onOrdered={refreshOrders} orderingDisabled={!canOrder} />
 
       <section className="panel">
         {turnToast ? (
