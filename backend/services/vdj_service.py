@@ -1008,7 +1008,22 @@ def _merged_live_queue(club_id: int, persist: bool):
     if changed:
         db.session.commit()
 
-    waiting.sort(key=lambda o: (o.queued_at or o.created_at, o.id))
+    # ИЗМЕНЕНО (2026-10, запрос пользователя): в режиме "Последовательно"
+    # принятые заказы, которых нет в VirtualDJ, выстраиваются по кругу столов
+    # от стола "Начало очереди" — так же, как номера на карточках столов.
+    # В режиме "Как решает диджей" порядок прежний — по времени принятия.
+    positions = {}
+    try:
+        from services import table_board_service  # ленивый импорт: иначе круговая зависимость
+
+        club = db.session.get(table_board_service.Club, club_id)
+        if club is not None and (
+            table_board_service.get_queue_mode(club) == table_board_service.QUEUE_MODE_SEQUENTIAL
+        ):
+            positions = table_board_service.get_club_queue_positions(club_id)
+    except Exception:  # порядок — не повод ронять показ очереди
+        positions = {}
+    waiting.sort(key=lambda o: (positions.get(o.id, 10**9), o.queued_at or o.created_at, o.id))
     return [(item, matched) for item, matched in rows], waiting
 
 
