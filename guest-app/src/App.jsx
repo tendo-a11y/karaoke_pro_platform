@@ -1065,6 +1065,7 @@ function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra }) {
   return (
     <div className="ai-search">
       <div className="finder-modes">
+        <div className="finder-group">
         {FINDER_MODES.map((m) => (
           <button
             key={m.key}
@@ -1075,10 +1076,12 @@ function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra }) {
             {m.label}
           </button>
         ))}
-        {onExtra
-          ? [
-              { key: "fav", label: "☆ Избранное" },
+        </div>
+        {onExtra ? (
+          <div className="finder-group finder-group--extra">
+            {[
               { key: "orders", label: "📋 Мои заказы" },
+              { key: "fav", label: "☆ Избранное" },
               { key: "history", label: "🕘 История" },
             ].map((b) => (
               <button
@@ -1089,8 +1092,9 @@ function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra }) {
               >
                 {b.label}
               </button>
-            ))
-          : null}
+            ))}
+          </div>
+        ) : null}
       </div>
 
       {mode === "screenshot" ? (
