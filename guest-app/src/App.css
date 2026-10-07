@@ -834,3 +834,7 @@ img { max-width: 100%; }
   background: var(--ok); color: #06210f; border-color: var(--ok);
 }
 .finder-modes { column-gap: 6px; row-gap: 8px; }
+
+/* Три кнопки справа (Избранное, Мои заказы, История): отступ и черта только у первой. */
+.finder-modes .finder-modes__fav ~ .finder-modes__fav { margin-left: 0; }
+.finder-modes .finder-modes__fav ~ .finder-modes__fav::before { display: none; }
