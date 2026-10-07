@@ -2622,7 +2622,7 @@ export default function App() {
   // прошлого, и дефолт "Все" для неё удобнее (не приходится лишний раз
   // щёлкать, чтобы увидеть весь список, который и так уже отфильтрован по
   // вкладке от "текущего").
-  const [orderHistoryDays, setOrderHistoryDays] = useState(null);
+  const [orderHistoryDays, setOrderHistoryDays] = useState(1);
   const [orderExtra, setOrderExtra] = useState(null);
   // ДОБАВЛЕНО (2026-10, запрос пользователя): выбор тональности при заказе.
   const [toneOn, setToneOn] = useState(false);
