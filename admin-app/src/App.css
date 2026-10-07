@@ -282,3 +282,25 @@ button.btn--danger {
   flex: 0 0 auto;
   padding: 8px 14px;
 }
+
+/* ДОБАВЛЕНО (2026-10): адаптация под ноутбуки, планшеты и телефоны. */
+html { -webkit-text-size-adjust: 100%; }
+img { max-width: 100%; height: auto; }
+.order-row, .club-detail__bridge-token { overflow-wrap: anywhere; }
+
+@media (min-width: 1100px) {
+  .app-shell { max-width: 960px; }
+}
+
+@media (max-width: 600px) {
+  .app-shell { padding: 12px 12px 32px; gap: 12px; }
+  .app-header { flex-wrap: wrap; gap: 6px; }
+  .app-header h1 { font-size: 18px; }
+  .panel { padding: 12px; }
+  .kj-row__main { flex-wrap: wrap; }
+  .kj-row__name-input { flex: 1 1 100%; min-width: 0; font-size: 16px; }
+  .club-detail__admin-actions button, .club-detail__bridge-actions button { flex: 1 1 100%; }
+  .qr-grid { gap: 10px; }
+  .qr-card { width: auto; flex: 1 1 140px; }
+  .vip-stat-row { gap: 10px; }
+}
