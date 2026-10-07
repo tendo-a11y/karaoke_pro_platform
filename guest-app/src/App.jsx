@@ -2453,7 +2453,12 @@ export default function App() {
         session.token,
         ordersTab === "current" ? { scope: "session" } : { days: orderHistoryDays },
       );
-      setOrders(data);
+      // История: последние заказы сверху (запрос пользователя 2026-10).
+      setOrders(
+        ordersTab === "history" && Array.isArray(data)
+          ? [...data].sort((a, b) => (b.id || 0) - (a.id || 0))
+          : data,
+      );
     } catch {
       // Временный сбой поллинга — не блокируем форму заказа баннером.
     }
