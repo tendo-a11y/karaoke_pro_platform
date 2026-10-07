@@ -289,10 +289,10 @@ def create_order():
         )
 
     # ДОБАВЛЕНО (2026-10): случайный повтор той же песни (в любой категории).
-    if vip_service.has_active_duplicate(g.club_id, g.guest_id, song_title, artist):
+    if vip_service.has_active_duplicate(g.club_id, g.guest_id, song_title, artist, g.table_no):
         return api_error(
             409, "DUPLICATE_SONG",
-            "Эта песня у вас уже заказана. Чтобы поменять категорию, откройте «Мои заказы» и нажмите «Заменить песню».",
+            "Эта песня уже заказана — вами или за вашим столом. Чтобы поменять категорию, откройте «Мои заказы» и нажмите «Заменить песню».",
         )
 
     detected_guest_type, _vip = _guest_type_and_vip(g.club_id, g.guest_id)
@@ -839,7 +839,7 @@ def reorder_favorite(favorite_id):
     if result.outcome == "duplicate":
         return api_error(
             409, "DUPLICATE_SONG",
-            "Эта песня у вас уже заказана. Чтобы поменять категорию, откройте «Мои заказы» и нажмите «Заменить песню».",
+            "Эта песня уже заказана — вами или за вашим столом. Чтобы поменять категорию, откройте «Мои заказы» и нажмите «Заменить песню».",
         )
     if result.outcome == "limit_reached":
         return api_error(
