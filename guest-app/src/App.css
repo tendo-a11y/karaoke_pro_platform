@@ -860,3 +860,16 @@ img { max-width: 100%; }
 /* Больше воздуха: между рамками и между кнопками внутри рамок. */
 .finder-modes { column-gap: 14px; row-gap: 10px; margin-bottom: 14px; }
 .finder-group { gap: 7px; padding: 6px 8px; }
+
+/* Кнопка "Выберите скриншот / Фото" — заметная, моргает, пока картинка не выбрана. */
+.screenshot-pick {
+  display: block; text-align: center; margin: 10px 0; padding: 14px 16px;
+  border: 2px solid var(--ok); border-radius: 12px;
+  background: rgba(47, 191, 113, 0.14); color: var(--ok);
+  font-size: 16px; font-weight: 700; cursor: pointer;
+}
+.screenshot-pick--blink { animation: screenshot-pick-blink 1.2s ease-in-out infinite; }
+@keyframes screenshot-pick-blink {
+  0%, 100% { background: rgba(47, 191, 113, 0.14); box-shadow: 0 0 0 0 rgba(47, 191, 113, 0); }
+  50% { background: rgba(47, 191, 113, 0.45); box-shadow: 0 0 0 6px rgba(47, 191, 113, 0.18); color: #fff; }
+}
