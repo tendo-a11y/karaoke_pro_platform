@@ -2111,7 +2111,7 @@ function ProfileNamePanel({ token, meInfo, onNameChanged }) {
           }}
         >
           👤 Профиль{meInfo.display_name ? ` · ${meInfo.display_name}` : ""}
-          <span className="collapsible-caret">{profileOpen ? "▲" : "▼"}</span>
+          <span className={`collapsible-caret${profileOpen ? " collapsible-caret--blink" : ""}`}>{profileOpen ? "▲" : "▼"}</span>
         </h2>
         {profileOpen && (
         <>
