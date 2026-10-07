@@ -765,6 +765,14 @@ def _order_matches_vdj_item(order, item) -> bool:
         return False
     if order_title == item_title and (not order_artist or not item_artist or order_artist == item_artist):
         return True
+    # Исполнитель записан по-разному ("Барских Макс" / "Макс Барских",
+    # "Тишман" / "Марк Тишман"): считаем совпадением, если слова одного
+    # варианта целиком входят в другой, в любом порядке.
+    if order_title == item_title and order_artist and item_artist:
+        order_words = set(order_artist.replace(",", " ").split())
+        item_words = set(item_artist.replace(",", " ").split())
+        if order_words and item_words and (order_words <= item_words or item_words <= order_words):
+            return True
     if item_artist and order_title in (
         f"{item_artist} - {item_title}", f"{item_artist} — {item_title}",
         f"{item_title} - {item_artist}", f"{item_title} — {item_artist}",
