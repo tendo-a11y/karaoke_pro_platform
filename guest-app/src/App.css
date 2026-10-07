@@ -838,3 +838,13 @@ img { max-width: 100%; }
 /* Три кнопки справа (Избранное, Мои заказы, История): отступ и черта только у первой. */
 .finder-modes .finder-modes__fav ~ .finder-modes__fav { margin-left: 0; }
 .finder-modes .finder-modes__fav ~ .finder-modes__fav::before { display: none; }
+
+/* ДОБАВЛЕНО (2026-10): две рамки — режимы поиска и "Мои заказы / Избранное / История". */
+.finder-modes { gap: 8px; }
+.finder-group {
+  display: flex; flex-wrap: wrap; gap: 4px; padding: 6px;
+  border: 1px solid var(--border); border-radius: 14px; background: var(--panel-alt);
+}
+.finder-group--extra { border-color: var(--ok); }
+.finder-modes .finder-group .finder-modes__fav { margin-left: 0; }
+.finder-modes .finder-group .finder-modes__fav::before { display: none; }
