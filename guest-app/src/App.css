@@ -713,7 +713,7 @@ select {
   border-radius: 12px;
   padding: 12px;
   margin-bottom: 14px;
-  animation: ai-search-pulse 1.6s ease-in-out infinite;
+  animation: ai-search-pulse 0.9s ease-in-out infinite;
 }
 .order-form-panel .ai-search .order-form button[type="submit"] {
   background: var(--ok);
@@ -741,7 +741,7 @@ select {
   50% { opacity: 1; transform: scale(1.02); }
 }
 .order-form-panel .ai-search .order-form button[type="submit"].is-searching {
-  animation: find-button-pulse 2s ease-in-out infinite;
+  animation: find-button-pulse 0.9s ease-in-out infinite;
 }
 
 /* ДОБАВЛЕНО (2026-10, запрос пользователя): в живой очереди гостя его
@@ -767,7 +767,7 @@ select {
   font-weight: 700;
   color: var(--text);
   background: rgba(47, 191, 113, 0.3);
-  animation: queue-mine-blink 1.2s ease-in-out infinite;
+  animation: queue-mine-blink 0.9s ease-in-out infinite;
 }
 .queue-item__mine-badge { color: var(--ok); font-weight: 700; }
 .queue-item--my-table { border-left: 3px solid var(--ok); padding-left: 8px; }
@@ -868,20 +868,20 @@ img { max-width: 100%; }
   background: rgba(47, 191, 113, 0.14); color: var(--ok);
   font-size: 16px; font-weight: 700; cursor: pointer;
 }
-.screenshot-pick--blink { animation: screenshot-pick-blink 1.2s ease-in-out infinite; }
+.screenshot-pick--blink { animation: screenshot-pick-blink 0.9s ease-in-out infinite; }
 @keyframes screenshot-pick-blink {
   0%, 100% { background: rgba(47, 191, 113, 0.14); box-shadow: 0 0 0 0 rgba(47, 191, 113, 0); }
   50% { background: rgba(47, 191, 113, 0.45); box-shadow: 0 0 0 6px rgba(47, 191, 113, 0.18); color: #fff; }
 }
 
 /* ДОБАВЛЕНО (2026-10): подсветка следующего шага при заказе песни. */
-.step-blink { animation: step-blink 1.1s ease-in-out infinite; }
+.step-blink { animation: step-blink 0.9s ease-in-out infinite; }
 @keyframes step-blink {
   0%, 100% { box-shadow: 0 0 0 0 rgba(47, 191, 113, 0); }
   50% { box-shadow: 0 0 0 4px rgba(47, 191, 113, 0.6); border-color: var(--ok); }
 }
-.step-blink-item { animation: step-wave 1.8s ease-in-out infinite; }
+.step-blink-item { animation: step-wave 0.9s ease-in-out infinite; }
 @keyframes step-wave {
-  0%, 45%, 100% { background: transparent; }
-  20% { background: rgba(47, 191, 113, 0.38); }
+  0%, 60%, 100% { background: transparent; }
+  30% { background: rgba(47, 191, 113, 0.38); }
 }
