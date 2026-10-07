@@ -1565,11 +1565,6 @@ function TableGroupPanel({ token, guestId, hasTable, status, onGroupChanged, tab
       </h2>
       {open && (
       <>
-      {status === "admin" && (
-        <p className="empty-hint">
-          Вы — админ стола. Только вы разрешаете, кому сесть за стол. Чужие сесть не могут.
-        </p>
-      )}
       {error && <div className="banner banner--error">{error}</div>}
 
       {status === "pending" && (
@@ -1613,6 +1608,11 @@ function TableGroupPanel({ token, guestId, hasTable, status, onGroupChanged, tab
                       </button>
                     )}
                   </span>
+                  {m.is_admin && m.guest_id === guestId && (
+                    <p className="empty-hint" style={{ flexBasis: "100%", width: "100%", margin: "4px 0 0" }}>
+                      Вы — админ стола. Только вы разрешаете, кому сесть за стол. Чужие сесть не могут.
+                    </p>
+                  )}
                   {/* Та же карточка поверх экрана, что и у "❓" в категориях. */}
                   {m.is_admin && m.guest_id === guestId && showAdminInfo && (
                     <div className="service-card-overlay" onClick={() => setShowAdminInfo(false)}>
