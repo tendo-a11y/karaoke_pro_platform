@@ -35,7 +35,14 @@ class BridgeVirtualDJClient(VirtualDJClient):
     def _room(self) -> str:
         return f"bridge_club_{self.club_id}"
 
-    def _call(self, command: str, payload: dict) -> dict:
+    def get_history(self) -> list:
+        # Короткое ожидание: история — необязательная вещь, из-за неё панель
+        # KJ не должна подвисать, если мост занят или ещё не обновлён.
+        result = self._call("get_history", {}, timeout=4.0)
+        items = result.get("items")
+        return items if isinstance(items, list) else []
+
+    def _call(self, command: str, payload: dict, timeout: Optional[float] = None) -> dict:
         request_id = registry.new_request_id()
         pending = registry.register(request_id)
         socketio.emit(
@@ -44,10 +51,11 @@ class BridgeVirtualDJClient(VirtualDJClient):
             room=self._room(),
             namespace="/bridge",
         )
-        result = registry.wait(request_id, pending, self.timeout)
+        wait_for = timeout if timeout is not None else self.timeout
+        result = registry.wait(request_id, pending, wait_for)
         if result is None:
             raise VirtualDJError(
-                f"Компьютер KJ не ответил за {self.timeout:.0f}с — "
+                f"Компьютер KJ не ответил за {wait_for:.0f}с — "
                 f"мост offline или VirtualDJ не отвечает"
             )
         if result.get("error"):
