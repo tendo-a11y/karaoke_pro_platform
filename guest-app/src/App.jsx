@@ -1444,7 +1444,7 @@ function TableGroupPanel({ token, guestId, hasTable, status, onGroupChanged, tab
       {error && <div className="banner banner--error">{error}</div>}
 
       {status === "pending" && (
-        <p className="empty-hint">
+        <p className="table-wait-notice">
           ⏳ Заявка на стол{tableNo != null ? ` ${tableNo}` : ""} отправлена. Ждите — тот, кто первым сел за стол, должен подтвердить.
         </p>
       )}
@@ -1467,9 +1467,12 @@ function TableGroupPanel({ token, guestId, hasTable, status, onGroupChanged, tab
             <ul className="order-list table-group-members">
               {view.members.map((m) => (
                 <li key={m.guest_id} className="order-row table-group-member">
-                  <span>
+                  <span className="table-group-who">
+                    {m.photo_data_url ? <img src={m.photo_data_url} alt="" className="table-group-who__photo" /> : null}
                     {m.is_admin ? "👑 " : "🙂 "}
-                    {m.guest_id === guestId ? "Вы" : `Гость ${m.guest_id}`}
+                    {m.guest_id === guestId
+                      ? `Вы${m.display_name ? ` · ${m.display_name}` : ""}`
+                      : m.display_name || `Гость ${m.guest_id}`}
                     {m.is_admin && m.guest_id === guestId && (
                       <button
                         type="button"
@@ -1528,7 +1531,10 @@ function TableGroupPanel({ token, guestId, hasTable, status, onGroupChanged, tab
               <ul className="order-list">
                 {view.pending_requests.map((r) => (
                   <li key={r.id} className="order-row table-group-member">
-                    <span>Гость {r.guest_id}</span>
+                    <span className="table-group-who">
+                      {r.photo_data_url ? <img src={r.photo_data_url} alt="" className="table-group-who__photo" /> : null}
+                      🙋 {r.display_name || `Гость ${r.guest_id}`}
+                    </span>
                     <div className="favorite-actions">
                       <button
                         type="button"
