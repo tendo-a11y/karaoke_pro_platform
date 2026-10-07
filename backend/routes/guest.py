@@ -6,7 +6,7 @@ from flask import Blueprint, current_app, g, request
 from auth import issue_guest_token, require_guest
 from errors import api_error, api_ok
 from extensions import db
-from models import STATUS_COMPLETED, STATUS_ERROR, STATUS_ORDER_CHANGE_PENDING, STATUS_REJECTED, ChatMessage, Club, Order, OrderChangeRequest, Service
+from models import STATUS_COMPLETED, STATUS_ERROR, STATUS_ORDER_CHANGE_PENDING, STATUS_REJECTED, ChatMessage, Club, GuestAccount, Order, OrderChangeRequest, Service
 from services import ai_search_service, billing_service, guest_account_service, guest_status_service, song_service, table_board_service, table_close_service, table_group_service, vdj_service, vip_service, vip_topup_request_service
 from services.google_auth_service import GoogleAuthError, verify_google_credential
 from sockets import emit_chat_message, emit_order_created, emit_vip_request_created
@@ -1094,14 +1094,34 @@ def get_table_group():
     if view.outcome == "no_group":
         return api_ok({"group": None, "members": [], "pending_requests": [], "is_admin": False})
 
+    # ДОБАВЛЕНО (2026-10, запрос пользователя): имя и фото гостя (если он их
+    # задал) — в списке сидящих за столом и в заявках на присоединение.
+    ids = [m.guest_id for m in view.members] + [r.guest_id for r in view.pending_requests]
+    accounts = {}
+    if ids:
+        accounts = {
+            a.telegram_user_id: a
+            for a in GuestAccount.query.filter(
+                GuestAccount.club_id == g.club_id,
+                GuestAccount.telegram_user_id.in_(ids),
+            ).all()
+        }
+
+    def _who(guest_id):
+        account = accounts.get(guest_id)
+        return {
+            "display_name": account.display_name if account else None,
+            "photo_data_url": account.photo_data_url if account else None,
+        }
+
     return api_ok({
         "group": view.group.to_dict(),
         "is_admin": view.group.admin_guest_id == g.guest_id,
         "members": [
-            {**m.to_dict(), "is_admin": m.guest_id == view.group.admin_guest_id}
+            {**m.to_dict(), **_who(m.guest_id), "is_admin": m.guest_id == view.group.admin_guest_id}
             for m in view.members
         ],
-        "pending_requests": [r.to_dict() for r in view.pending_requests],
+        "pending_requests": [{**r.to_dict(), **_who(r.guest_id)} for r in view.pending_requests],
     })
 
 
