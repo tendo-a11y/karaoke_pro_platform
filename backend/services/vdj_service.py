@@ -306,6 +306,13 @@ def mark_played(order_id: int, kj):
         return order, "conflict"
 
     db.session.refresh(order)
+    # ДОБАВЛЕНО (2026-10, запрос пользователя): нажатое "Готово" убирает песню
+    # из живой очереди KJ и гостя, даже если в VirtualDJ она ещё стоит — та же
+    # метка, что и при закрытии стола (см. _merged_live_queue).
+    if order.vdj_item_id and not order.vdj_item_id.startswith("closed:"):
+        order.vdj_item_id = f"closed:{int(_utcnow().timestamp())}:{order.vdj_item_id}"[:255]
+        db.session.commit()
+        db.session.refresh(order)
     emit_order_updated(order)
 
     return order, "played"
@@ -831,7 +838,7 @@ def _merged_live_queue(club_id: int, persist: bool):
         db.session.query(Order.vdj_item_id)
         .filter(
             Order.club_id == club_id,
-            Order.status == STATUS_COMPLETED,
+            Order.status.in_((STATUS_COMPLETED, STATUS_PLAYING)),
             Order.vdj_item_id.like("closed:%"),
         )
         .all()
