@@ -615,7 +615,7 @@ function VipBalancePanel({ token, meInfo }) {
 // по принятому решению единая хронологическая лента, см. отчёт по
 // Finance/cashback history). Показываем только VIP-гостям — у обычных
 // гостей эта лента всегда пуста (транзакции существуют только у VIP).
-function VipHistoryPanel({ token }) {
+function VipHistoryPanel({ token, embedded = false }) {
   const [transactions, setTransactions] = useState([]);
   const [error, setError] = useState(null);
   const [loaded, setLoaded] = useState(false);
@@ -654,7 +654,7 @@ function VipHistoryPanel({ token }) {
   if (!loaded) return null;
 
   return (
-    <section className="panel vip-history-panel">
+    <section className={embedded ? "vip-history-panel profile-finance" : "panel vip-history-panel"}>
       <h2
         className="collapsible-header"
         role="button"
@@ -1965,6 +1965,9 @@ function ProfileNamePanel({ token, meInfo, onNameChanged }) {
           )}
         </div>
 
+        {/* Финансы VIP-гостя — внутри профиля (запрос пользователя 2026-10). */}
+        {meInfo.is_vip && <VipHistoryPanel token={token} embedded />}
+
         {/* ДОБАВЛЕНО (запрос пользователя 2026-10-04) — ссылки на
         политику конфиденциальности/условия использования и кнопка
         "Удалить мои данные" (право на удаление персональных данных),
@@ -2819,18 +2822,6 @@ export default function App() {
         <ProfileNamePanel token={session.token} meInfo={meInfo} onNameChanged={refreshMe} />
       )}
 
-      <VipPanel token={session.token} meInfo={meInfo} />
-
-      {meInfo.is_vip && <VipHistoryPanel token={session.token} />}
-
-      <TableGroupPanel
-        token={session.token}
-        guestId={session.guest_id}
-        hasTable={hasTable}
-        status={meInfo.table_group_status}
-        onGroupChanged={refreshMe}
-      />
-
       <section className="panel order-form-panel">
         <h2>Заказать песню</h2>
         {/* ИЗМЕНЕНО (жалоба пользователя 2026-09-22: "возможность выбрать
@@ -2912,6 +2903,18 @@ export default function App() {
           </>
         )}
       </section>
+
+      <VipPanel token={session.token} meInfo={meInfo} />
+
+      {meInfo.is_vip && !activated && <VipHistoryPanel token={session.token} />}
+
+      <TableGroupPanel
+        token={session.token}
+        guestId={session.guest_id}
+        hasTable={hasTable}
+        status={meInfo.table_group_status}
+        onGroupChanged={refreshMe}
+      />
 
       <section className="panel">
         {/* ДОБАВЛЕНО (2026-09-24, см. ORDERS_TABS выше) — переключатель
