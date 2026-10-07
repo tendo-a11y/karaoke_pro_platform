@@ -1011,6 +1011,8 @@ function resizeImageToBase64(file) {
 }
 
 function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra }) {
+  // "Не эта" под найденной песней: подсказываем другие способы — моргают "Ссылка" и "Скриншот".
+  const [suggestOther, setSuggestOther] = useState(false);
   const [mode, setMode] = useState("text");
   const [text, setText] = useState("");
   const [results, setResults] = useState([]);
@@ -1080,8 +1082,9 @@ function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra }) {
           <button
             key={m.key}
             type="button"
-            className={`link-btn${mode === m.key && !extra ? " finder-modes__active" : ""}`}
+            className={`link-btn${mode === m.key && !extra ? " finder-modes__active" : ""}${suggestOther && (m.key === "link" || m.key === "screenshot") ? " step-blink" : ""}`}
             onClick={() => {
+              setSuggestOther(false);
               if (extra && onExtra) onExtra(null);
               if (m.key === "screenshot" && onScreenshotHelp) onScreenshotHelp();
               else switchMode(m.key);
@@ -1146,6 +1149,35 @@ function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra }) {
                     🎵 {s.artist ? `${s.artist} — ${s.title}` : s.title}
                     {s.ordered_today && <span className="song-search__ordered-badge"> · уже заказана сегодня</span>}
                   </button>
+                  <div className="song-confirm-row">
+                    <button
+                      type="button"
+                      className="song-confirm song-confirm--yes step-blink"
+                      onClick={() => {
+                        onPick(s);
+                        setResults([]);
+                        setSearched(false);
+                        setSuggestOther(false);
+                        if (screenshotInputRef.current) screenshotInputRef.current.value = "";
+                      }}
+                    >
+                      ✅ Эта?
+                    </button>
+                    <button
+                      type="button"
+                      className="song-confirm song-confirm--no"
+                      onClick={() => {
+                        const next = results.filter((_, i) => i !== idx);
+                        setResults(next);
+                        if (next.length === 0) {
+                          setSearched(false);
+                          setSuggestOther(true);
+                        }
+                      }}
+                    >
+                      ✕ Не эта
+                    </button>
+                  </div>
                 </li>
               ))}
             </ul>
@@ -1186,6 +1218,35 @@ function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra }) {
                     🎵 {s.artist ? `${s.artist} — ${s.title}` : s.title}
                     {s.ordered_today && <span className="song-search__ordered-badge"> · уже заказана сегодня</span>}
                   </button>
+                  <div className="song-confirm-row">
+                    <button
+                      type="button"
+                      className="song-confirm song-confirm--yes step-blink"
+                      onClick={() => {
+                        onPick(s);
+                        setResults([]);
+                        setSearched(false);
+                        setSuggestOther(false);
+                        if (screenshotInputRef.current) screenshotInputRef.current.value = "";
+                      }}
+                    >
+                      ✅ Эта?
+                    </button>
+                    <button
+                      type="button"
+                      className="song-confirm song-confirm--no"
+                      onClick={() => {
+                        const next = results.filter((_, i) => i !== idx);
+                        setResults(next);
+                        if (next.length === 0) {
+                          setSearched(false);
+                          setSuggestOther(true);
+                        }
+                      }}
+                    >
+                      ✕ Не эта
+                    </button>
+                  </div>
                 </li>
               ))}
             </ul>
