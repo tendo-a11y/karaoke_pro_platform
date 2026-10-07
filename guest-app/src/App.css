@@ -801,3 +801,14 @@ img { max-width: 100%; }
 @media (max-width: 360px) {
   .app-shell { padding-left: 10px; padding-right: 10px; }
 }
+
+/* ДОБАВЛЕНО (2026-10): всплывающее сообщение "скоро ваша очередь". */
+.turn-toast {
+  position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
+  z-index: 1100; width: calc(100% - 24px); max-width: 456px;
+  display: flex; flex-direction: column; gap: 4px; text-align: left;
+  padding: 14px 16px; border-radius: 12px; border: 2px solid var(--ok);
+  background: #123524; color: #fff; font-size: 16px; font-weight: 700;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5); cursor: pointer;
+}
+.turn-toast__close { font-size: 12px; font-weight: 400; opacity: 0.75; }
