@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from extensions import db
 from models import (
@@ -13,6 +13,7 @@ from models import (
     STATUS_PROCESSING,
     STATUS_QUEUED,
     STATUS_REJECTED,
+    ChatMessage,
     Order,
     OrderChangeRequest,
     Service,
@@ -1123,7 +1124,58 @@ def get_guest_queue_view(club_id: int, guest_id: int) -> list[dict]:
             }
         )
 
+    try:
+        _notify_guest_turn_soon(club_id, guest_id, result)
+    except Exception:  # уведомление не должно ломать показ очереди
+        db.session.rollback()
+
     return result
+
+
+def _notify_guest_turn_soon(club_id: int, guest_id: int, queue_view: list[dict]) -> None:
+    """
+    ДОБАВЛЕНО (2026-10, запрос пользователя): за две песни и за одну песню
+    до выхода гостю приходит сообщение в чат с KJ. Каждое — один раз на
+    песню (проверка по тексту сообщения за последние 6 часов).
+    """
+    texts = []
+    for index, item in enumerate(queue_view):
+        if not item.get("is_mine") or index not in (1, 2):
+            continue
+        title = (item.get("song_title") or "").strip() or "без названия"
+        if index == 2:
+            texts.append(f"🎤 Приготовьтесь! До вашей песни «{title}» осталось 2 песни.")
+        else:
+            texts.append(f"🎤 Вы следующий! Ваша песня «{title}» — сразу после этой.")
+    if not texts:
+        return
+    since = datetime.now(timezone.utc) - timedelta(hours=6)
+    created = False
+    for text in texts:
+        exists = (
+            db.session.query(ChatMessage.id)
+            .filter(
+                ChatMessage.club_id == club_id,
+                ChatMessage.telegram_user_id == guest_id,
+                ChatMessage.from_guest.is_(False),
+                ChatMessage.message_text == text,
+                ChatMessage.created_at >= since,
+            )
+            .first()
+        )
+        if exists:
+            continue
+        db.session.add(
+            ChatMessage(
+                club_id=club_id,
+                telegram_user_id=guest_id,
+                from_guest=False,
+                message_text=text,
+            )
+        )
+        created = True
+    if created:
+        db.session.commit()
 
 
 def claim_vdj_queue_item(kj, vdj_item_id: str, song_title: str, artist, table_no, service_id):
