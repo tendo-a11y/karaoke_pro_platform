@@ -332,6 +332,19 @@ def transfer_identity(club_id: int, table_no: int, old_guest_id: int, new_guest_
 
 def leave_group(club_id: int, table_no: int, guest_id: int) -> MemberActionResult:
     if get_membership(club_id, table_no, guest_id) is None:
+        # ДОБАВЛЕНО (2026-10, запрос пользователя): гость может передумать и
+        # "встать", пока его заявку ещё не приняли — заявка просто снимается.
+        pending = (
+            TableJoinRequest.query
+            .filter_by(club_id=club_id, table_no=table_no, guest_id=guest_id, status=STATUS_TABLE_JOIN_PENDING)
+            .all()
+        )
+        if pending:
+            for join_request in pending:
+                join_request.status = STATUS_TABLE_JOIN_REJECTED
+                join_request.decided_at = _utcnow()
+            db.session.commit()
+            return MemberActionResult(outcome="ok")
         return MemberActionResult(outcome="not_a_member")
     _remove_member_and_reassign(club_id, table_no, guest_id)
     return MemberActionResult(outcome="ok")
