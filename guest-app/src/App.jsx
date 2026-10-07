@@ -3028,9 +3028,7 @@ export default function App() {
 
         <section className="panel">
           <h2>💬 Общий чат</h2>
-          <button type="button" className="btn-link" disabled>
-            Скоро
-          </button>
+          <p className="empty-hint">🛠 В разработке. Скоро заработает.</p>
         </section>
 
         <section className="panel">
