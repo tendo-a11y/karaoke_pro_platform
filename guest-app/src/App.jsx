@@ -2954,11 +2954,28 @@ export default function App() {
         {queue.length === 0 ? (
           <p className="empty-hint">Очередь пуста.</p>
         ) : (
+          <>
+          {/* ДОБАВЛЕНО (2026-10, запрос пользователя: "гость должен визуально
+          видеть в очереди, где его песня; пусть моргает зелёным; Crazy —
+          красные"): подсказка с номером ближайшей песни гостя над очередью. */}
+          {(() => {
+            const mineIndex = queue.findIndex((q) => q.is_mine);
+            if (mineIndex < 0) return null;
+            return (
+              <p className="queue-mine-summary">
+                🎤 Ваша песня — {mineIndex + 1}-я в очереди
+                {mineIndex > 0 ? `, перед вами ${mineIndex}` : " — вы следующие!"}
+              </p>
+            );
+          })()}
           <ol className="queue-list">
-            {queue.map((item) => {
+            {queue.map((item, index) => {
               const itemClasses = ["queue-item"];
+              const isMyTable =
+                !item.is_mine && item.table_no != null && item.table_no === meInfo.table_no;
               if (item.is_vip) itemClasses.push("queue-item--vip");
               if (item.is_crazy) itemClasses.push("queue-item--crazy");
+              if (isMyTable) itemClasses.push("queue-item--my-table");
               if (item.is_mine) itemClasses.push("queue-item--mine");
               return (
                 <li key={item.key ?? item.vdj_item_id} className={itemClasses.join(" ")}>
@@ -2967,12 +2984,14 @@ export default function App() {
                   🎵 {item.song_title}
                   {item.artist ? ` — ${item.artist}` : ""}
                   {item.is_mine ? (
-                    <span className="queue-item__mine-badge"> — ваша песня 🎤</span>
+                    <span className="queue-item__mine-badge"> — №{index + 1} в очереди · ваша песня 🎤</span>
                   ) : null}
+                  {isMyTable ? <span className="queue-item__table-badge"> — ваш стол</span> : null}
                 </li>
               );
             })}
           </ol>
+          </>
         )}
       </section>
     </div>
