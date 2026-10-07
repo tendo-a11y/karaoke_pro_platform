@@ -2599,7 +2599,47 @@ function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged }) {
   return (
     <div className="table-group-card">
       <button type="button" className="btn-link" onClick={onBack}>← К доске</button>
-      <h2>Стол {tableNo}</h2>
+      {/* ИЗМЕНЕНО (2026-10, запрос пользователя: "кнопку Переместить стол —
+      рядом с именем стола"): кнопка и форма переноса теперь сразу у
+      заголовка карточки, а не внизу под списком компании. */}
+      <h2 className="table-group-card__title">
+        Стол {tableNo}
+        {group && !moveOpen && (
+          <button type="button" className="btn btn--accent" disabled={busy} onClick={handleOpenMove}>
+            ⇄ Переместить стол
+          </button>
+        )}
+      </h2>
+      {group && (
+        <>
+          {moveOpen && (
+            <form className="table-group-card__move" onSubmit={handleMove}>
+              {freeTables ? (
+                <select value={moveTarget} onChange={(e) => setMoveTarget(e.target.value)} required>
+                  <option value="" disabled>Новый номер стола…</option>
+                  {freeTables.map((n) => (
+                    <option key={n} value={n}>{n}</option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  type="number"
+                  min="1"
+                  placeholder="Новый номер стола"
+                  value={moveTarget}
+                  onChange={(e) => setMoveTarget(e.target.value)}
+                  required
+                />
+              )}
+              <button type="submit" className="btn btn--accept" disabled={busy}>Перенести</button>
+              <button type="button" className="btn-link" disabled={busy} onClick={() => setMoveOpen(false)}>
+                Отмена
+              </button>
+            </form>
+          )}
+          {moveOpen && actionError && <div className="banner banner--error">{actionError}</div>}
+        </>
+      )}
 
       {loadError === "empty" && <p className="empty-hint">За этим столом сейчас никого нет.</p>}
       {loadError && loadError !== "empty" && <div className="banner banner--error">{loadError}</div>}
@@ -2670,38 +2710,8 @@ function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged }) {
             <button type="button" className="btn btn--reject" disabled={busy} onClick={handleClose}>
               🔒 Закрыть стол
             </button>
-            {!moveOpen && (
-              <button type="button" className="btn-link" disabled={busy} onClick={handleOpenMove}>
-                Переместить стол
-              </button>
-            )}
           </div>
 
-          {moveOpen && (
-            <form className="table-group-card__move" onSubmit={handleMove}>
-              {freeTables ? (
-                <select value={moveTarget} onChange={(e) => setMoveTarget(e.target.value)} required>
-                  <option value="" disabled>Новый номер стола…</option>
-                  {freeTables.map((n) => (
-                    <option key={n} value={n}>{n}</option>
-                  ))}
-                </select>
-              ) : (
-                <input
-                  type="number"
-                  min="1"
-                  placeholder="Новый номер стола"
-                  value={moveTarget}
-                  onChange={(e) => setMoveTarget(e.target.value)}
-                  required
-                />
-              )}
-              <button type="submit" className="btn btn--accept" disabled={busy}>Перенести</button>
-              <button type="button" className="btn-link" disabled={busy} onClick={() => setMoveOpen(false)}>
-                Отмена
-              </button>
-            </form>
-          )}
         </>
       )}
     </div>
