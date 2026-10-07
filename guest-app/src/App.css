@@ -848,3 +848,11 @@ img { max-width: 100%; }
 .finder-group--extra { border-color: var(--ok); }
 .finder-modes .finder-group .finder-modes__fav { margin-left: 0; }
 .finder-modes .finder-group .finder-modes__fav::before { display: none; }
+
+/* Шесть кнопок в один ряд: две рамки рядом, у каждой своя подложка. */
+.finder-modes { gap: 6px; align-items: stretch; }
+.finder-group { flex-wrap: nowrap; gap: 3px; padding: 4px; align-items: center; background: rgba(255, 176, 32, 0.10); border-color: rgba(255, 176, 32, 0.45); }
+.finder-group--extra { background: rgba(47, 191, 113, 0.10); border-color: var(--ok); }
+.finder-modes .finder-group .link-btn { padding: 4px 7px; font-size: 11px; white-space: nowrap; }
+.finder-modes .finder-group--extra .finder-modes__fav { background: transparent; }
+.finder-modes .finder-group--extra .finder-modes__fav.finder-modes__active { background: var(--ok); }
