@@ -302,8 +302,13 @@ def complete_table_orders(club_id: int, table_no: int, since) -> list[Order]:
         .all()
     )
     orders = [order for order in orders if order.id not in waiting_ids]
+    closed_ts = int(datetime.now(timezone.utc).timestamp())
     for order in orders:
         order.status = STATUS_COMPLETED
+        # Метка для живой очереди: песня закрытого стола сразу пропадает из
+        # неё, даже если в VirtualDJ ещё стоит (см. vdj_service._merged_live_queue).
+        if order.vdj_item_id and not order.vdj_item_id.startswith("closed:"):
+            order.vdj_item_id = f"closed:{closed_ts}:{order.vdj_item_id}"[:255]
     db.session.commit()
 
     for order in orders:
