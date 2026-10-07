@@ -3026,13 +3026,6 @@ export default function App() {
         чат (заглушка), 4) заказ новой песни (заглушка). */}
         <ChatPanel token={session.token} />
 
-        <ScreenshotOrderPanel
-          token={session.token}
-          services={services}
-          autoFocus={focusScreenshotOrder}
-          onFocused={() => setFocusScreenshotOrder(false)}
-        />
-
         <section className="panel">
           <h2>💬 Общий чат</h2>
           <button type="button" className="btn-link" disabled>
