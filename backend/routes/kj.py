@@ -1369,6 +1369,25 @@ def set_guest_photo(guest_id):
     return api_ok(account.to_dict())
 
 
+@bp.post("/guests/<guest_id>/make-vip")
+@require_kj
+def make_guest_vip(guest_id):
+    """KJ сам переводит гостя в VIP из вкладки "Гости", без заявки от гостя
+    (запрос пользователя 2026-10) — см. vip_service.make_vip_directly."""
+    parsed_id = _parse_guest_id(guest_id)
+    if parsed_id is None:
+        return api_error(400, "VALIDATION_ERROR", "guest_id должен быть числом")
+    vip_client, outcome = vip_service.make_vip_directly(g.club_id, parsed_id, g.kj)
+    if outcome == "guest_account_missing":
+        return api_error(
+            409, "GUEST_ACCOUNT_MISSING",
+            "У гостя ещё нет постоянного профиля — он ни разу не входил через Google",
+        )
+    if outcome == "already_vip":
+        return api_error(409, "ALREADY_VIP", "Этот гость уже VIP")
+    return api_ok(vip_client.to_dict(), status_code=201)
+
+
 @bp.put("/guests/<guest_id>/name")
 @require_kj
 def rename_guest(guest_id):
