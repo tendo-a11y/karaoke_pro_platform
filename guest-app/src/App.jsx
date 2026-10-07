@@ -1070,8 +1070,12 @@ function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra }) {
           <button
             key={m.key}
             type="button"
-            className={`link-btn${mode === m.key ? " finder-modes__active" : ""}`}
-            onClick={() => (m.key === "screenshot" && onScreenshotHelp ? onScreenshotHelp() : switchMode(m.key))}
+            className={`link-btn${mode === m.key && !extra ? " finder-modes__active" : ""}`}
+            onClick={() => {
+              if (extra && onExtra) onExtra(null);
+              if (m.key === "screenshot" && onScreenshotHelp) onScreenshotHelp();
+              else switchMode(m.key);
+            }}
           >
             {m.label}
           </button>
@@ -1097,7 +1101,7 @@ function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra }) {
         ) : null}
       </div>
 
-      {mode === "screenshot" ? (
+      {extra ? null : mode === "screenshot" ? (
         <div className="screenshot-search">
           <p className="empty-hint">
             Загрузите скриншот из Shazam, Spotify, ВКонтакте или похожего приложения — определим песню по картинке.
