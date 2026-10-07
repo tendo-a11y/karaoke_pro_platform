@@ -1078,7 +1078,7 @@ function AiSearch({ token, onPick, onScreenshotHelp, favoritesOpen = false, onTo
         {onToggleFavorites ? (
           <button
             type="button"
-            className={`link-btn${favoritesOpen ? " finder-modes__active" : ""}`}
+            className={`link-btn finder-modes__fav${favoritesOpen ? " finder-modes__active" : ""}`}
             onClick={onToggleFavorites}
           >
             ☆ Избранное / История
