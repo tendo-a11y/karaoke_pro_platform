@@ -313,7 +313,7 @@ function LegalPageScreen({ page }) {
 // категории) и подтверждением цены для Crazy — то же, что уже есть в
 // главной форме заказа, теперь и в "Заказать снова", "Заменить песню" и
 // "Заказ через скриншот", чтобы предупреждение о цене нельзя было обойти.
-function ServiceSelect({ services, value, onChange, disabled }) {
+function ServiceSelect({ services, value, onChange, disabled, highlight = false }) {
   // Свой список выбора категории вместо системного (запрос пользователя
   // 2026-10): в раскрытом списке у каждой категории кнопка "❓", которая
   // открывает карточку категории поверх экрана (название, цена, описание,
@@ -356,7 +356,7 @@ function ServiceSelect({ services, value, onChange, disabled }) {
       />
       <button
         type="button"
-        className="service-picker__toggle"
+        className={`service-picker__toggle${highlight && !value && !open ? " step-blink" : ""}`}
         disabled={disabled}
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
@@ -366,8 +366,18 @@ function ServiceSelect({ services, value, onChange, disabled }) {
       </button>
       {open && (
         <ul className="service-picker__list">
-          {services.map((s) => (
-            <li key={s.id} className={selected && selected.id === s.id ? "service-picker__item--selected" : undefined}>
+          {services.map((s, index) => (
+            <li
+              key={s.id}
+              className={
+                selected && selected.id === s.id
+                  ? "service-picker__item--selected"
+                  : highlight && !value
+                    ? "step-blink-item"
+                    : undefined
+              }
+              style={highlight && !value ? { animationDelay: `${index * 0.25}s` } : undefined}
+            >
               <div className="service-picker__row">
                 <button type="button" className="service-picker__option" onClick={() => choose(s)}>
                   {labelOf(s)}
@@ -2983,6 +2993,7 @@ export default function App() {
                 placeholder="Исполнитель (обязательно)"
                 maxLength={200}
                 required
+                className={songTitle.trim() && !artist.trim() ? "step-blink" : undefined}
               />
               {services.length > 0 && (
                 // "Без тарифа" убран из списка (запрос пользователя
@@ -2991,9 +3002,22 @@ export default function App() {
                 // плейсхолдер-опция ниже недоступна для повторного выбора
                 // (disabled), поэтому required реально не даёт отправить
                 // заказ без осознанного выбора категории каждый раз.
-                <ServiceSelect services={services} value={serviceId} onChange={setServiceId} />
+                <ServiceSelect
+                  services={services}
+                  value={serviceId}
+                  onChange={setServiceId}
+                  highlight={Boolean(songTitle.trim() && artist.trim())}
+                />
               )}
-              <button type="submit" disabled={submitting || !songTitle.trim() || !artist.trim()}>
+              <button
+                type="submit"
+                disabled={submitting || !songTitle.trim() || !artist.trim()}
+                className={
+                  !submitting && songTitle.trim() && artist.trim() && (serviceId || services.length === 0)
+                    ? "step-blink"
+                    : undefined
+                }
+              >
                 {submitting ? "Отправляем…" : "🎶 Заказать"}
               </button>
             </form>
