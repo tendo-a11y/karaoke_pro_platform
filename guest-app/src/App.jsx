@@ -1398,6 +1398,31 @@ function TableGroupPanel({ token, guestId, hasTable, status, onGroupChanged, tab
   // ДОБАВЛЕНО (2026-10, запрос пользователя): блок сворачивается, как "Профиль".
   const [groupOpen, setGroupOpen] = useState(false);
   const [view, setView] = useState(null);
+  // ДОБАВЛЕНО (2026-10, запрос пользователя): права админа стола переходят
+  // следующему гостю автоматически — новому админу показываем уведомление.
+  const [adminNotice, setAdminNotice] = useState(null);
+  const prevAdminRef = useRef(null);
+  useEffect(() => {
+    if (!view || !Array.isArray(view.members)) return;
+    const admin = view.members.find((m) => m.is_admin);
+    if (!admin) return;
+    const prev = prevAdminRef.current;
+    if (admin.guest_id === guestId && prev && prev.id !== guestId) {
+      const stillHere = view.members.some((m) => m.guest_id === prev.id);
+      const who = prev.name || "Админ стола";
+      setAdminNotice(
+        stillHere
+          ? `${who} передал(а) вам права — теперь вы админ стола.`
+          : `${who} ушёл(а) — теперь вы админ стола.`,
+      );
+      try {
+        if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+      } catch {
+        // вибрация недоступна — не страшно
+      }
+    }
+    prevAdminRef.current = { id: admin.guest_id, name: admin.display_name || null };
+  }, [view, guestId]);
   const [error, setError] = useState(null);
   const [busyKey, setBusyKey] = useState(null);
   const [requestingJoin, setRequestingJoin] = useState(false);
@@ -1516,6 +1541,12 @@ function TableGroupPanel({ token, guestId, hasTable, status, onGroupChanged, tab
 
   return (
     <section className="panel table-group-panel">
+      {adminNotice ? (
+        <button type="button" className="turn-toast" onClick={() => setAdminNotice(null)}>
+          👑 {adminNotice} Только вы решаете, кому сесть за стол.
+          <span className="turn-toast__close">Нажмите, чтобы закрыть</span>
+        </button>
+      ) : null}
       <h2
         className="collapsible-header"
         role="button"
