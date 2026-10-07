@@ -23,11 +23,13 @@ from services.vdj_service import (
     claim_vdj_queue_item,
     confirm_order,
     get_kj_queue_view,
+    link_order_to_vdj_item,
     list_pending_change_requests,
     mark_played,
     push_order_to_queue,
     reject_order,
     reject_order_change_request,
+    rename_order,
     update_order_category,
     update_order_table,
 )
@@ -237,6 +239,66 @@ def mark_played_route(order_id):
         return api_error(status_code, error_code, message)
 
     return api_error(500, "INTERNAL_ERROR", "Неизвестный результат обработки заказа")
+
+
+_RENAME_LINK_OUTCOME_HTTP = {
+    "not_found": (404, "ORDER_NOT_FOUND", "Заказ не найден"),
+    "forbidden": (403, "FORBIDDEN", "Нет доступа к этому заказу"),
+    "not_allowed": (409, "ORDER_NOT_EDITABLE", "Этот заказ уже нельзя изменить — он сыгран или снят"),
+    "vdj_error": (502, "VDJ_UNAVAILABLE", "Нет связи с VirtualDJ"),
+    "item_not_found": (404, "VDJ_ITEM_NOT_FOUND", "Этой песни уже нет в очереди VirtualDJ"),
+    "already_linked": (409, "ALREADY_LINKED", "Эта песня VirtualDJ уже привязана к другому заказу"),
+}
+
+
+@bp.put("/order/<int:order_id>/rename")
+@require_kj
+def rename_order_route(order_id):
+    """
+    KJ исправляет название (и исполнителя) песни в заказе на точное, как в
+    VirtualDJ (запрос пользователя 2026-10) — после этого заказ и "ничья"
+    позиция VirtualDJ с тем же названием сливаются в живой очереди в одну
+    строку. См. vdj_service.rename_order.
+    """
+    payload = request.get_json(silent=True) or {}
+    song_title = payload.get("song_title")
+    artist = payload.get("artist")
+    if not isinstance(song_title, str) or not song_title.strip():
+        return api_error(400, "VALIDATION_ERROR", "Название песни обязательно")
+    if artist is not None and not isinstance(artist, str):
+        return api_error(400, "VALIDATION_ERROR", "Исполнитель должен быть строкой")
+    song_title = song_title.strip()[:500]
+    artist = (artist or "").strip()[:500] or None
+
+    order, outcome = rename_order(order_id, g.kj, song_title, artist)
+    if outcome == "ok":
+        return api_ok(order.to_dict())
+    status_code, error_code, message = _RENAME_LINK_OUTCOME_HTTP.get(
+        outcome, (500, "INTERNAL_ERROR", "Неизвестный результат обработки заказа"),
+    )
+    return api_error(status_code, error_code, message)
+
+
+@bp.put("/order/<int:order_id>/link-vdj")
+@require_kj
+def link_order_to_vdj_route(order_id):
+    """
+    Кнопка "🔗 Это одна песня" в живой очереди: KJ указывает, какая позиция
+    VirtualDJ — это и есть данный принятый заказ. См.
+    vdj_service.link_order_to_vdj_item.
+    """
+    payload = request.get_json(silent=True) or {}
+    vdj_item_id = payload.get("vdj_item_id")
+    if not isinstance(vdj_item_id, str) or not vdj_item_id:
+        return api_error(400, "VALIDATION_ERROR", "vdj_item_id обязателен")
+
+    order, outcome = link_order_to_vdj_item(order_id, g.kj, vdj_item_id)
+    if outcome == "ok":
+        return api_ok(order.to_dict())
+    status_code, error_code, message = _RENAME_LINK_OUTCOME_HTTP.get(
+        outcome, (500, "INTERNAL_ERROR", "Неизвестный результат обработки заказа"),
+    )
+    return api_error(status_code, error_code, message)
 
 
 @bp.put("/order/<int:order_id>/push-to-vdj")
