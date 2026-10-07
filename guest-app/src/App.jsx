@@ -1774,8 +1774,8 @@ function ScreenshotOrderPanel({ token, services, autoFocus, onFocused }) {
           </button>
         </div>
       )}
-      <label className="btn-link profile-photo-upload">
-        {busy ? "Загружаем…" : pendingImage ? "Заменить скриншот" : "Выбрать скриншот"}
+      <label className={`profile-photo-upload screenshot-pick${!busy && !pendingImage ? " screenshot-pick--blink" : ""}`}>
+        {busy ? "Загружаем…" : pendingImage ? "Заменить скриншот / фото" : "📷 Выберите скриншот / Фото"}
         <input
           type="file"
           accept="image/*"
