@@ -2331,6 +2331,36 @@ export default function App() {
   // вкладке от "текущего").
   const [orderHistoryDays, setOrderHistoryDays] = useState(null);
   const [queue, setQueue] = useState([]);
+  // ДОБАВЛЕНО (2026-10): всплывающее сообщение "скоро ваша очередь" — за
+  // две песни и за одну песню до выхода гостя, один раз на песню.
+  const [turnToast, setTurnToast] = useState(null);
+  const turnToastShownRef = useRef(new Set());
+  useEffect(() => {
+    let text = null;
+    queue.forEach((item, index) => {
+      if (!item.is_mine || (index !== 1 && index !== 2)) return;
+      const mark = `${item.song_title}|${index}`;
+      if (turnToastShownRef.current.has(mark)) return;
+      turnToastShownRef.current.add(mark);
+      if (text && index === 2) return;
+      text =
+        index === 2
+          ? `🎤 Приготовьтесь! До вашей песни «${item.song_title}» осталось 2 песни.`
+          : `🎤 Вы следующий! Ваша песня «${item.song_title}» — сразу после этой.`;
+    });
+    if (!text) return;
+    setTurnToast(text);
+    try {
+      if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+    } catch {
+      // вибрация недоступна — не страшно
+    }
+  }, [queue]);
+  useEffect(() => {
+    if (!turnToast) return undefined;
+    const timer = setTimeout(() => setTurnToast(null), 30000);
+    return () => clearTimeout(timer);
+  }, [turnToast]);
   const [services, setServices] = useState([]);
   const [favoriteBusyOrderId, setFavoriteBusyOrderId] = useState(null);
   const [favoriteMessage, setFavoriteMessage] = useState(null);
@@ -2950,6 +2980,12 @@ export default function App() {
       <FavoritesPanel token={session.token} services={services} onOrdered={refreshOrders} orderingDisabled={!canOrder} />
 
       <section className="panel">
+        {turnToast ? (
+          <button type="button" className="turn-toast" onClick={() => setTurnToast(null)}>
+            {turnToast}
+            <span className="turn-toast__close">Нажмите, чтобы закрыть</span>
+          </button>
+        ) : null}
         <h2>Живая очередь</h2>
         {queue.length === 0 ? (
           <p className="empty-hint">Очередь пуста.</p>
