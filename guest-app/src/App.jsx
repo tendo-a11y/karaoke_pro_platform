@@ -1468,16 +1468,6 @@ function TableGroupPanel({ token, guestId, hasTable, status, onGroupChanged, tab
           ⏳ Заявка на стол{tableNo != null ? ` ${tableNo}` : ""} отправлена. Ждите. {acceptsText}
         </p>
       )}
-      {status === "pending" && (
-        <button
-          type="button"
-          className="link-btn"
-          disabled={busyKey === "leave"}
-          onClick={handleLeave}
-        >
-          🚪 Передумал — встать из-за стола
-        </button>
-      )}
       {status === "not_joined" && (
         <>
           <p className="empty-hint">
@@ -1586,6 +1576,17 @@ function TableGroupPanel({ token, guestId, hasTable, status, onGroupChanged, tab
                 ))}
               </ul>
             </div>
+          )}
+
+          {status === "pending" && (
+            <button
+              type="button"
+              className="link-btn"
+              disabled={busyKey === "leave"}
+              onClick={handleLeave}
+            >
+              🚪 Передумал — встать из-за стола
+            </button>
           )}
 
           {isMember && (
