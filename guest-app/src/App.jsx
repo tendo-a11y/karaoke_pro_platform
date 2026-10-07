@@ -1447,6 +1447,11 @@ function TableGroupPanel({ token, guestId, hasTable, status, onGroupChanged, tab
   // из неё вышел/кикнут — get_table_group у неё же и спрашиваем, поэтому
   // ветвим именно по status, а не по view.group.
   const isMember = status === "admin" || status === "member";
+  // Кто принимает на стол (запрос пользователя 2026-10): имя того, кто сел первым, если он его задал.
+  const tableAdmin = view && Array.isArray(view.members) ? view.members.find((m) => m.is_admin) : null;
+  const acceptsText = tableAdmin && tableAdmin.display_name
+    ? `Принимает на стол ${tableAdmin.display_name}.`
+    : "Тот, кто первым сел за стол, должен подтвердить.";
 
   return (
     <section className="panel table-group-panel">
@@ -1460,7 +1465,7 @@ function TableGroupPanel({ token, guestId, hasTable, status, onGroupChanged, tab
 
       {status === "pending" && (
         <p className="table-wait-notice">
-          ⏳ Заявка на стол{tableNo != null ? ` ${tableNo}` : ""} отправлена. Ждите — тот, кто первым сел за стол, должен подтвердить.
+          ⏳ Заявка на стол{tableNo != null ? ` ${tableNo}` : ""} отправлена. Ждите. {acceptsText}
         </p>
       )}
       {status === "pending" && (
@@ -1476,7 +1481,7 @@ function TableGroupPanel({ token, guestId, hasTable, status, onGroupChanged, tab
       {status === "not_joined" && (
         <>
           <p className="empty-hint">
-            Вы присоединяетесь к столу{tableNo != null ? ` ${tableNo}` : ""}. Тот, кто первым сел за стол, должен подтвердить.
+            Вы присоединяетесь к столу{tableNo != null ? ` ${tableNo}` : ""}. {acceptsText}
           </p>
           <button type="button" onClick={handleRequestJoin} disabled={requestingJoin}>
             {requestingJoin ? "Отправляем…" : `🙋 Присоединиться к столу${tableNo != null ? ` ${tableNo}` : ""}`}
