@@ -1606,7 +1606,7 @@ function TableGroupPanel({ token, guestId, hasTable, status, onGroupChanged, tab
                         disabled={busyKey === `kick-${m.guest_id}`}
                         onClick={() => runAction(`kick-${m.guest_id}`, () => api.kickTableGroupMember(token, m.guest_id))}
                       >
-                        🚪 Выгнать
+                        🚪 Снять со стола
                       </button>
                       <button
                         type="button"
