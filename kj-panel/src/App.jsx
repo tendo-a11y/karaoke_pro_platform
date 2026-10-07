@@ -230,6 +230,9 @@ function QueueTable({ queue, token, clubId }) {
                   ⚠ нет в VDJ
                 </span>
               )}
+              {item.tone ? (
+                <span className="tone-badge">🎚 Тон {item.tone > 0 ? `+${item.tone}` : item.tone}</span>
+              ) : null}
               {item.guest_song_text && (
                 <span className="queue-row__guest-text">гость написал: {item.guest_song_text}</span>
               )}
@@ -2916,6 +2919,9 @@ function OrdersBoardSlot({ slot, categories, busy, onAccept, onReject, onComplet
         )}
         <div className="table-slot__song">🎵 {slot.song_title}</div>
         {slot.artist && <div className="table-slot__artist">🎤 {slot.artist}</div>}
+        {slot.tone ? (
+          <div className="tone-badge">🎚 Тон {slot.tone > 0 ? `+${slot.tone}` : slot.tone}</div>
+        ) : null}
         {!canEditCategory && categoryName && <div className="table-slot__category">{categoryName}</div>}
         {slot.status === "error" && slot.error_message && (
           <div className="table-slot__error">{slot.error_message}</div>
