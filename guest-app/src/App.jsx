@@ -1383,6 +1383,21 @@ function TableGroupPanel({ token, guestId, hasTable, status, onGroupChanged, tab
     }
   }
 
+  // Встал из-за стола — гость остаётся без стола, поэтому состав стола
+  // заново не запрашиваем, только обновляем его собственный статус.
+  async function handleLeave() {
+    setBusyKey("leave");
+    setError(null);
+    try {
+      await api.leaveTableGroup(token);
+      await onGroupChanged();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
   async function handleRequestJoin() {
     setRequestingJoin(true);
     setError(null);
@@ -1453,7 +1468,7 @@ function TableGroupPanel({ token, guestId, hasTable, status, onGroupChanged, tab
           type="button"
           className="link-btn"
           disabled={busyKey === "leave"}
-          onClick={() => runAction("leave", () => api.leaveTableGroup(token))}
+          onClick={handleLeave}
         >
           🚪 Передумал — встать из-за стола
         </button>
@@ -1573,7 +1588,7 @@ function TableGroupPanel({ token, guestId, hasTable, status, onGroupChanged, tab
               type="button"
               className="link-btn"
               disabled={busyKey === "leave"}
-              onClick={() => runAction("leave", () => api.leaveTableGroup(token))}
+              onClick={handleLeave}
             >
               🚪 Встать со стола
             </button>
