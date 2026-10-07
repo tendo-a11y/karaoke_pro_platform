@@ -553,6 +553,16 @@ def close_all_tables(club_id: int, kj) -> CloseAllResult:
             closed_table_nos.append(table_no)
     guest_status_service.clear_all_tables(club_id)
 
+    # ДОБАВЛЕНО (2026-10, запрос пользователя): "Закрыть все столы" — это
+    # очистка всего вечера, поэтому и чеки ранее закрытых столов у гостей
+    # больше не показываются.
+    TableCloseRequest.query.filter(
+        TableCloseRequest.club_id == club_id,
+        TableCloseRequest.status == STATUS_TABLE_CLOSE_APPROVED,
+        TableCloseRequest.hide_receipt.is_(False),
+    ).update({"hide_receipt": True}, synchronize_session=False)
+    db.session.commit()
+
     # ДОБАВЛЕНО (запрос пользователя: "Начало очереди" должно каждый раз
     # запрашиваться заново, а не оставаться от прошлого вечера) — "Закрыть
     # все столы" и есть тот самый конец вечера, поэтому именно здесь стол
@@ -612,5 +622,9 @@ def pending_receipt_for_guest(club_id: int, guest_id: int) -> dict | None:
     )
     for req in candidates:
         if req.member_guest_ids and guest_id_str in req.member_guest_ids:
+            # Пустой чек (ни одной песни) гостю не показываем.
+            receipt = req.receipt_json if isinstance(req.receipt_json, dict) else None
+            if receipt is not None and not receipt.get("song_count"):
+                continue
             return req.to_dict()
     return None
