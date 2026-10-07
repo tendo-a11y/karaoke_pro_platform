@@ -718,7 +718,7 @@ function VipHistoryPanel({ token, embedded = false }) {
   );
 }
 
-function FavoritesPanel({ token, services, onOrdered, orderingDisabled }) {
+function FavoritesPanel({ token, services, onOrdered, orderingDisabled, embedded = false }) {
   const [favorites, setFavorites] = useState([]);
   const [error, setError] = useState(null);
   const [busyId, setBusyId] = useState(null);
@@ -783,7 +783,10 @@ function FavoritesPanel({ token, services, onOrdered, orderingDisabled }) {
   }
 
   return (
-    <section className="panel">
+    <section className={embedded ? "profile-finance" : "panel"}>
+      {embedded ? (
+        <h2>☆ Избранное / История ({favorites.length})</h2>
+      ) : (
       <h2
         className="collapsible-header"
         role="button"
@@ -797,11 +800,12 @@ function FavoritesPanel({ token, services, onOrdered, orderingDisabled }) {
           }
         }}
       >
-        ☆ Избранное ({favorites.length})
+        ☆ Избранное / История ({favorites.length})
         <span className="collapsible-caret">{open ? "▲" : "▼"}</span>
       </h2>
+      )}
       {error && <div className="banner banner--error">{error}</div>}
-      {!open ? null : favorites.length === 0 ? (
+      {!open && !embedded ? null : favorites.length === 0 ? (
         <p className="empty-hint">Пока пусто — добавляйте песни из "Моих заказов".</p>
       ) : (
         <ul className="order-list">
@@ -996,7 +1000,7 @@ function resizeImageToBase64(file) {
   });
 }
 
-function AiSearch({ token, onPick, onScreenshotHelp }) {
+function AiSearch({ token, onPick, onScreenshotHelp, favoritesOpen = false, onToggleFavorites }) {
   const [mode, setMode] = useState("text");
   const [text, setText] = useState("");
   const [results, setResults] = useState([]);
@@ -1071,6 +1075,15 @@ function AiSearch({ token, onPick, onScreenshotHelp }) {
             {m.label}
           </button>
         ))}
+        {onToggleFavorites ? (
+          <button
+            type="button"
+            className={`link-btn${favoritesOpen ? " finder-modes__active" : ""}`}
+            onClick={onToggleFavorites}
+          >
+            ☆ Избранное / История
+          </button>
+        ) : null}
       </div>
 
       {mode === "screenshot" ? (
@@ -2334,6 +2347,7 @@ export default function App() {
   // щёлкать, чтобы увидеть весь список, который и так уже отфильтрован по
   // вкладке от "текущего").
   const [orderHistoryDays, setOrderHistoryDays] = useState(null);
+  const [favoritesOpen, setFavoritesOpen] = useState(false);
   const [queue, setQueue] = useState([]);
   // ДОБАВЛЕНО (2026-10): всплывающее сообщение "скоро ваша очередь" — за
   // две песни и за одну песню до выхода гостя, один раз на песню.
@@ -2846,7 +2860,18 @@ export default function App() {
             setSongTitle(song.title);
             setArtist(song.artist || "");
           }}
+          favoritesOpen={favoritesOpen}
+          onToggleFavorites={() => setFavoritesOpen((prev) => !prev)}
         />
+        {favoritesOpen ? (
+          <FavoritesPanel
+            token={session.token}
+            services={services}
+            onOrdered={refreshOrders}
+            orderingDisabled={!canOrder}
+            embedded
+          />
+        ) : null}
         {activated && !groupOk ? (
           <p className="empty-hint">
             Пока вы не одобренный участник группового стола — см. панель «Групповой стол» выше.
@@ -2904,8 +2929,6 @@ export default function App() {
           </>
         )}
       </section>
-
-      <FavoritesPanel token={session.token} services={services} onOrdered={refreshOrders} orderingDisabled={!canOrder} />
 
       {!activated && <VipPanel token={session.token} meInfo={meInfo} />}
 
