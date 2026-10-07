@@ -1609,7 +1609,21 @@ function TableGroupPanel({ token, guestId, hasTable, status, onGroupChanged, tab
                     )}
                   </span>
                   {m.is_admin && m.guest_id === guestId && (
-                    <p className="empty-hint" style={{ flexBasis: "100%", width: "100%", margin: "4px 0 0" }}>
+                    <p
+                      style={{
+                        flexBasis: "100%",
+                        width: "100%",
+                        margin: "6px 0 0",
+                        padding: "8px 10px",
+                        borderRadius: 8,
+                        borderLeft: "3px solid var(--accent)",
+                        background: "rgba(255, 176, 32, 0.12)",
+                        color: "var(--text)",
+                        fontSize: 14,
+                        fontWeight: 600,
+                        lineHeight: 1.35,
+                      }}
+                    >
                       Вы — админ стола. Только вы разрешаете, кому сесть за стол. Чужие сесть не могут.
                     </p>
                   )}
