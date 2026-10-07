@@ -316,6 +316,9 @@ class Order(db.Model):
     # исправил название на точное из VirtualDJ (см. vdj_service.rename_order /
     # link_order_to_vdj_item). NULL — название не менялось.
     guest_song_text = db.Column(db.String(1000), nullable=True)
+    # ДОБАВЛЕНО (2026-10, запрос пользователя): тональность, которую гость
+    # выбрал при заказе (от -6 до +6, без нуля). NULL — тон не выбран.
+    tone = db.Column(db.Integer, nullable=True)
     confirmed_by = db.Column(db.Integer, db.ForeignKey("kj_operators.id"), nullable=True)
 
     # automatic (по VirtualDJ History) | manual (KJ нажал вручную, fallback) — новое ТЗ §14
@@ -355,6 +358,7 @@ class Order(db.Model):
             "vdj_filepath": self.vdj_filepath,
             "error_message": self.error_message,
             "guest_song_text": self.guest_song_text,
+            "tone": self.tone,
             "completion_source": self.completion_source,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "confirmed_at": self.confirmed_at.isoformat() if self.confirmed_at else None,
