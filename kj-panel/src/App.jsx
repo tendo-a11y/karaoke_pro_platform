@@ -44,6 +44,13 @@ function QueueTable({ queue, token, clubId }) {
   // после первого живого теста: 3 песни, добавленные прямо в VirtualDJ,
   // попали в живую очередь KJ Pro, но назначить им стол было нельзя).
   const [claimDrafts, setClaimDrafts] = useState({});
+  // ДОБАВЛЕНО (2026-10, запрос пользователя): в живой очереди теперь стоят и
+  // принятые заказы, которых ещё нет в VirtualDJ (item.in_vdj === false).
+  // renameDraft — правка названия такого заказа на точное из VirtualDJ;
+  // linkingOrderId — режим "🔗 Это одна песня": KJ выбрал заказ и теперь
+  // указывает, с какой "ничьей" строкой VirtualDJ его склеить.
+  const [renameDraft, setRenameDraft] = useState(null); // { orderId, title, artist }
+  const [linkingOrderId, setLinkingOrderId] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -153,6 +160,40 @@ function QueueTable({ queue, token, clubId }) {
     }
   }
 
+  async function handleSaveRename(item) {
+    const title = (renameDraft?.title || "").trim();
+    if (!title) {
+      setRowError(item.order_id, "Название не может быть пустым");
+      return;
+    }
+    setBusyKey(`rename-${item.order_id}`);
+    setRowError(item.order_id, null);
+    try {
+      await api.renameOrder(token, item.order_id, title, (renameDraft?.artist || "").trim());
+      setRenameDraft(null);
+    } catch (err) {
+      setRowError(item.order_id, err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  async function handleLinkHere(item) {
+    const orderId = linkingOrderId;
+    if (orderId == null) return;
+    const errorKey = `claim-${item.vdj_item_id}`;
+    setBusyKey(`link-${item.vdj_item_id}`);
+    setRowError(errorKey, null);
+    try {
+      await api.linkOrderToVdj(token, orderId, item.vdj_item_id);
+      setLinkingOrderId(null);
+    } catch (err) {
+      setRowError(errorKey, err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
   async function handleRemove(item) {
     const key = item.vdj_item_id ?? `no-id-${item.order_id}`;
     setBusyKey(`remove-${key}`);
@@ -169,7 +210,7 @@ function QueueTable({ queue, token, clubId }) {
   return (
     <div className="queue-dropzone">
       {queue.length === 0 ? (
-        <p className="empty-hint">Очередь VirtualDJ пока пуста.</p>
+        <p className="empty-hint">Очередь пока пуста.</p>
       ) : (
         // Вертикальный список вместо таблицы — тот же стиль строк, что и на
         // экране "Категории" (.categories-list/.category-row), по просьбе
@@ -178,7 +219,7 @@ function QueueTable({ queue, token, clubId }) {
         <ul className="queue-list-vertical">
           {queue.map((item, idx) => (
             <li
-              key={item.vdj_item_id ?? `no-id-${idx}`}
+              key={item.vdj_item_id ?? (item.order_id != null ? `order-${item.order_id}` : `no-id-${idx}`)}
               className={`queue-row${item.orphaned ? " queue-row--orphaned" : ""}`}
             >
               <span className="queue-row__position">{idx + 1}</span>
@@ -187,6 +228,78 @@ function QueueTable({ queue, token, clubId }) {
               {item.orphaned && (
                 <span className="queue-row__orphaned-badge" title="Эта песня больше не найдена в самом VirtualDJ — например, из-за перезапуска сервера. Можно только удалить.">
                   ⚠ нет в VDJ
+                </span>
+              )}
+              {item.guest_song_text && (
+                <span className="queue-row__guest-text">гость написал: {item.guest_song_text}</span>
+              )}
+              {item.order_id != null && item.in_vdj === true && (
+                <span className="queue-row__invdj-badge">✓ в VirtualDJ</span>
+              )}
+              {item.order_id != null && item.in_vdj === false && (
+                <>
+                  <span className="queue-row__orphaned-badge">нет в VirtualDJ</span>
+                  <button
+                    type="button"
+                    className="btn-link"
+                    onClick={() =>
+                      setRenameDraft(
+                        renameDraft?.orderId === item.order_id
+                          ? null
+                          : { orderId: item.order_id, title: item.song_title || "", artist: item.artist || "" },
+                      )
+                    }
+                  >
+                    ✏️ Название
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-link"
+                    onClick={() => setLinkingOrderId(linkingOrderId === item.order_id ? null : item.order_id)}
+                  >
+                    {linkingOrderId === item.order_id ? "✕ Отмена" : "🔗 Это одна песня"}
+                  </button>
+                </>
+              )}
+              {item.order_id == null && item.vdj_item_id && linkingOrderId != null && (
+                <button
+                  type="button"
+                  className="btn btn--accent"
+                  disabled={busyKey === `link-${item.vdj_item_id}`}
+                  onClick={() => handleLinkHere(item)}
+                >
+                  🔗 Склеить с этой
+                </button>
+              )}
+              {linkingOrderId === item.order_id && item.order_id != null && (
+                <p className="empty-hint queue-row__error">
+                  Теперь нажмите «🔗 Склеить с этой» у нужной песни из VirtualDJ выше.
+                </p>
+              )}
+              {renameDraft?.orderId === item.order_id && item.order_id != null && (
+                <span className="queue-row__rename">
+                  <input
+                    type="text"
+                    className="vip-amount-input queue-row__rename-input"
+                    placeholder="Точное название, как в VirtualDJ"
+                    value={renameDraft.title}
+                    onChange={(event) => setRenameDraft({ ...renameDraft, title: event.target.value })}
+                  />
+                  <input
+                    type="text"
+                    className="vip-amount-input queue-row__rename-input"
+                    placeholder="Исполнитель"
+                    value={renameDraft.artist}
+                    onChange={(event) => setRenameDraft({ ...renameDraft, artist: event.target.value })}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn--accent"
+                    disabled={busyKey === `rename-${item.order_id}`}
+                    onClick={() => handleSaveRename(item)}
+                  >
+                    Сохранить
+                  </button>
                 </span>
               )}
               {item.order_id != null ? (
@@ -2836,11 +2949,9 @@ function OrdersBoardSlot({ slot, categories, busy, onAccept, onReject, onComplet
           личность (см. push_order_to_queue() в backend). Показывается,
           пока песня ещё не поставлена (vdj_item_id пуст) — после этого
           место само освобождается кнопкой "Готово", как и раньше. */}
-          {!slot.vdj_item_id && (
-            <button type="button" className="btn btn--complete" disabled={busy} onClick={() => onPushToVdj(slot.order_id)}>
-              🎵 В очередь VDJ
-            </button>
-          )}
+          {/* Кнопка "🎵 В очередь VDJ" убрана (2026-10): принятый заказ сразу
+          стоит в живой очереди, а с песней в VirtualDJ склеивается по
+          названию или кнопкой "🔗 Это одна песня" (см. QueueTable). */}
           {canComplete && (
             <button type="button" className="btn btn--complete" disabled={busy} onClick={() => onComplete(slot.order_id)}>
               🏁 Готово
