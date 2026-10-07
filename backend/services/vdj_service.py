@@ -746,6 +746,215 @@ def update_order_category(order_id: int, kj, service_id):
     return order, "updated"
 
 
+def _norm_song_name(value) -> str:
+    return " ".join((value or "").lower().replace("ё", "е").split())
+
+
+def _order_matches_vdj_item(order, item) -> bool:
+    """
+    Одна и та же песня? Сравнение названия заказа с позицией VirtualDJ без
+    учёта регистра, лишних пробелов и "ё/е". Исполнитель сравнивается,
+    только если он указан с обеих сторон; также учитывается, что VirtualDJ
+    или гость могли записать "исполнитель - название" одной строкой.
+    """
+    order_title = _norm_song_name(order.song_title)
+    order_artist = _norm_song_name(order.artist)
+    item_title = _norm_song_name(item.song_title)
+    item_artist = _norm_song_name(item.artist)
+    if not order_title or not item_title:
+        return False
+    if order_title == item_title and (not order_artist or not item_artist or order_artist == item_artist):
+        return True
+    if item_artist and order_title in (
+        f"{item_artist} - {item_title}", f"{item_artist} — {item_title}",
+        f"{item_title} - {item_artist}", f"{item_title} — {item_artist}",
+    ):
+        return True
+    if order_artist and item_title in (
+        f"{order_artist} - {order_title}", f"{order_artist} — {order_title}",
+        f"{order_title} - {order_artist}", f"{order_title} — {order_artist}",
+    ):
+        return True
+    return False
+
+
+def _remember_guest_song_text(order) -> None:
+    """Сохраняет исходный текст гостя один раз — перед первой сменой названия."""
+    if order.guest_song_text is None:
+        order.guest_song_text = f"{order.artist} — {order.song_title}" if order.artist else order.song_title
+
+
+def _merged_live_queue(club_id: int, persist: bool):
+    """
+    Общая основа живой очереди для KJ Panel и Guest App (запрос пользователя
+    2026-10: "Принять" должно сразу отправлять песню в живую очередь, а
+    заказ гостя "cvecha" и песня "Свеча", которую KJ сам поставил в
+    VirtualDJ, после переименования должны стать одной строкой).
+
+    Возвращает (rows, waiting):
+      rows    — [(позиция VirtualDJ, заказ или None)] в порядке VirtualDJ;
+      waiting — принятые заказы (STATUS_QUEUED), которых в VirtualDJ нет.
+
+    Слияние: сначала по уже сохранённой связи (Order.vdj_item_id), затем —
+    для ещё "ничьих" позиций VirtualDJ — по совпадению названия
+    (_order_matches_vdj_item). persist=True (вызовы со стороны KJ) сохраняет
+    найденную связь в заказе; persist=False (Guest App) только показывает.
+
+    Заказ, чья позиция из VirtualDJ исчезла (песня отыграна/убрана в самом
+    VirtualDJ или мост переподключился): заказ, созданный KJ из позиции
+    VirtualDJ (source="virtualdj"), снимается, как и раньше; заказ гостя или
+    ручной заказ KJ НЕ снимается — он просто снова считается "нет в
+    VirtualDJ" и остаётся в очереди, пока KJ сам не отметит его сыгранным
+    или не уберёт (иначе спетая песня пропадала бы из чека стола).
+    """
+    vdj = get_vdj_client(club_id)
+    live_queue = vdj.get_queue()
+
+    linked_orders = (
+        db.session.query(Order)
+        .filter(
+            Order.club_id == club_id,
+            Order.status == STATUS_QUEUED,
+            Order.vdj_item_id.isnot(None),
+        )
+        .order_by(Order.queued_at.asc())
+        .all()
+    )
+    waiting = (
+        db.session.query(Order)
+        .filter(
+            Order.club_id == club_id,
+            Order.status == STATUS_QUEUED,
+            Order.vdj_item_id.is_(None),
+        )
+        .order_by(Order.queued_at.asc(), Order.id.asc())
+        .all()
+    )
+
+    rows = []
+    for item in live_queue:
+        matched = None
+        if item.vdj_item_id:
+            for order in linked_orders:
+                if order.vdj_item_id == item.vdj_item_id or item.vdj_item_id.endswith(order.vdj_item_id):
+                    matched = order
+                    break
+            if matched is not None:
+                linked_orders.remove(matched)
+        rows.append([item, matched])
+
+    changed = False
+    for order in linked_orders:
+        if order.source == "virtualdj":
+            if persist:
+                order.status = STATUS_REJECTED
+                order.rejected_at = _utcnow()
+                changed = True
+        else:
+            if persist:
+                order.vdj_item_id = None
+                changed = True
+            waiting.append(order)
+
+    for row in rows:
+        item, matched = row
+        if matched is not None or not item.vdj_item_id:
+            continue
+        for order in waiting:
+            if _order_matches_vdj_item(order, item):
+                row[1] = order
+                waiting.remove(order)
+                if persist:
+                    order.vdj_item_id = item.vdj_item_id
+                    changed = True
+                break
+
+    if changed:
+        db.session.commit()
+
+    waiting.sort(key=lambda o: (o.queued_at or o.created_at, o.id))
+    return [(item, matched) for item, matched in rows], waiting
+
+
+def rename_order(order_id: int, kj, song_title: str, artist):
+    """
+    KJ исправляет название песни в заказе на точное (как в VirtualDJ) —
+    кнопка "✏️ Название" в живой очереди. Исходный текст гостя сохраняется
+    в guest_song_text. Если после этого название совпало с "ничьей"
+    позицией VirtualDJ — они сольются при пересборке очереди ниже.
+    Возвращает (order, outcome): not_found | forbidden | not_allowed | ok.
+    """
+    order = db.session.get(Order, order_id)
+    if order is None:
+        return None, "not_found"
+    if order.club_id != kj.club_id:
+        return None, "forbidden"
+    if order.status not in (STATUS_PENDING, STATUS_QUEUED):
+        return order, "not_allowed"
+
+    _remember_guest_song_text(order)
+    order.song_title = song_title
+    order.artist = artist or None
+    db.session.commit()
+
+    emit_order_updated(order)
+    emit_queue_updated(kj.club_id, get_kj_queue_view(kj.club_id))
+    db.session.refresh(order)
+    return order, "ok"
+
+
+def link_order_to_vdj_item(order_id: int, kj, vdj_item_id: str):
+    """
+    Кнопка "🔗 Это одна песня": KJ вручную указывает, что принятый заказ и
+    позиция VirtualDJ — одна и та же песня. Заказ получает точное название
+    из VirtualDJ (исходный текст гостя сохраняется) и связь с позицией.
+    Возвращает (order, outcome): not_found | forbidden | not_allowed |
+    vdj_error | item_not_found | already_linked | ok.
+    """
+    order = db.session.get(Order, order_id)
+    if order is None:
+        return None, "not_found"
+    if order.club_id != kj.club_id:
+        return None, "forbidden"
+    if order.status != STATUS_QUEUED:
+        return order, "not_allowed"
+
+    vdj = get_vdj_client(kj.club_id)
+    try:
+        live_queue = vdj.get_queue()
+    except VirtualDJError:
+        return order, "vdj_error"
+    item = next((i for i in live_queue if i.vdj_item_id and i.vdj_item_id == vdj_item_id), None)
+    if item is None:
+        return order, "item_not_found"
+
+    taken = (
+        Order.query
+        .filter(
+            Order.club_id == kj.club_id,
+            Order.status == STATUS_QUEUED,
+            Order.vdj_item_id == vdj_item_id,
+            Order.id != order.id,
+        )
+        .first()
+    )
+    if taken is not None:
+        return order, "already_linked"
+
+    _remember_guest_song_text(order)
+    if item.song_title:
+        order.song_title = item.song_title
+    if item.artist:
+        order.artist = item.artist
+    order.vdj_item_id = vdj_item_id
+    db.session.commit()
+
+    emit_order_updated(order)
+    emit_queue_updated(kj.club_id, get_kj_queue_view(kj.club_id))
+    db.session.refresh(order)
+    return order, "ok"
+
+
 def get_kj_queue_view(club_id: int) -> list[dict]:
     """
     Живая очередь VirtualDJ клуба, где каждая позиция по возможности
@@ -802,33 +1011,14 @@ def get_kj_queue_view(club_id: int) -> list[dict]:
     управляет только явное действие KJ (кнопка "Готово"), а не сверка с
     живой очередью VirtualDJ.
     """
-    vdj = get_vdj_client(club_id)
-    live_queue = vdj.get_queue()
-
-    unused_orders = (
-        db.session.query(Order)
-        .filter(
-            Order.club_id == club_id,
-            Order.status == STATUS_QUEUED,
-            Order.vdj_item_id.isnot(None),
-        )
-        .order_by(Order.queued_at.asc())
-        .all()
-    )
+    # ИЗМЕНЕНО (2026-10, запрос пользователя): живая очередь теперь — это
+    # позиции VirtualDJ ПЛЮС принятые заказы, которых в VirtualDJ ещё нет
+    # (in_vdj=False). Заказ и позиция VirtualDJ с одинаковым названием
+    # сливаются в одну строку автоматически — см. _merged_live_queue().
+    rows, waiting = _merged_live_queue(club_id, persist=True)
 
     result = []
-    for item in live_queue:
-        matched = None
-        if item.vdj_item_id:
-            for order in unused_orders:
-                if not order.vdj_item_id:
-                    continue
-                if order.vdj_item_id == item.vdj_item_id or item.vdj_item_id.endswith(order.vdj_item_id):
-                    matched = order
-                    break
-            if matched is not None:
-                unused_orders.remove(matched)
-
+    for item, matched in rows:
         result.append(
             {
                 "vdj_item_id": item.vdj_item_id,
@@ -836,39 +1026,26 @@ def get_kj_queue_view(club_id: int) -> list[dict]:
                 "artist": item.artist,
                 "table_no": matched.table_no if matched else None,
                 "order_id": matched.id if matched else None,
-                # Доп. ТЗ "KJ Pro": нужен экрану живой очереди, чтобы показать
-                # и дать сменить категорию уже поставленной в очередь песни
-                # (см. update_order_category() выше).
                 "service_id": matched.service_id if matched else None,
                 "orphaned": False,
+                "in_vdj": True,
+                "guest_song_text": matched.guest_song_text if matched else None,
             }
         )
-
-    # Заказы, оставшиеся неразобранными выше — STATUS_QUEUED в базе, но нет
-    # такой позиции в живой очереди VirtualDJ вообще (см. докстринг).
-    #
-    # Запрос пользователя 2026-09-17: раньше такие "потерянные" заказы
-    # показывались KJ прямо в живой очереди с пометкой orphaned=True и
-    # кнопкой "Удалить" (см. историю в докстринге выше) — но на практике это
-    # только путает: KJ видит в очереди песню, которой там давно нет, и не
-    # понимает, что это не настоящий заказ, а мусор от рассинхронизации.
-    # Теперь вместо показа с ручным удалением — сразу молча снимаем такой
-    # заказ с очереди сами (STATUS_REJECTED, тем же способом, что и ручное
-    # удаление в remove_from_vdj_queue() выше), и в список живой очереди он
-    # вообще не попадает — KJ просто никогда его не увидит.
-    #
-    # Сознательно НЕ отправляем гостю уведомление "❌ Ваша песня удалена из
-    # очереди" (в отличие от remove_from_vdj_queue(), где это осознанное
-    # действие KJ прямо сейчас) — здесь мы просто обнаружили постфактум, что
-    # песня пропала из VirtualDJ неизвестно когда (возможно, уже давно), и
-    # присылать гостю через неопределённое время после этого "уведомление",
-    # никак не привязанное к моменту реального события, только сбило бы его
-    # с толку.
-    for order in unused_orders:
-        order.status = STATUS_REJECTED
-        order.rejected_at = _utcnow()
-    if unused_orders:
-        db.session.commit()
+    for order in waiting:
+        result.append(
+            {
+                "vdj_item_id": None,
+                "song_title": order.song_title,
+                "artist": order.artist,
+                "table_no": order.table_no,
+                "order_id": order.id,
+                "service_id": order.service_id,
+                "orphaned": False,
+                "in_vdj": False,
+                "guest_song_text": order.guest_song_text,
+            }
+        )
     return result
 
 
@@ -892,19 +1069,9 @@ def get_guest_queue_view(club_id: int, guest_id: int) -> list[dict]:
     очереди должно происходить только один раз за опрос, и её уже выполняет
     KJ Panel (оба экрана опрашивают один и тот же club_id параллельно).
     """
-    vdj = get_vdj_client(club_id)
-    live_queue = vdj.get_queue()
-
-    unused_orders = (
-        db.session.query(Order)
-        .filter(
-            Order.club_id == club_id,
-            Order.status == STATUS_QUEUED,
-            Order.vdj_item_id.isnot(None),
-        )
-        .order_by(Order.queued_at.asc())
-        .all()
-    )
+    # ИЗМЕНЕНО (2026-10): та же объединённая очередь, что и у KJ (позиции
+    # VirtualDJ + принятые заказы, которых там ещё нет), но без записи в базу.
+    rows, waiting = _merged_live_queue(club_id, persist=False)
 
     service_names = {
         s.id: (s.name or "")
@@ -921,20 +1088,10 @@ def get_guest_queue_view(club_id: int, guest_id: int) -> list[dict]:
         return name.upper() == "CRAZY"
 
     result = []
-    for item in live_queue:
-        matched = None
-        if item.vdj_item_id:
-            for order in unused_orders:
-                if not order.vdj_item_id:
-                    continue
-                if order.vdj_item_id == item.vdj_item_id or item.vdj_item_id.endswith(order.vdj_item_id):
-                    matched = order
-                    break
-            if matched is not None:
-                unused_orders.remove(matched)
-
+    for item, matched in rows:
         result.append(
             {
+                "key": f"vdj-{item.vdj_item_id}",
                 "vdj_item_id": item.vdj_item_id,
                 "song_title": item.song_title,
                 "artist": item.artist,
@@ -942,6 +1099,19 @@ def get_guest_queue_view(club_id: int, guest_id: int) -> list[dict]:
                 "is_vip": bool(matched and matched.guest_type == "vip"),
                 "is_mine": bool(matched and matched.telegram_user_id == guest_id),
                 "is_crazy": bool(matched and _is_crazy(matched.service_id)),
+            }
+        )
+    for order in waiting:
+        result.append(
+            {
+                "key": f"order-{order.id}",
+                "vdj_item_id": None,
+                "song_title": order.song_title,
+                "artist": order.artist,
+                "table_no": order.table_no,
+                "is_vip": order.guest_type == "vip",
+                "is_mine": order.telegram_user_id == guest_id,
+                "is_crazy": _is_crazy(order.service_id),
             }
         )
 
