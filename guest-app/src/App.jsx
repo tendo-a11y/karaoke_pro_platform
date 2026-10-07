@@ -464,6 +464,11 @@ function OrderRow({
     <li className={`order-row status-${order.status}`}>
       <div className="order-row__song">🎵 {order.song_title}</div>
       {order.artist && <div className="order-row__artist">🎤 {order.artist}</div>}
+      {order.tone ? (
+        <div>
+          🎚 Тон <span className="tone-badge">{order.tone > 0 ? `+${order.tone}` : order.tone}</span>
+        </div>
+      ) : null}
       {label && <div className="order-row__status">{label}</div>}
       {order.error_message && <div className="order-row__error">{order.error_message}</div>}
       <div className="order-row__actions">
@@ -2619,6 +2624,9 @@ export default function App() {
   // вкладке от "текущего").
   const [orderHistoryDays, setOrderHistoryDays] = useState(null);
   const [orderExtra, setOrderExtra] = useState(null);
+  // ДОБАВЛЕНО (2026-10, запрос пользователя): выбор тональности при заказе.
+  const [toneOn, setToneOn] = useState(false);
+  const [tone, setTone] = useState(null);
   const [queue, setQueue] = useState([]);
   // ДОБАВЛЕНО (2026-10): всплывающее сообщение "скоро ваша очередь" — за
   // две песни и за одну песню до выхода гостя, один раз на песню.
@@ -2833,10 +2841,13 @@ export default function App() {
       const created = await api.createOrder(
         token, songTitle.trim(), artist.trim() || null,
         serviceId ? Number(serviceId) : null,
+        toneOn && tone != null ? tone : null,
       );
       setSongTitle("");
       setArtist("");
       setServiceId("");
+      setToneOn(false);
+      setTone(null);
       // queue_position — номер места в общей очереди клуба (см. docstring
       // table_board_service.get_club_queue_positions на бэкенде); "0" — на
       // случай (не должен происходить в штатной работе), если сервер по
@@ -3246,6 +3257,51 @@ export default function App() {
                   highlight={Boolean(songTitle.trim() && artist.trim())}
                 />
               )}
+              <div className="tone-picker">
+                <label className="tone-picker__check">
+                  <input
+                    type="checkbox"
+                    checked={toneOn}
+                    onChange={(e) => {
+                      setToneOn(e.target.checked);
+                      if (!e.target.checked) setTone(null);
+                    }}
+                  />
+                  🎚 Тон
+                  {toneOn && tone != null ? (
+                    <span className="tone-badge">{tone > 0 ? `+${tone}` : tone}</span>
+                  ) : null}
+                  {toneOn && tone == null ? <span className="tone-picker__hint">выберите</span> : null}
+                </label>
+                {toneOn && (
+                  <div className="tone-picker__row">
+                    <div className="tone-picker__side">
+                      {[-6, -5, -4, -3, -2, -1].map((t) => (
+                        <button
+                          key={t}
+                          type="button"
+                          className={`tone-picker__btn${tone === t ? " tone-picker__btn--active" : ""}`}
+                          onClick={() => setTone(t)}
+                        >
+                          {t}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="tone-picker__side">
+                      {[1, 2, 3, 4, 5, 6].map((t) => (
+                        <button
+                          key={t}
+                          type="button"
+                          className={`tone-picker__btn${tone === t ? " tone-picker__btn--active" : ""}`}
+                          onClick={() => setTone(t)}
+                        >
+                          +{t}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
               <button
                 type="submit"
                 disabled={submitting || !songTitle.trim() || !artist.trim()}
