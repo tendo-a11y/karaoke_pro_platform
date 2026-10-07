@@ -785,7 +785,7 @@ function FavoritesPanel({ token, services, onOrdered, orderingDisabled, embedded
   return (
     <section className={embedded ? "profile-finance" : "panel"}>
       {embedded ? (
-        <h2>☆ Избранное / История ({favorites.length})</h2>
+        <h2>☆ Избранное ({favorites.length})</h2>
       ) : (
       <h2
         className="collapsible-header"
@@ -800,7 +800,7 @@ function FavoritesPanel({ token, services, onOrdered, orderingDisabled, embedded
           }
         }}
       >
-        ☆ Избранное / История ({favorites.length})
+        ☆ Избранное ({favorites.length})
         <span className="collapsible-caret">{open ? "▲" : "▼"}</span>
       </h2>
       )}
@@ -1000,7 +1000,7 @@ function resizeImageToBase64(file) {
   });
 }
 
-function AiSearch({ token, onPick, onScreenshotHelp, favoritesOpen = false, onToggleFavorites }) {
+function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra }) {
   const [mode, setMode] = useState("text");
   const [text, setText] = useState("");
   const [results, setResults] = useState([]);
@@ -1075,15 +1075,22 @@ function AiSearch({ token, onPick, onScreenshotHelp, favoritesOpen = false, onTo
             {m.label}
           </button>
         ))}
-        {onToggleFavorites ? (
-          <button
-            type="button"
-            className={`link-btn finder-modes__fav${favoritesOpen ? " finder-modes__active" : ""}`}
-            onClick={onToggleFavorites}
-          >
-            ☆ Избранное / История
-          </button>
-        ) : null}
+        {onExtra
+          ? [
+              { key: "fav", label: "☆ Избранное" },
+              { key: "orders", label: "📋 Мои заказы" },
+              { key: "history", label: "🕘 История" },
+            ].map((b) => (
+              <button
+                key={b.key}
+                type="button"
+                className={`link-btn finder-modes__fav${extra === b.key ? " finder-modes__active" : ""}`}
+                onClick={() => onExtra(b.key)}
+              >
+                {b.label}
+              </button>
+            ))
+          : null}
       </div>
 
       {mode === "screenshot" ? (
@@ -2347,7 +2354,7 @@ export default function App() {
   // щёлкать, чтобы увидеть весь список, который и так уже отфильтрован по
   // вкладке от "текущего").
   const [orderHistoryDays, setOrderHistoryDays] = useState(null);
-  const [favoritesOpen, setFavoritesOpen] = useState(false);
+  const [orderExtra, setOrderExtra] = useState(null);
   const [queue, setQueue] = useState([]);
   // ДОБАВЛЕНО (2026-10): всплывающее сообщение "скоро ваша очередь" — за
   // две песни и за одну песню до выхода гостя, один раз на песню.
@@ -2860,10 +2867,14 @@ export default function App() {
             setSongTitle(song.title);
             setArtist(song.artist || "");
           }}
-          favoritesOpen={favoritesOpen}
-          onToggleFavorites={() => setFavoritesOpen((prev) => !prev)}
+          extra={orderExtra}
+          onExtra={(key) => {
+            if (key === "orders") setOrdersTab("current");
+            if (key === "history") setOrdersTab("history");
+            setOrderExtra((prev) => (prev === key ? null : key));
+          }}
         />
-        {favoritesOpen ? (
+        {orderExtra === "fav" ? (
           <FavoritesPanel
             token={session.token}
             services={services}
@@ -2871,6 +2882,63 @@ export default function App() {
             orderingDisabled={!canOrder}
             embedded
           />
+        ) : null}
+        {orderExtra === "orders" || orderExtra === "history" ? (
+          <div className="profile-finance">
+          <h2>{ordersTab === "history" ? "🕘 История" : "📋 Мои заказы"}</h2>
+        {ordersTab === "history" && (
+          <div className="order-history-periods">
+            {ORDER_HISTORY_PERIODS.map((p) => (
+              <button
+                key={p.label}
+                type="button"
+                className={`link-btn${orderHistoryDays === p.days ? " order-history-periods__active" : ""}`}
+                onClick={() => setOrderHistoryDays(p.days)}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+        )}
+        {favoriteMessage && <div className="banner banner--ok">{favoriteMessage}</div>}
+        {cancelError && <div className="banner banner--error">{cancelError}</div>}
+        {orders.length === 0 ? (
+          <p className="empty-hint">
+            {ordersTab === "current"
+              ? "Заказов пока нет — закажите первую песню выше."
+              : orderHistoryDays === null
+                ? "Заказов пока нет."
+                : "Заказов за этот период нет."}
+          </p>
+        ) : (
+          <ul className="order-list">
+            {orders.map((o) => (
+              <OrderRow
+                key={o.id}
+                order={o}
+                token={session.token}
+                services={services}
+                isReplacing={replacingOrderId === o.id}
+                onToggleReplace={handleToggleReplace}
+                onReplace={handleReplaceOrder}
+                replaceBusy={replaceBusyOrderId === o.id}
+                onCancel={handleCancelOrder}
+                cancelBusy={cancelBusyOrderId === o.id}
+                // ДОБАВЛЕНО (2026-09-29, жалоба пользователя "нет
+                // возможности добавить песню в избранное из Мои заказы и из
+                // истории"): кнопка "➕ В избранное" в OrderRow уже была
+                // готова (как и handleAddFavorite ниже) — не хватало только
+                // этих двух свойств, чтобы она показалась в обоих списках
+                // (эта секция рендерит и "Мои заказы", и "Историю" —
+                // переключение между ними меняет только сам список orders).
+                // Показывается у каждой песни без исключений.
+                onFavorite={handleAddFavorite}
+                favoriteBusy={favoriteBusyOrderId === o.id}
+              />
+            ))}
+          </ul>
+        )}
+          </div>
         ) : null}
         {activated && !groupOk ? (
           <p className="empty-hint">
@@ -2941,75 +3009,6 @@ export default function App() {
         status={meInfo.table_group_status}
         onGroupChanged={refreshMe}
       />
-
-      <section className="panel">
-        {/* ДОБАВЛЕНО (2026-09-24, см. ORDERS_TABS выше) — переключатель
-        "Мои заказы" / "История" вместо одного заголовка. */}
-        <div className="orders-tabs">
-          {ORDERS_TABS.map((t) => (
-            <button
-              key={t.key}
-              type="button"
-              className={`orders-tabs__btn${ordersTab === t.key ? " orders-tabs__btn--active" : ""}`}
-              onClick={() => setOrdersTab(t.key)}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-        {ordersTab === "history" && (
-          <div className="order-history-periods">
-            {ORDER_HISTORY_PERIODS.map((p) => (
-              <button
-                key={p.label}
-                type="button"
-                className={`link-btn${orderHistoryDays === p.days ? " order-history-periods__active" : ""}`}
-                onClick={() => setOrderHistoryDays(p.days)}
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
-        )}
-        {favoriteMessage && <div className="banner banner--ok">{favoriteMessage}</div>}
-        {cancelError && <div className="banner banner--error">{cancelError}</div>}
-        {orders.length === 0 ? (
-          <p className="empty-hint">
-            {ordersTab === "current"
-              ? "Заказов пока нет — закажите первую песню выше."
-              : orderHistoryDays === null
-                ? "Заказов пока нет."
-                : "Заказов за этот период нет."}
-          </p>
-        ) : (
-          <ul className="order-list">
-            {orders.map((o) => (
-              <OrderRow
-                key={o.id}
-                order={o}
-                token={session.token}
-                services={services}
-                isReplacing={replacingOrderId === o.id}
-                onToggleReplace={handleToggleReplace}
-                onReplace={handleReplaceOrder}
-                replaceBusy={replaceBusyOrderId === o.id}
-                onCancel={handleCancelOrder}
-                cancelBusy={cancelBusyOrderId === o.id}
-                // ДОБАВЛЕНО (2026-09-29, жалоба пользователя "нет
-                // возможности добавить песню в избранное из Мои заказы и из
-                // истории"): кнопка "➕ В избранное" в OrderRow уже была
-                // готова (как и handleAddFavorite ниже) — не хватало только
-                // этих двух свойств, чтобы она показалась в обоих списках
-                // (эта секция рендерит и "Мои заказы", и "Историю" —
-                // переключение между ними меняет только сам список orders).
-                // Показывается у каждой песни без исключений.
-                onFavorite={handleAddFavorite}
-                favoriteBusy={favoriteBusyOrderId === o.id}
-              />
-            ))}
-          </ul>
-        )}
-      </section>
 
       <section className="panel">
         {turnToast ? (
