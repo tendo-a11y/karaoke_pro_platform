@@ -779,3 +779,13 @@ OrderChangeRequestsPanel), а не терялась среди обычных к
 .guests-section-title { margin: 18px 0 8px; font-size: 14px; color: var(--muted); }
 .guests-section-title--online { color: var(--ok); }
 .table-card .table-card__title.table-card__title--occupied { color: var(--ok); }
+
+/* ДОБАВЛЕНО (2026-10): живая очередь — принятые заказы, которых ещё нет в
+   VirtualDJ, правка названия и склейка с позицией VirtualDJ. */
+.queue-row__guest-text { flex: 0 0 auto; font-size: 12px; color: var(--muted); font-style: italic; }
+.queue-row__invdj-badge {
+  flex: 0 0 auto; font-size: 12px; color: var(--ok);
+  border: 1px solid var(--ok); border-radius: 999px; padding: 2px 8px;
+}
+.queue-row__rename { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.queue-row__rename-input { flex: 1 1 180px; min-width: 0; }
