@@ -829,12 +829,16 @@ function FavoritesPanel({ token, services, onOrdered, orderingDisabled, embedded
                   value={serviceSelections[f.id] || ""}
                   onChange={(v) => setServiceSelections((prev) => ({ ...prev, [f.id]: v }))}
                   disabled={busyId === f.id || orderingDisabled}
+                  highlight={!orderingDisabled}
                 />
               )}
               <div className="favorite-actions">
                 <button
                   type="button"
                   disabled={busyId === f.id || orderingDisabled || !serviceSelections[f.id]}
+                  className={
+                    busyId !== f.id && !orderingDisabled && serviceSelections[f.id] ? "step-blink-fill" : undefined
+                  }
                   onClick={() => handleReorder(f.id)}
                   title={orderingDisabled ? "Недоступно, пока вы не одобренный участник группового стола" : undefined}
                 >
