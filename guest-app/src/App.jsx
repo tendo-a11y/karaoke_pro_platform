@@ -1395,6 +1395,8 @@ function ReplaceForm({ order, token, services, busy, onSubmit, onCancel }) {
 // страницы, но onGroupChanged даёт родителю знать, когда стоит немедленно
 // перечитать /me (одобрили/выгнали/приняты права), не дожидаясь общего опроса.
 function TableGroupPanel({ token, guestId, hasTable, status, onGroupChanged, tableNo = null }) {
+  // ДОБАВЛЕНО (2026-10, запрос пользователя): блок сворачивается, как "Профиль".
+  const [groupOpen, setGroupOpen] = useState(false);
   const [view, setView] = useState(null);
   const [error, setError] = useState(null);
   const [busyKey, setBusyKey] = useState(null);
@@ -1501,13 +1503,37 @@ function TableGroupPanel({ token, guestId, hasTable, status, onGroupChanged, tab
   const isMember = status === "admin" || status === "member";
   // Кто принимает на стол (запрос пользователя 2026-10): имя того, кто сел первым, если он его задал.
   const tableAdmin = view && Array.isArray(view.members) ? view.members.find((m) => m.is_admin) : null;
+  // Раскрыт сам, когда от гостя что-то требуется: заявка не подана/ждёт
+  // ответа, или к нему (админу стола) кто-то просится за стол.
+  const needsAttention =
+    status === "pending" ||
+    status === "not_joined" ||
+    Boolean(view && view.is_admin && view.pending_requests && view.pending_requests.length > 0);
+  const open = needsAttention || groupOpen;
   const acceptsText = tableAdmin && tableAdmin.display_name
     ? `Принимает на стол ${tableAdmin.display_name}.`
     : "Тот, кто первым сел за стол, должен подтвердить.";
 
   return (
     <section className="panel table-group-panel">
-      <h2>👥 Групповой стол</h2>
+      <h2
+        className="collapsible-header"
+        role="button"
+        tabIndex={0}
+        aria-expanded={open}
+        onClick={() => setGroupOpen((prev) => !prev)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            setGroupOpen((prev) => !prev);
+          }
+        }}
+      >
+        👥 Групповой стол{tableNo != null ? ` · ${tableNo}` : ""}
+        <span className={`collapsible-caret${open ? " collapsible-caret--blink" : ""}`}>{open ? "▲" : "▼"}</span>
+      </h2>
+      {open && (
+      <>
       {status === "admin" && (
         <p className="empty-hint">
           Вы — админ стола. Только вы разрешаете, кому сесть за стол. Чужие сесть не могут.
@@ -1664,6 +1690,8 @@ function TableGroupPanel({ token, guestId, hasTable, status, onGroupChanged, tab
             </div>
           )}
         </>
+      )}
+      </>
       )}
     </section>
   );
