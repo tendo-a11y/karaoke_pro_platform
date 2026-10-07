@@ -793,3 +793,67 @@ OrderChangeRequestsPanel), а не терялась среди обычных к
 /* Кнопка "Переместить стол" в одной строке с названием стола. */
 .table-group-card__title { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .table-group-card__title .btn { font-size: 13px; }
+
+/* ДОБАВЛЕНО (2026-10): адаптация под ноутбуки, планшеты и телефоны. */
+html { -webkit-text-size-adjust: 100%; }
+img { max-width: 100%; }
+.table-slot__song, .table-slot__artist, .queue-row__song, .queue-row__artist { overflow-wrap: anywhere; }
+.table-card { min-width: 0; }
+.table-slot__actions { flex-wrap: wrap; }
+
+@media (pointer: coarse) {
+  .btn { min-height: 42px; }
+  .btn-link { padding: 10px 8px; font-size: 14px; }
+}
+
+@media (max-width: 1366px) {
+  .app-shell { padding: 16px; }
+  .orders-board__grid { gap: 10px; }
+  .table-card { padding: 10px; }
+}
+
+@media (max-width: 900px) {
+  .app-header { flex-direction: column; align-items: flex-start; gap: 10px; }
+  .app-header__nav { width: 100%; gap: 6px; }
+  .orders-board__grid { grid-template-columns: repeat(3, 1fr); }
+  .app-main { gap: 20px; }
+}
+
+@media (max-width: 700px) {
+  .app-shell { padding: 12px; }
+  .app-header h1 { font-size: 19px; }
+  .orders-board__grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .orders-board__header { justify-content: stretch; }
+  .orders-board__header .btn { flex: 1 1 auto; }
+  input, select, textarea { font-size: 16px !important; }
+  .table-slot { padding: 8px; }
+  .table-slot__actions .btn { flex: 1 1 100%; }
+
+  .queue-row { padding: 10px; gap: 8px; }
+  .queue-row__song, .queue-row__artist { flex: 1 1 100%; }
+  .queue-row__table, .queue-row__remove { margin-left: 0; }
+  .queue-row__category-select { max-width: none; flex: 1 1 140px; }
+
+  .manual-add-form input, .manual-add-form__table, .manual-add-form .btn { flex: 1 1 100%; }
+  .table-settings-form { flex-wrap: wrap; }
+  .table-settings-form input { flex: 1 1 140px; min-width: 0; }
+  .category-row__name, .category-row__description { flex: 1 1 100%; }
+  .category-row__price { flex: 1 1 90px; }
+  .category-row__actions { margin-left: 0; width: 100%; }
+  .category-row__actions .btn { flex: 1 1 auto; }
+  .category-add-form input[type="text"], .category-add-form .btn { flex: 1 1 100%; }
+  .vip-row__actions { width: 100%; }
+  .vip-amount-input { flex: 1 1 100px; min-width: 0; }
+  .chat-thread-row__image { max-width: 100%; }
+  .table-group-card__move select, .table-group-card__move input { flex: 1 1 140px; min-width: 0; }
+  .guest-card { padding: 12px; }
+  .vip-stat-row { gap: 10px; }
+}
+
+@media (max-width: 480px) {
+  .queue-mode-toggle { flex-direction: column; }
+}
+
+@media (max-width: 340px) {
+  .orders-board__grid { grid-template-columns: 1fr; }
+}
