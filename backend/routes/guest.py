@@ -272,6 +272,14 @@ def create_order():
         if service is None or service.club_id != g.club_id or service.kj_only:
             return api_error(404, "SERVICE_NOT_FOUND", "Услуга не найдена")
 
+    # ДОБАВЛЕНО (2026-10): тональность по желанию гостя, от -6 до +6.
+    tone = payload.get("tone")
+    if tone is not None:
+        if isinstance(tone, bool) or not isinstance(tone, int) or tone < -6 or tone > 6:
+            return api_error(400, "VALIDATION_ERROR", "tone должен быть числом от -6 до 6")
+        if tone == 0:
+            tone = None
+
     active_count = vip_service.count_active_orders(g.club_id, g.guest_id)
     max_active = current_app.config["MAX_ACTIVE_SONGS_PER_GUEST"]
     if active_count >= max_active:
@@ -301,6 +309,7 @@ def create_order():
         song_title=song_title,
         artist=artist,
         service_id=service_id,
+        tone=tone,
         source="guest",
         channel="webapp",
     )
