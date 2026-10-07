@@ -2421,7 +2421,26 @@ export default function App() {
   const [meInfo, setMeInfo] = useState(null);
   // Дедупликация показа чека закрытия стола "один раз" по id заявки — см.
   // докстринг TableCloseReceiptBanner выше.
-  const [dismissedCloseRequestIds, setDismissedCloseRequestIds] = useState(() => new Set());
+  // ИЗМЕНЕНО (2026-10, запрос пользователя): закрытый чек запоминается на
+  // телефоне гостя и больше не появляется — даже после обновления страницы.
+  const [dismissedCloseRequestIds, setDismissedCloseRequestIds] = useState(() => {
+    try {
+      const saved = JSON.parse(window.localStorage.getItem("kp_dismissed_receipts") || "[]");
+      return new Set(Array.isArray(saved) ? saved : []);
+    } catch {
+      return new Set();
+    }
+  });
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        "kp_dismissed_receipts",
+        JSON.stringify([...dismissedCloseRequestIds].slice(-50)),
+      );
+    } catch {
+      // память телефона недоступна — чек просто скроется до обновления страницы
+    }
+  }, [dismissedCloseRequestIds]);
   // !clubId — не результат асинхронной операции, а сразу известное по URL
   // состояние, поэтому это часть рендера, а не setState в эффекте.
   const linkInvalid = !clubId;
