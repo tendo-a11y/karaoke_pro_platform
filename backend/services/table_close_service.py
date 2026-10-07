@@ -225,6 +225,28 @@ def _build_receipt(club_id: int, table_no: int, since) -> dict:
     }
 
 
+def _session_since(club_id: int, table_no: int, group_created_at):
+    """
+    ДОБАВЛЕНО (2026-10, запрос пользователя "стол закрыт — значит песен не
+    должно быть никаких вообще"): если за столом остались активные песни,
+    заказанные ещё до того, как нынешняя компания села (гость вставал и
+    садился снова), они тоже закрываются и попадают в чек — после закрытия
+    стола на нём не остаётся ни одной активной песни.
+    """
+    earliest = (
+        db.session.query(db.func.min(Order.created_at))
+        .filter(
+            Order.club_id == club_id,
+            Order.table_no == table_no,
+            Order.status.in_(ACTIVE_TABLE_STATUSES),
+        )
+        .scalar()
+    )
+    if earliest is not None and (group_created_at is None or earliest < group_created_at):
+        return earliest
+    return group_created_at
+
+
 def complete_table_orders(club_id: int, table_no: int, since) -> list[Order]:
     """
     ЗАМЕНЯЕТ старый close_table_orders (массовое STATUS_REJECTED) в потоке
@@ -336,8 +358,9 @@ def approve_request(request_id: int, kj, hide_receipt: bool) -> DecisionResult:
         for m in TableGroupMember.query.filter_by(club_id=req.club_id, table_no=req.table_no).all()
     ]
     member_guest_ids = [str(gid) for gid in member_guest_id_ints]
-    closed_orders = complete_table_orders(req.club_id, req.table_no, group.created_at)
-    receipt = _build_receipt(req.club_id, req.table_no, group.created_at)
+    since = _session_since(req.club_id, req.table_no, group.created_at)
+    closed_orders = complete_table_orders(req.club_id, req.table_no, since)
+    receipt = _build_receipt(req.club_id, req.table_no, since)
 
     TableJoinRequest.query.filter_by(club_id=req.club_id, table_no=req.table_no).delete()
     TableGroupMember.query.filter_by(club_id=req.club_id, table_no=req.table_no).delete()
@@ -419,7 +442,7 @@ def close_table_directly(club_id: int, table_no: int, kj, hide_receipt: bool) ->
             m.guest_id
             for m in TableGroupMember.query.filter_by(club_id=club_id, table_no=table_no).all()
         ]
-        since = group.created_at
+        since = _session_since(club_id, table_no, group.created_at)
     else:
         active_orders = Order.query.filter(
             Order.club_id == club_id,
