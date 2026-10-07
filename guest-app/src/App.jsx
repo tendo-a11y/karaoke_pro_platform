@@ -3033,9 +3033,7 @@ export default function App() {
 
         <section className="panel">
           <h2>🎵 Заказ новой песни</h2>
-          <button type="button" className="btn-link" disabled>
-            Скоро
-          </button>
+          <p className="empty-hint">🛠 В разработке. Скоро заработает.</p>
         </section>
       </div>
     );
