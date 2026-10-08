@@ -3389,7 +3389,7 @@ export default function App() {
                   {item.song_title}
                   {item.is_crazy ? " — CRAZY 🔥" : ""}
                   {item.is_mine ? (
-                    <span className="queue-item__mine-badge"> — №{index + 1} в очереди · ваша песня</span>
+                    <span className="queue-item__mine-badge"> — {index + 1} в очереди · ваша песня</span>
                   ) : null}
                   {isMyTable ? <span className="queue-item__table-badge"> — ваш стол</span> : null}
                 </li>
