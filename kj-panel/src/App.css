@@ -929,6 +929,13 @@ img { max-width: 100%; }
 /* ДОБАВЛЕНО (2026-10): галочка "Новинка" у песни в живой очереди. */
 .queue-row__new { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; opacity: 0.85; white-space: nowrap; }
 .queue-row__new input { width: auto; margin: 0; }
+/* Кнопка "Копировать" справа от названия песни. */
+.queue-row__copy {
+  flex: 0 0 auto; width: auto; margin: 0; padding: 3px 8px;
+  font-size: 12px; white-space: nowrap; min-width: 112px;
+  background: transparent; color: var(--accent);
+  border: 1px solid var(--accent); border-radius: 6px; cursor: pointer;
+}
 
 
 /* ДОБАВЛЕНО (2026-10): один знак вопроса с пояснением про "Новинку" над живой очередью. */
