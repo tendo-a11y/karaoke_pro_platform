@@ -1024,3 +1024,11 @@ button.step-blink-fill { animation: button-fill-blink 1s ease-in-out infinite; }
   background: transparent; color: var(--text); border: 1px solid rgba(255, 255, 255, 0.2);
 }
 .song-lists__page--active { border-color: var(--accent); color: var(--accent); }
+
+/* Переключатель языка RU / RO / EN / UA над шапкой. */
+.lang-switch { display: flex; justify-content: flex-end; gap: 4px; margin: 0 0 8px; }
+.lang-switch__btn {
+  width: auto; margin: 0; padding: 2px 8px; font-size: 11px; font-weight: 700;
+  background: transparent; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; cursor: pointer;
+}
+.lang-switch__btn--active { background: var(--accent); color: #1a1400; border-color: var(--accent); }
