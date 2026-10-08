@@ -443,7 +443,7 @@ function SongListRow({ song, onPick }) {
           {song.artist ? `${song.artist} — ` : ""}
           {song.song_title}
         </span>
-        <button type="button" className="link-btn step-blink" onClick={() => onPick(song)}>
+        <button type="button" className="link-btn" onClick={() => onPick(song)}>
           Заказать
         </button>
       </div>
