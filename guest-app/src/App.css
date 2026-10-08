@@ -90,7 +90,11 @@ body { margin: 0; background: var(--bg); color: var(--text); }
 }
 
 .chat-form { flex-direction: row; margin-top: 10px; }
-.chat-form input { flex: 1; }
+.chat-form input { flex: 1; min-width: 0; }
+/* ДОБАВЛЕНО (2026-10): на телефоне кнопка "Отправить" уезжала за край. */
+.chat-form { align-items: center; gap: 6px; }
+.chat-form > button[type="submit"] { flex: 0 0 auto; width: auto; margin: 0; padding: 10px 12px; white-space: nowrap; }
+.chat-form .chat-attach-btn { flex: 0 0 auto; }
 
 input {
   background: var(--panel-alt);
