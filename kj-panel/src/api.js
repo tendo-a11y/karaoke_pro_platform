@@ -153,6 +153,10 @@ export const api = {
   listAdminMessages: (token, clubId) => request(`/api/kj/admin-messages/${clubId}`, { token }),
   sendAdminMessage: (token, clubId, messageText) =>
     request(`/api/kj/admin-messages/${clubId}`, { method: "POST", token, body: { message_text: messageText } }),
+  deleteAdminMessage: (token, clubId, messageId) =>
+    request(`/api/kj/admin-messages/${clubId}/${messageId}`, { method: "DELETE", token }),
+  clearAdminMessages: (token, clubId) =>
+    request(`/api/kj/admin-messages/${clubId}`, { method: "DELETE", token }),
   markAdminMessagesRead: (token, clubId) =>
     request(`/api/kj/admin-messages/${clubId}/read`, { method: "PUT", token }),
   // ДОБАВЛЕНО (2026-09-20, решение пользователя "Нужно одобрение KJ (запрос
