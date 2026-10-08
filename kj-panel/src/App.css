@@ -929,3 +929,12 @@ img { max-width: 100%; }
 /* ДОБАВЛЕНО (2026-10): галочка "Новинка" у песни в живой очереди. */
 .queue-row__new { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; opacity: 0.85; white-space: nowrap; }
 .queue-row__new input { width: auto; margin: 0; }
+
+
+/* ДОБАВЛЕНО (2026-10): один знак вопроса с пояснением про "Новинку" над живой очередью. */
+.queue-new-help { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 8px; }
+.queue-new-help__btn {
+  width: auto; margin: 0; padding: 2px 10px; font-size: 12px; font-weight: 700; border-radius: 999px;
+  background: transparent; color: var(--accent, #f5b942); border: 1px solid currentColor; cursor: pointer;
+}
+.queue-new-help__text { font-size: 13px; opacity: 0.9; }
