@@ -867,12 +867,19 @@ def _auto_complete_from_history(club_id: int, vdj) -> None:
     if not candidates:
         _HISTORY_NEXT_CHECK[club_id] = now + timedelta(seconds=_HISTORY_INTERVAL_OK)
         return
+    import logging
+    log = logging.getLogger(__name__)
     try:
         history = vdj.get_history()
-    except Exception:  # мост не обновлён или не ответил — это не ошибка для KJ
+    except Exception as exc:  # мост не обновлён или не ответил — это не ошибка для KJ
         _HISTORY_NEXT_CHECK[club_id] = now + timedelta(seconds=_HISTORY_INTERVAL_FAIL)
+        log.warning("Автоготово: история VirtualDJ клуба %s недоступна (%s)", club_id, exc)
         return
     _HISTORY_NEXT_CHECK[club_id] = now + timedelta(seconds=_HISTORY_INTERVAL_OK)
+    log.info(
+        "Автоготово: клуб %s — в истории %s записей, ждут проверки %s заказов",
+        club_id, len(history or []), len(candidates),
+    )
 
     played = []
     for entry in history or []:
@@ -902,6 +909,7 @@ def _auto_complete_from_history(club_id: int, vdj) -> None:
             order.vdj_item_id = f"closed:{int(now.timestamp())}:{order.vdj_item_id}"[:255]
             changed.append(order)
     if changed:
+        log.info("Автоготово: клуб %s — по истории отмечено спетыми %s", club_id, [o.id for o in changed])
         db.session.commit()
         for order in changed:
             emit_order_updated(order)
