@@ -61,6 +61,7 @@ function QueueTable({ queue, token, clubId }) {
   // ДОБАВЛЕНО (2026-10, запрос пользователя): галочка "Новинка" у песни —
   // такие песни гость видит в списке "Новинки" над живой очередью.
   const [newSongKeys, setNewSongKeys] = useState(() => new Set());
+  const [newSongHelpOpen, setNewSongHelpOpen] = useState(false);
   useEffect(() => {
     let cancelled = false;
     const load = () =>
@@ -242,6 +243,23 @@ function QueueTable({ queue, token, clubId }) {
 
   return (
     <div className="queue-dropzone">
+      {queue.length > 0 && (
+        <div className="queue-new-help">
+          <button
+            type="button"
+            className="queue-new-help__btn"
+            title="Что такое «Новинка»?"
+            onClick={() => setNewSongHelpOpen((v) => !v)}
+          >
+            ? Новинка
+          </button>
+          {newSongHelpOpen && (
+            <span className="queue-new-help__text">
+              Отметьте новинку — и она будет рекомендована гостям в очереди гостей (кнопка «Новинки»).
+            </span>
+          )}
+        </div>
+      )}
       {queue.length === 0 ? (
         <p className="empty-hint">Очередь пока пуста.</p>
       ) : (
