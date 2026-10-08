@@ -984,7 +984,17 @@ button.step-blink-fill { animation: button-fill-blink 1s ease-in-out infinite; }
 
 
 /* ДОБАВЛЕНО (2026-10): кнопки "История за час / Популярные / Новинки" над живой очередью. */
-.song-lists { margin: 0 0 12px; }
+.song-lists {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 176, 32, 0.55);
+  border-radius: 12px;
+  background: var(--panel-alt);
+}
+.panel .song-lists h2 { margin: 0; }
+.song-lists__tabs { margin-top: 10px; }
+/* Заголовок "Активная очередь" — красноватый. */
+.panel h2.active-queue-title { color: #ff7a7a; }
 .song-lists__tabs { display: flex; flex-wrap: wrap; gap: 6px; }
 .song-lists__tab {
   width: auto; margin: 0; padding: 5px 10px; font-size: 12px; font-weight: 600;
