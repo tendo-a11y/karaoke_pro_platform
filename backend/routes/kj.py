@@ -1260,6 +1260,30 @@ def set_general_chat():
     return api_ok({"enabled": bool(club.chat_enabled)})
 
 
+# ДОБАВЛЕНО (2026-10, запрос пользователя): "Новинки" — галочка у песни в
+# живой очереди, см. services/song_lists_service.py.
+@bp.get("/new-songs")
+@require_kj
+def list_new_songs():
+    from services import song_lists_service
+    return api_ok(song_lists_service.new_songs(g.club_id))
+
+
+@bp.put("/new-songs")
+@require_kj
+def set_new_song():
+    from services import song_lists_service
+    payload = request.get_json(silent=True) or {}
+    song_title = payload.get("song_title")
+    artist = payload.get("artist")
+    if not isinstance(song_title, str) or not song_title.strip():
+        return api_error(400, "VALIDATION_ERROR", "song_title обязателен")
+    if artist is not None and not isinstance(artist, str):
+        return api_error(400, "VALIDATION_ERROR", "artist должен быть строкой")
+    song_lists_service.set_new(g.club_id, song_title, artist, bool(payload.get("is_new")))
+    return api_ok(song_lists_service.new_songs(g.club_id))
+
+
 # ДОБАВЛЕНО (2026-10, запрос пользователя): автозакрытие столов в заданное
 # время по часам компьютера KJ — см. services/auto_close_service.py.
 def _auto_close_view(club):
