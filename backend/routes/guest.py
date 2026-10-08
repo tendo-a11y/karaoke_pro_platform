@@ -1213,6 +1213,8 @@ def kick_table_group_member(target_guest_id):
         return api_error(400, "CANNOT_KICK_SELF", "Нельзя выгнать самого себя — используйте выход")
     if result.outcome == "not_a_member":
         return api_error(404, "NOT_A_MEMBER", "Этот гость не состоит в группе")
+    # ДОБАВЛЕНО (2026-10): сняли со стола — его неспетые песни убираются.
+    vdj_service.close_guest_orders(g.club_id, target_guest_id)
     return api_ok({"kicked": True})
 
 
@@ -1249,6 +1251,8 @@ def leave_table_group():
     # ДОБАВЛЕНО (2026-10, запрос пользователя): встал из-за стола — значит
     # статус "Без стола" (и для сидевшего, и для снявшего свою заявку).
     guest_status_service.set_table(g.club_id, g.guest_id, None)
+    # ДОБАВЛЕНО (2026-10): ушёл — его неспетые песни убираются из очереди.
+    vdj_service.close_guest_orders(g.club_id, g.guest_id)
     return api_ok({"left": True})
 
 
