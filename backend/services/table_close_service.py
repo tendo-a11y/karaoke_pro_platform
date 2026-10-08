@@ -577,6 +577,10 @@ def close_all_tables(club_id: int, kj) -> CloseAllResult:
     club = db.session.get(Club, club_id)
     if club is not None:
         club.queue_start_table = None
+        # ДОБАВЛЕНО (2026-10, запрос пользователя): "Закрыть все столы"
+        # полностью завершает вечер — следующий вечер начинается с чистого
+        # листа (например, пометки "уже заказана сегодня").
+        club.evening_closed_at = datetime.now(timezone.utc)
         db.session.commit()
 
     return CloseAllResult(closed_table_nos=closed_table_nos, decisions=decisions)
