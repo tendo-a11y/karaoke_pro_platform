@@ -432,6 +432,12 @@ select {
   letter-spacing: 0.04em;
 }
 
+/* Групповой стол — в такой же рамке, как блок "История за час · Популярные · Новинки". */
+.panel.table-group-panel {
+  border: 1px solid rgba(255, 176, 32, 0.55);
+  border-radius: 12px;
+  background: var(--panel-alt);
+}
 .table-group-panel > button { margin-top: 8px; }
 .table-group-panel > .link-btn { margin-top: 12px; }
 
