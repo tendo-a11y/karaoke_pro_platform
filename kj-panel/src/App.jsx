@@ -314,19 +314,24 @@ function QueueTable({ queue, token, clubId }) {
               <span className="queue-row__position">{idx + 1}</span>
               <span className="queue-row__artist">{item.artist || "—"}</span>
               <span className="queue-row__song">{item.song_title}</span>
-              {/* Уже в "Новинках" — галочку и слово "Новинка" не показываем. */}
-              {item.song_title && !newSongKeys.has(newSongKey(item.song_title, item.artist)) && (
-                <label className="queue-row__new" title="Показывать гостям в «Новинках»">
+              {/* Уже в "Новинках" — галочку и слово "Новинка" не видно, но место
+              под них остаётся, чтобы знак вопроса стоял всегда на одном месте. */}
+              {item.song_title && (
+                <label
+                  className={`queue-row__new${
+                    newSongKeys.has(newSongKey(item.song_title, item.artist)) ? " queue-row__new--hidden" : ""
+                  }`}
+                  title="Показывать гостям в «Новинках»"
+                >
                   <input
                     type="checkbox"
                     checked={false}
+                    disabled={newSongKeys.has(newSongKey(item.song_title, item.artist))}
                     onChange={(e) => toggleNewSong(item, e.target.checked)}
                   />
                   <span
                     className={`queue-row__new-word${
-                      idx === queue.findIndex((q) => q.song_title && !newSongKeys.has(newSongKey(q.song_title, q.artist)))
-                        ? " queue-row__new-word--first"
-                        : ""
+                      idx === queue.findIndex((q) => q.song_title) ? " queue-row__new-word--first" : ""
                     }`}
                   >
                     Новинка
@@ -1166,6 +1171,142 @@ function StatsPanel({ token, clubId }) {
           </section>
         </>
       )}
+    </main>
+  );
+}
+
+// ДОБАВЛЕНО (2026-10, запрос пользователя): KJ управляет списками гостя
+// над живой очередью — "История за час", "Популярные", "Новинки".
+const SONG_ADMIN_TABS = [
+  { key: "recent", label: "История за час" },
+  { key: "popular", label: "Популярные" },
+  { key: "new", label: "Новинки" },
+];
+
+function SongListsAdminPanel({ token }) {
+  const [tab, setTab] = useState("recent");
+  const [data, setData] = useState(null);
+  const [error, setError] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [newTitle, setNewTitle] = useState("");
+  const [newArtist, setNewArtist] = useState("");
+
+  const load = useCallback(async () => {
+    try {
+      setData(await api.getSongListsAdmin(token));
+      setError(null);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : String(err));
+    }
+  }, [token]);
+
+  useEffect(() => {
+    load();
+    const id = setInterval(load, 30000);
+    return () => clearInterval(id);
+  }, [load]);
+
+  async function run(action) {
+    setBusy(true);
+    setError(null);
+    try {
+      await action();
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function removeItem(song) {
+    if (tab === "new") return run(() => api.setNewSong(token, song.song_title, song.artist, false));
+    if (tab === "popular") {
+      return run(() => api.hideSongListItem(token, { kind: "popular", song_title: song.song_title, artist: song.artist || null }));
+    }
+    return run(() => api.hideSongListItem(token, { kind: "history", order_id: song.order_id }));
+  }
+
+  const items = (data && data[tab]) || [];
+  const label = (s) => (s.artist ? `${s.artist} — ${s.song_title}` : s.song_title);
+
+  return (
+    <main className="app-main">
+      <section>
+        <h2>Списки для гостей</h2>
+        <p className="empty-hint">
+          То, что гость видит над живой очередью. Крестик убирает песню у гостей. В чеках и статистике ничего не меняется.
+        </p>
+        <div className="guest-type-filters">
+          {SONG_ADMIN_TABS.map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              className={`btn-link${tab === t.key ? " guest-type-filters__active" : ""}`}
+              onClick={() => setTab(t.key)}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+        {error && <div className="banner banner--error">{error}</div>}
+        {!data && !error && <p className="empty-hint">Загрузка…</p>}
+        {tab === "new" && (
+          <form
+            className="song-admin__add"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!newTitle.trim()) return;
+              run(async () => {
+                await api.setNewSong(token, newTitle.trim(), newArtist.trim() || null, true);
+                setNewTitle("");
+                setNewArtist("");
+              });
+            }}
+          >
+            <input type="text" placeholder="Исполнитель" value={newArtist} onChange={(e) => setNewArtist(e.target.value)} />
+            <input type="text" placeholder="Название песни" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} />
+            <button type="submit" className="btn-link" disabled={busy || !newTitle.trim()}>
+              Добавить в новинки
+            </button>
+          </form>
+        )}
+        {data && items.length === 0 && <p className="empty-hint">Список пуст.</p>}
+        {items.length > 0 && (
+          <ol className="song-admin__list">
+            {items.map((s, i) => (
+              <li key={`${tab}-${s.order_id ?? s.id ?? i}-${s.song_title}`} className="song-admin__row">
+                <span>{label(s)}</span>
+                {tab === "popular" && s.count ? <span className="empty-hint"> · {s.count} раз</span> : null}
+                <button
+                  type="button"
+                  className="song-admin__remove"
+                  title="Убрать у гостей"
+                  disabled={busy}
+                  onClick={() => removeItem(s)}
+                >
+                  ✕
+                </button>
+              </li>
+            ))}
+          </ol>
+        )}
+        {tab === "popular" && data && data.hidden_popular.length > 0 && (
+          <>
+            <h3>Скрытые из «Популярных»</h3>
+            <ul className="song-admin__list">
+              {data.hidden_popular.map((h) => (
+                <li key={h.id} className="song-admin__row">
+                  <span>{label(h)}</span>
+                  <button type="button" className="btn-link" disabled={busy} onClick={() => run(() => api.unhideSongListItem(token, h.id))}>
+                    Вернуть
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+      </section>
     </main>
   );
 }
@@ -4337,6 +4478,11 @@ export default function App() {
               👥 Гости
             </button>
           )}
+          {view !== "song-lists" && (
+            <button type="button" className="btn-link" onClick={() => setView("song-lists")}>
+              Списки для гостей
+            </button>
+          )}
           {STATS_ENABLED && view !== "stats" && (
             <button type="button" className="btn-link" onClick={() => setView("stats")}>
               Статистика
@@ -4374,6 +4520,8 @@ export default function App() {
         </>
       ) : view === "guests" ? (
         <GuestsPanel token={token} clubId={me.club_id} />
+      ) : view === "song-lists" ? (
+        <SongListsAdminPanel token={token} />
       ) : view === "stats" && STATS_ENABLED ? (
         <StatsPanel token={token} clubId={me.club_id} />
       ) : view === "manual" ? (
