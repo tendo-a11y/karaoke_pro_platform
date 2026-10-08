@@ -451,8 +451,10 @@ function SongListRow({ song, onPick }) {
   );
 }
 
-function SongListsPanel({ token, onPick }) {
-  const [tab, setTab] = useState(null);
+function SongListsPanel({ token, onPick, open, onToggle }) {
+  // Один треугольник на весь блок: открыли — живая очередь сворачивается.
+  const [tabState, setTab] = useState("recent");
+  const tab = open ? tabState : null;
   const [lists, setLists] = useState(null);
   const [error, setError] = useState(null);
   const [page, setPage] = useState(0);
@@ -480,6 +482,23 @@ function SongListsPanel({ token, onPick }) {
 
   return (
     <div className="song-lists">
+      <h2
+        className="collapsible-header"
+        role="button"
+        tabIndex={0}
+        aria-expanded={open}
+        onClick={onToggle}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onToggle();
+          }
+        }}
+      >
+        История за час · Популярные · Новинки
+        <span className={`collapsible-caret${open ? " collapsible-caret--blink" : ""}`}>{open ? "▲" : "▼"}</span>
+      </h2>
+      {open && (
       <div className="song-lists__tabs">
         {SONG_LIST_TABS.map((t) => (
           <button
@@ -487,18 +506,15 @@ function SongListsPanel({ token, onPick }) {
             type="button"
             className={`song-lists__tab${tab === t.key ? " song-lists__tab--active" : ""}`}
             onClick={() => {
-              setTab(tab === t.key ? null : t.key);
+              setTab(t.key);
               setPage(0);
             }}
           >
-            {t.label}{" "}
-            {/* Треугольничек как у "Профиля": открыт — моргает, чтобы закрыли. */}
-            <span className={`collapsible-caret${tab === t.key ? " collapsible-caret--blink" : ""}`}>
-              {tab === t.key ? "▲" : "▼"}
-            </span>
+            {t.label}
           </button>
         ))}
       </div>
+      )}
       {current && (
         <div className="song-lists__body">
           {error && <div className="banner banner--error">{error}</div>}
@@ -2771,6 +2787,7 @@ export default function App() {
   // ДОБАВЛЕНО (2026-10): всплывающее сообщение "скоро ваша очередь" — за
   // две песни и за одну песню до выхода гостя, один раз на песню.
   const [turnToast, setTurnToast] = useState(null);
+  const [songListsOpen, setSongListsOpen] = useState(false);
   const turnToastShownRef = useRef(new Set());
   useEffect(() => {
     let text = null;
@@ -3504,6 +3521,8 @@ export default function App() {
         ) : null}
         <SongListsPanel
           token={session.token}
+          open={songListsOpen}
+          onToggle={() => setSongListsOpen((v) => !v)}
           onPick={(song) => {
             setSongTitle(song.song_title);
             setArtist(song.artist || "");
@@ -3512,8 +3531,27 @@ export default function App() {
             if (panel) panel.scrollIntoView({ behavior: "smooth", block: "start" });
           }}
         />
-        <h2>Живая очередь</h2>
-        {queue.length === 0 ? (
+        {songListsOpen ? (
+          <h2
+            className="collapsible-header"
+            role="button"
+            tabIndex={0}
+            aria-expanded={false}
+            onClick={() => setSongListsOpen(false)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                setSongListsOpen(false);
+              }
+            }}
+          >
+            Живая очередь
+            <span className="collapsible-caret">▼</span>
+          </h2>
+        ) : (
+          <h2>Живая очередь</h2>
+        )}
+        {songListsOpen ? null : queue.length === 0 ? (
           <p className="empty-hint">Очередь пуста.</p>
         ) : (
           <>
