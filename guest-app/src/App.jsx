@@ -3084,7 +3084,15 @@ export default function App() {
 
         <section className="panel">
           <h2>💬 Общий чат</h2>
-          <p className="empty-hint">🛠 В разработке. Скоро заработает.</p>
+          <a
+            className="btn-link"
+            href="https://t.me/voicevocalclub/1"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ display: "inline-block", textDecoration: "none" }}
+          >
+            Открыть чат в Telegram
+          </a>
         </section>
 
         <section className="panel">
