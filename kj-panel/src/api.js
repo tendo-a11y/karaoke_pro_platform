@@ -181,6 +181,13 @@ export const api = {
     request(`/api/kj/guests/${guestId}/photo`, {
       method: "PUT", token, body: { photo_data_url: photoDataUrl },
     }),
+  getClubStats: (token, clubId, from, to) => {
+    const params = new URLSearchParams();
+    if (from) params.set("from", from);
+    if (to) params.set("to", to);
+    params.set("tz", String(-new Date().getTimezoneOffset()));
+    return request(`/api/kj/stats/${clubId}?${params.toString()}`, { token });
+  },
   getGeneralChat: (token) => request("/api/kj/general-chat", { token }),
   setGeneralChat: (token, enabled) =>
     request("/api/kj/general-chat", { method: "PUT", token, body: { enabled } }),
