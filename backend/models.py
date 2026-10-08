@@ -1275,3 +1275,32 @@ class NewSong(db.Model):
             "artist": self.artist,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
+
+
+class SongListHidden(db.Model):
+    """
+    ДОБАВЛЕНО (2026-10, запрос пользователя): KJ скрывает песню из списков
+    гостя над живой очередью. kind="popular" — песня (по исполнителю и
+    названию) не показывается в "Популярных", пока KJ её не вернёт;
+    kind="history" — конкретная спетая песня (order_id) не показывается в
+    "Истории за час". В чеках и статистике ничего не меняется.
+    """
+    __tablename__ = "song_list_hidden"
+
+    id = db.Column(db.Integer, primary_key=True)
+    club_id = db.Column(db.Integer, db.ForeignKey("clubs.club_id"), nullable=False, index=True)
+    kind = db.Column(db.String(20), nullable=False)
+    norm_key = db.Column(db.String(1100), nullable=True)
+    order_id = db.Column(db.Integer, nullable=True)
+    song_title = db.Column(db.String(500), nullable=True)
+    artist = db.Column(db.String(500), nullable=True)
+    created_at = db.Column(db.DateTime(timezone=True), default=utcnow, nullable=False)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "kind": self.kind,
+            "song_title": self.song_title,
+            "artist": self.artist,
+            "order_id": self.order_id,
+        }
