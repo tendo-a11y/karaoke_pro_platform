@@ -1214,6 +1214,27 @@ def update_table_settings(club_id):
     })
 
 
+# ДОБАВЛЕНО (2026-10, запрос пользователя): переключатель "Общий чат"
+# (ссылка на группу в Telegram у гостя) — Вкл/Откл из KJ Panel.
+@bp.get("/general-chat")
+@require_kj
+def get_general_chat():
+    club = db.session.get(Club, g.club_id)
+    return api_ok({"enabled": bool(club.chat_enabled) if club else False})
+
+
+@bp.put("/general-chat")
+@require_kj
+def set_general_chat():
+    club = db.session.get(Club, g.club_id)
+    if club is None:
+        return api_error(404, "NOT_FOUND", "Клуб не найден")
+    payload = request.get_json(silent=True) or {}
+    club.chat_enabled = bool(payload.get("enabled"))
+    db.session.commit()
+    return api_ok({"enabled": bool(club.chat_enabled)})
+
+
 # ДОБАВЛЕНО (2026-10-04, запрос пользователя "бот и приложение — два
 # отдельных инструмента, что в боте то и в приложении, во вкладку VIP надо
 # добавить то, что есть в боте") — перенос handlers/kj.py::
