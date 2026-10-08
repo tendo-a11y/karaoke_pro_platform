@@ -361,6 +361,41 @@ def close_table_orders(club_id: int, table_no: int):
     return orders
 
 
+def close_guest_orders(club_id: int, guest_id: int):
+    """
+    ДОБАВЛЕНО (2026-10, запрос пользователя: "если гость ушёл — песни
+    автоудаляются, очередь перестраивается"): гость встал из-за стола (сам,
+    его снял админ стола или KJ) — все его ещё не спетые заказы отклоняются
+    и сразу скрываются из живой очереди, даже если песня ещё стоит в
+    VirtualDJ (та же метка "closed:", что и при закрытии стола). Деньги не
+    списываются, уже спетое не трогается.
+    """
+    orders = (
+        Order.query
+        .filter(
+            Order.club_id == club_id,
+            Order.telegram_user_id == guest_id,
+            Order.status.in_([STATUS_PENDING, STATUS_PROCESSING, STATUS_QUEUED, STATUS_ERROR]),
+        )
+        .all()
+    )
+    if not orders:
+        return []
+    now = _utcnow()
+    for order in orders:
+        order.status = STATUS_REJECTED
+        order.rejected_at = now
+        if order.vdj_item_id and not order.vdj_item_id.startswith("closed:"):
+            order.vdj_item_id = f"closed:{int(now.timestamp())}:{order.vdj_item_id}"[:255]
+    db.session.commit()
+
+    for order in orders:
+        db.session.refresh(order)
+        emit_order_rejected(order)
+
+    return orders
+
+
 def _queue_rank(vdj, vdj_item_id: str):
     """
     1-based позиция заказа в текущей очереди VirtualDJ клуба — по образцу
@@ -918,7 +953,7 @@ def _merged_live_queue(club_id: int, persist: bool):
         db.session.query(Order)
         .filter(
             Order.club_id == club_id,
-            Order.status.in_((STATUS_COMPLETED, STATUS_PLAYING)),
+            Order.status.in_((STATUS_COMPLETED, STATUS_PLAYING, STATUS_REJECTED)),
             Order.vdj_item_id.like("closed:%"),
         )
         .all()
