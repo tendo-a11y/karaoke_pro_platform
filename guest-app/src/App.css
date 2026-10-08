@@ -767,7 +767,6 @@ select {
   font-weight: 700;
   color: var(--text);
   background: rgba(47, 191, 113, 0.3);
-  animation: queue-mine-blink 1s ease-in-out infinite;
 }
 .queue-item__mine-badge { color: var(--ok); font-weight: 700; }
 .queue-item--my-table { border-left: 3px solid var(--ok); padding-left: 8px; }
