@@ -44,7 +44,11 @@ function QueueTable({ queue, token, clubId }) {
   // Кнопка "Копировать" у песни: копирует "Исполнитель — Название".
   const [copiedIdx, setCopiedIdx] = useState(null);
   async function copySong(item, idx) {
-    const text = item.artist ? `${item.artist} — ${item.song_title}` : item.song_title;
+    // Без тире: "Исполнитель Название" (отдельно стоящие - и — убираются).
+    const text = `${item.artist || ""} ${item.song_title || ""}`
+      .replace(/(^|\s)[—–-]+(?=\s|$)/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
     try {
       await navigator.clipboard.writeText(text);
     } catch {
