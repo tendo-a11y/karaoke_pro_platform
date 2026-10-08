@@ -32,6 +32,13 @@ const POLL_QUEUE_MS = 10000;
 // песен отложен). Категории подтягиваются тем же способом, что и в
 // CategoriesPanel (см. её reload()) — свой собственный небольшой список
 // внутри компонента, отдельный от него.
+// Ключ песни для "Новинок": исполнитель + название без учёта регистра и
+// лишних пробелов (так же считает сервер).
+function newSongKey(title, artist) {
+  const norm = (v) => String(v || "").toLowerCase().split(/\s+/).filter(Boolean).join(" ");
+  return `${norm(artist)}|${norm(title)}`;
+}
+
 function QueueTable({ queue, token, clubId }) {
   const [categories, setCategories] = useState([]);
   const [tableDrafts, setTableDrafts] = useState({});
@@ -51,6 +58,32 @@ function QueueTable({ queue, token, clubId }) {
   // указывает, с какой "ничьей" строкой VirtualDJ его склеить.
   const [renameDraft, setRenameDraft] = useState(null); // { orderId, title, artist }
   const [linkingOrderId, setLinkingOrderId] = useState(null);
+  // ДОБАВЛЕНО (2026-10, запрос пользователя): галочка "Новинка" у песни —
+  // такие песни гость видит в списке "Новинки" над живой очередью.
+  const [newSongKeys, setNewSongKeys] = useState(() => new Set());
+  useEffect(() => {
+    let cancelled = false;
+    const load = () =>
+      api.listNewSongs(token)
+        .then((list) => {
+          if (!cancelled) setNewSongKeys(new Set((list || []).map((s) => newSongKey(s.song_title, s.artist))));
+        })
+        .catch(() => {});
+    load();
+    const id = setInterval(load, 30000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [token]);
+  async function toggleNewSong(item, checked) {
+    try {
+      const list = await api.setNewSong(token, item.song_title, item.artist, checked);
+      setNewSongKeys(new Set((list || []).map((s) => newSongKey(s.song_title, s.artist))));
+    } catch {
+      // не критично — галочка просто не поменяется
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -225,6 +258,16 @@ function QueueTable({ queue, token, clubId }) {
               <span className="queue-row__position">{idx + 1}</span>
               <span className="queue-row__artist">{item.artist || "—"}</span>
               <span className="queue-row__song">{item.song_title}</span>
+              {item.song_title && (
+                <label className="queue-row__new" title="Показывать гостям в «Новинках»">
+                  <input
+                    type="checkbox"
+                    checked={newSongKeys.has(newSongKey(item.song_title, item.artist))}
+                    onChange={(e) => toggleNewSong(item, e.target.checked)}
+                  />
+                  Новинка
+                </label>
+              )}
               {item.orphaned && (
                 <span className="queue-row__orphaned-badge" title="Эта песня больше не найдена в самом VirtualDJ — например, из-за перезапуска сервера. Можно только удалить.">
                   ⚠ нет в VDJ
