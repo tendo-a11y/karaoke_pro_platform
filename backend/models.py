@@ -51,6 +51,9 @@ class Club(db.Model):
     auto_close_time = db.Column(db.String(5), nullable=True)        # "07:00"
     auto_close_tz_offset = db.Column(db.Integer, nullable=True)     # минуты от UTC
     auto_close_last_date = db.Column(db.Date, nullable=True)        # когда уже сработало
+    # Когда в последний раз закрыли вечер ("Закрыть все столы" вручную или
+    # автоматически). Всё, что до этого, — прошлый вечер.
+    evening_closed_at = db.Column(db.DateTime(timezone=True), nullable=True)
 
     # Перенос полей старой Venue (handlers/admin.py: venue_add_*/venue_show_details/
     # venue_contacts_list) — контактные данные клуба и число столов. В старой
