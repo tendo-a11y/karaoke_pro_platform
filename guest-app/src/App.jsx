@@ -1,6 +1,28 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, GOOGLE_CLIENT_ID, api, loadStoredSession, storeSession } from "./api";
 import "./App.css";
+import { LANG, LANGS, setLang } from "./i18n.js";
+import { LEGAL_HTML } from "./i18n_legal.js";
+
+// Переключатель языка RU / RO / EN / UA (запрос пользователя 2026-10).
+function LangSwitcher() {
+  return (
+    <div className="lang-switch">
+      {LANGS.map((l) => (
+        <button
+          key={l.code}
+          type="button"
+          className={`lang-switch__btn${LANG === l.code ? " lang-switch__btn--active" : ""}`}
+          onClick={() => {
+            if (LANG !== l.code) setLang(l.code);
+          }}
+        >
+          {l.label}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 // ИЗМЕНЕНО (запрос пользователя 2026-09-28: "Мои заказы — это заказы,
 // которые ждут своей очереди занять место в карточке стола. НЕ надо нигде
@@ -301,7 +323,8 @@ const TERMS_PAGE_HTML = `
 `;
 
 function LegalPageScreen({ page }) {
-  const html = page === "privacy" ? PRIVACY_PAGE_HTML : TERMS_PAGE_HTML;
+  const html =
+    (LEGAL_HTML[LANG] && LEGAL_HTML[LANG][page]) || (page === "privacy" ? PRIVACY_PAGE_HTML : TERMS_PAGE_HTML);
   return (
     <div className="legal-page">
       <div className="wrap" dangerouslySetInnerHTML={{ __html: html }} />
@@ -3251,6 +3274,7 @@ export default function App() {
 
   return (
     <div className="app-shell">
+      <LangSwitcher />
       <header className="app-header">
         <h1>🎤 {meInfo.club_name || "Karaoke"}</h1>
         <span className="app-header__table">
