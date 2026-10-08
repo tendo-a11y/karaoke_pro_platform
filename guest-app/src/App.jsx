@@ -3082,6 +3082,7 @@ export default function App() {
         чат (заглушка), 4) заказ новой песни (заглушка). */}
         <ChatPanel token={session.token} />
 
+        {meInfo?.chat_enabled && (
         <section className="panel">
           <h2>💬 Общий чат</h2>
           <a
@@ -3094,6 +3095,7 @@ export default function App() {
             Открыть чат в Telegram
           </a>
         </section>
+        )}
 
         <section className="panel">
           <h2>🎵 Заказ новой песни</h2>
