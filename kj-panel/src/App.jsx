@@ -763,6 +763,40 @@ function TableCloseRequestsPanel({ token, clubId, socket }) {
 // со всем механизмом access_code/redeem (см. отчёт по п.45 и routes/kj.py
 // ::list_vip_clients). VIP теперь появляется только через заявку гостя,
 // уже подтвердившего личность через Google, + одобрение здесь.
+// ДОБАВЛЕНО (2026-10): переключатель "Общий чат" (ссылка на группу в
+// Telegram у гостя) — Вкл/Откл.
+function GeneralChatToggle({ token }) {
+  const [enabled, setEnabled] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  useEffect(() => {
+    api.getGeneralChat(token)
+      .then((data) => setEnabled(Boolean(data?.enabled)))
+      .catch((err) => setError(err.message));
+  }, [token]);
+  async function toggle() {
+    setBusy(true);
+    setError(null);
+    try {
+      const data = await api.setGeneralChat(token, !enabled);
+      setEnabled(Boolean(data?.enabled));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <section className="order-change-requests-panel">
+      <h2>Общий чат (Telegram): {enabled == null ? "…" : enabled ? "Вкл" : "Откл"}</h2>
+      {error && <div className="banner banner--error">{error}</div>}
+      <button type="button" className="btn-link" disabled={busy || enabled == null} onClick={toggle}>
+        {enabled ? "Отключить" : "Включить"}
+      </button>
+    </section>
+  );
+}
+
 function AdminMessagesPanel({ token, clubId, socket }) {
   // ДОБАВЛЕНО (2026-10-03, запрос пользователя "в админке есть панель
   // управления KJ... сообщения приходят KJ в его панель сообщения. Но
@@ -3819,6 +3853,7 @@ export default function App() {
           пополнение баланса были спрятаны внутри вкладки VIP; личного чата
           с гостем у KJ Panel не было вообще. Теперь всё в одном месте. */}
           <AdminMessagesPanel token={token} clubId={me.club_id} socket={socketInstance} />
+          <GeneralChatToggle token={token} />
           <OrderChangeRequestsPanel token={token} clubId={me.club_id} socket={socketInstance} />
           <TableCloseRequestsPanel token={token} clubId={me.club_id} socket={socketInstance} />
           <VipRequestsPanel token={token} clubId={me.club_id} socket={socketInstance} />
