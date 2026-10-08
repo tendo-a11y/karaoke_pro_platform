@@ -924,3 +924,8 @@ img { max-width: 100%; }
 .stats-bars__track { flex: 1; height: 10px; border-radius: 5px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
 .stats-bars__fill { display: block; height: 100%; border-radius: 5px; background: #2fbf71; }
 .stats-bars__count { width: 36px; text-align: right; }
+
+
+/* ДОБАВЛЕНО (2026-10): галочка "Новинка" у песни в живой очереди. */
+.queue-row__new { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; opacity: 0.85; white-space: nowrap; }
+.queue-row__new input { width: auto; margin: 0; }
