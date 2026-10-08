@@ -843,6 +843,8 @@ def _remember_guest_song_text(order) -> None:
 _HISTORY_NEXT_CHECK: dict = {}
 _HISTORY_INTERVAL_OK = 10      # секунд между опросами истории
 _HISTORY_INTERVAL_FAIL = 120   # мост не ответил/старый — не дёргаем часто
+_HISTORY_PLAYED: dict = {}     # club_id -> [(путь файла, время проигрывания)] из истории VirtualDJ
+_PLAYED_WINDOW_HOURS = 12      # "этот вечер": отыгравшее раньше не считается
 
 
 def _norm_path(value) -> str:
@@ -864,9 +866,9 @@ def _auto_complete_from_history(club_id: int, vdj) -> None:
         .all()
     )
     candidates = [o for o in candidates if not (o.vdj_item_id or "").startswith("closed:")]
-    if not candidates:
-        _HISTORY_NEXT_CHECK[club_id] = now + timedelta(seconds=_HISTORY_INTERVAL_OK)
-        return
+    # ИЗМЕНЕНО (2026-10, запрос пользователя "должно очищаться без стола
+    # тоже"): историю читаем всегда, даже если заказов нет — по ней из
+    # очереди убираются и отыгравшие песни без заказа (см. _merged_live_queue).
     import logging
     log = logging.getLogger(__name__)
     try:
@@ -876,10 +878,6 @@ def _auto_complete_from_history(club_id: int, vdj) -> None:
         log.warning("Автоготово: история VirtualDJ клуба %s недоступна (%s)", club_id, exc)
         return
     _HISTORY_NEXT_CHECK[club_id] = now + timedelta(seconds=_HISTORY_INTERVAL_OK)
-    log.info(
-        "Автоготово: клуб %s — в истории %s записей, ждут проверки %s заказов",
-        club_id, len(history or []), len(candidates),
-    )
 
     played = []
     for entry in history or []:
@@ -892,7 +890,8 @@ def _auto_complete_from_history(club_id: int, vdj) -> None:
             continue
         if path:
             played.append((path, played_at))
-    if not played:
+    _HISTORY_PLAYED[club_id] = played
+    if not played or not candidates:
         return
 
     changed = []
@@ -1050,6 +1049,29 @@ def _merged_live_queue(club_id: int, persist: bool):
 
     if changed:
         db.session.commit()
+
+    # ДОБАВЛЕНО (2026-10, запрос пользователя: "должно очищаться без стола
+    # тоже"): песня в VirtualDJ без заказа (её поставил сам диджей), которая
+    # по истории VirtualDJ уже отыграла в этот вечер, из живой очереди
+    # убирается — так же, как спетые заказы. Если к песне привязан заказ
+    # гостя, она остаётся (её закрывает автонажатие "Готово" выше).
+    played = _HISTORY_PLAYED.get(club_id) or []
+    if played:
+        border = _utcnow().timestamp() - _PLAYED_WINDOW_HOURS * 3600
+        from models import Club as _Club
+
+        club_row = db.session.get(_Club, club_id)
+        closed_at = getattr(club_row, "evening_closed_at", None) if club_row is not None else None
+        if closed_at is not None:
+            closed_ts = (closed_at if closed_at.tzinfo else closed_at.replace(tzinfo=timezone.utc)).timestamp()
+            border = max(border, closed_ts)
+        recent = [path for path, played_at in played if played_at >= border]
+        if recent:
+            def _was_played(item):
+                wanted = _norm_path(item.vdj_item_id)
+                return bool(wanted) and any(path == wanted or path.endswith(wanted) for path in recent)
+
+            rows = [row for row in rows if row[1] is not None or not _was_played(row[0])]
 
     # ИЗМЕНЕНО (2026-10, запрос пользователя): в режиме "Последовательно"
     # принятые заказы, которых нет в VirtualDJ, выстраиваются по кругу столов
