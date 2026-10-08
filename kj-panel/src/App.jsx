@@ -223,8 +223,8 @@ function QueueTable({ queue, token, clubId }) {
               className={`queue-row${item.orphaned ? " queue-row--orphaned" : ""}`}
             >
               <span className="queue-row__position">{idx + 1}</span>
-              <span className="queue-row__artist">{item.artist ? `🎤 ${item.artist}` : "—"}</span>
-              <span className="queue-row__song">🎵 {item.song_title}</span>
+              <span className="queue-row__artist">{item.artist || "—"}</span>
+              <span className="queue-row__song">{item.song_title}</span>
               {item.orphaned && (
                 <span className="queue-row__orphaned-badge" title="Эта песня больше не найдена в самом VirtualDJ — например, из-за перезапуска сервера. Можно только удалить.">
                   ⚠ нет в VDJ
