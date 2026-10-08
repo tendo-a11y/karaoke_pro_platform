@@ -192,6 +192,11 @@ export const api = {
     params.set("tz", String(-new Date().getTimezoneOffset()));
     return request(`/api/kj/stats/${clubId}?${params.toString()}`, { token });
   },
+  getAutoClose: (token) => request("/api/kj/auto-close", { token }),
+  setAutoClose: (token, enabled, time) =>
+    request("/api/kj/auto-close", {
+      method: "PUT", token, body: { enabled, time, tz_offset: -new Date().getTimezoneOffset() },
+    }),
   getGeneralChat: (token) => request("/api/kj/general-chat", { token }),
   setGeneralChat: (token, enabled) =>
     request("/api/kj/general-chat", { method: "PUT", token, body: { enabled } }),
