@@ -1157,11 +1157,36 @@ function AdminMessagesPanel({ token, clubId, socket }) {
     }
   }
 
+  // ДОБАВЛЕНО (2026-10): удаление — насовсем, у KJ и у администрации.
+  async function handleDelete(messageId) {
+    try {
+      await api.deleteAdminMessage(token, clubId, messageId);
+      setMessages((prev) => (prev || []).filter((m) => m.id !== messageId));
+    } catch (err) {
+      setSendError(err instanceof ApiError ? err.message : String(err));
+    }
+  }
+
+  async function handleClearAll() {
+    if (!window.confirm("Удалить всю переписку с администрацией? Она пропадёт и у администрации.")) return;
+    try {
+      await api.clearAdminMessages(token, clubId);
+      setMessages([]);
+    } catch (err) {
+      setSendError(err instanceof ApiError ? err.message : String(err));
+    }
+  }
+
   if (loadError) return <div className="banner banner--error">{loadError}</div>;
 
   return (
     <section className="order-change-requests-panel admin-messages-panel">
       <h2>📢 Сообщения от администрации</h2>
+      {messages && messages.length > 0 && (
+        <button type="button" className="btn-link" onClick={handleClearAll}>
+          Очистить всё
+        </button>
+      )}
       {!messages ? (
         <p className="empty-hint">Загрузка…</p>
       ) : messages.length === 0 ? (
@@ -1172,6 +1197,9 @@ function AdminMessagesPanel({ token, clubId, socket }) {
             <li key={m.id} className="vip-row chat-thread-row">
               <span>{m.from_admin ? "Администрация" : "Вы"}:</span>
               <span>{m.message_text}</span>
+              <button type="button" className="btn-link" title="Удалить сообщение" onClick={() => handleDelete(m.id)}>
+                ✕
+              </button>
             </li>
           ))}
         </ul>
