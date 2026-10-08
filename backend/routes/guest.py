@@ -367,6 +367,13 @@ def _mark_ordered_today(club_id: int, items: list[dict]) -> list[dict]:
     if not items:
         return items
     since = datetime.now(timezone.utc) - timedelta(days=1)
+    # ИЗМЕНЕНО (2026-10, запрос пользователя: "Закрыть столы полностью
+    # завершает вечер"): песни прошлого вечера не помечаются — только то,
+    # что заказано после последнего закрытия вечера.
+    club = db.session.get(Club, club_id)
+    evening_closed_at = club.evening_closed_at if club is not None else None
+    if evening_closed_at is not None and evening_closed_at > since:
+        since = evening_closed_at
     rows = (
         Order.query.with_entities(Order.song_title, Order.artist)
         .filter(
