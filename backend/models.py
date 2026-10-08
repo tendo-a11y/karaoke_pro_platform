@@ -1249,3 +1249,29 @@ class VipTopupRequest(db.Model):
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "decided_at": self.decided_at.isoformat() if self.decided_at else None,
         }
+
+
+class NewSong(db.Model):
+    """
+    ДОБАВЛЕНО (2026-10, запрос пользователя): "Новинки" — песни, которые KJ
+    отметил галочкой в живой очереди. Показываются гостю списком над живой
+    очередью. Одна песня (исполнитель + название без учёта регистра и
+    лишних пробелов) в клубе может быть в списке только один раз.
+    """
+    __tablename__ = "new_songs"
+    __table_args__ = (db.UniqueConstraint("club_id", "norm_key", name="uq_new_songs_club_key"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    club_id = db.Column(db.Integer, db.ForeignKey("clubs.club_id"), nullable=False, index=True)
+    song_title = db.Column(db.String(500), nullable=False)
+    artist = db.Column(db.String(500), nullable=True)
+    norm_key = db.Column(db.String(1100), nullable=False)
+    created_at = db.Column(db.DateTime(timezone=True), default=utcnow, nullable=False)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "song_title": self.song_title,
+            "artist": self.artist,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
