@@ -952,3 +952,17 @@ img { max-width: 100%; }
 .service-card__desc { margin: 0; font-size: 15px; line-height: 1.45; color: var(--text); white-space: pre-wrap; }
 .service-card__buttons { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
 .service-card__close { background: none; color: var(--muted); border: 1px solid var(--border); font-weight: 600; padding: 10px; border-radius: 8px; cursor: pointer; }
+
+
+/* ДОБАВЛЕНО (2026-10): экран "Списки для гостей". */
+.song-admin__add { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+.song-admin__add input { flex: 1 1 180px; }
+.song-admin__list { margin: 8px 0; padding-left: 22px; }
+.song-admin__row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.song-admin__row > span:first-child { flex: 1; }
+.song-admin__remove {
+  width: auto; margin: 0; padding: 2px 10px; border-radius: 6px; cursor: pointer;
+  background: transparent; color: var(--danger); border: 1px solid var(--danger); font-weight: 700;
+}
+
+.queue-row__new--hidden { visibility: hidden; pointer-events: none; }
