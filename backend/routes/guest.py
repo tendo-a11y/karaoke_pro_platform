@@ -372,7 +372,9 @@ def _mark_ordered_today(club_id: int, items: list[dict]) -> list[dict]:
         .filter(
             Order.club_id == club_id,
             Order.created_at >= since,
-            Order.status.notin_([STATUS_REJECTED, STATUS_ERROR]),
+            # ИЗМЕНЕНО (2026-10, запрос пользователя): пометка только у реально
+            # спетых песен (нажато или автоматически сработало "Готово").
+            Order.status.in_([STATUS_COMPLETED, "playing"]),
         )
         .all()
     )
