@@ -1385,6 +1385,19 @@ def clear_own_chat():
     return api_ok({"cleared": True})
 
 
+@bp.get("/song-lists")
+@require_guest
+def song_lists():
+    """ДОБАВЛЕНО (2026-10, запрос пользователя): списки над живой очередью —
+    "История за час", "Популярные", "Новинки" (services/song_lists_service.py)."""
+    from services import song_lists_service
+    return api_ok({
+        "recent": song_lists_service.recent_hour(g.club_id),
+        "popular": song_lists_service.popular(g.club_id),
+        "new": song_lists_service.new_songs(g.club_id),
+    })
+
+
 @bp.get("/queue")
 @require_guest
 def queue():
