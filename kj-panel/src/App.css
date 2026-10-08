@@ -890,7 +890,7 @@ img { max-width: 100%; }
   display: inline-block; align-self: flex-start; padding: 1px 8px; border-radius: 999px;
   font-weight: 700; font-size: 12px; white-space: nowrap;
   background: rgba(255, 176, 32, 0.2); color: var(--accent); border: 1px solid var(--accent);
-  animation: tone-badge-blink 0.9s ease-in-out infinite;
+  animation: tone-badge-blink 1s ease-in-out infinite;
 }
 @keyframes tone-badge-blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 
