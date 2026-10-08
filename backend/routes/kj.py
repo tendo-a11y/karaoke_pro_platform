@@ -1235,6 +1235,34 @@ def set_general_chat():
     return api_ok({"enabled": bool(club.chat_enabled)})
 
 
+# ДОБАВЛЕНО (2026-10, запрос пользователя): статистика своего клуба для
+# KJ Panel. Только чтение. Экран в панели пока скрыт (открывается только
+# по адресу с ?stats=1), см. services/club_stats_service.py.
+@bp.get("/stats/<int:club_id>")
+@require_kj
+def club_stats(club_id):
+    denied = _ensure_own_club(club_id)
+    if denied:
+        return denied
+    from datetime import date as _date
+    from services import club_stats_service
+    try:
+        tz_offset = int(request.args.get("tz", "0"))
+    except ValueError:
+        return api_error(400, "VALIDATION_ERROR", "tz должен быть числом")
+    if not -840 <= tz_offset <= 840:
+        return api_error(400, "VALIDATION_ERROR", "tz вне допустимого диапазона")
+    today = club_stats_service.today_club_day(tz_offset)
+    try:
+        date_from = _date.fromisoformat(request.args["from"]) if request.args.get("from") else today
+        date_to = _date.fromisoformat(request.args["to"]) if request.args.get("to") else date_from
+    except ValueError:
+        return api_error(400, "VALIDATION_ERROR", "Даты должны быть в формате ГГГГ-ММ-ДД")
+    if abs((date_to - date_from).days) > 366:
+        return api_error(400, "VALIDATION_ERROR", "Период не больше года")
+    return api_ok(club_stats_service.get_stats(club_id, date_from, date_to, tz_offset))
+
+
 # ДОБАВЛЕНО (2026-10-04, запрос пользователя "бот и приложение — два
 # отдельных инструмента, что в боте то и в приложении, во вкладку VIP надо
 # добавить то, что есть в боте") — перенос handlers/kj.py::
