@@ -713,7 +713,7 @@ select {
   border-radius: 12px;
   padding: 12px;
   margin-bottom: 14px;
-  animation: ai-search-pulse 1.8s ease-in-out infinite;
+  animation: ai-search-pulse 1s ease-in-out infinite;
 }
 .order-form-panel .ai-search .order-form button[type="submit"] {
   background: var(--ok);
@@ -741,7 +741,7 @@ select {
   50% { opacity: 1; transform: scale(1.02); }
 }
 .order-form-panel .ai-search .order-form button[type="submit"].is-searching {
-  animation: find-button-pulse 0.9s ease-in-out infinite;
+  animation: find-button-pulse 1s ease-in-out infinite;
 }
 
 /* ДОБАВЛЕНО (2026-10, запрос пользователя): в живой очереди гостя его
@@ -767,7 +767,7 @@ select {
   font-weight: 700;
   color: var(--text);
   background: rgba(47, 191, 113, 0.3);
-  animation: queue-mine-blink 0.9s ease-in-out infinite;
+  animation: queue-mine-blink 1s ease-in-out infinite;
 }
 .queue-item__mine-badge { color: var(--ok); font-weight: 700; }
 .queue-item--my-table { border-left: 3px solid var(--ok); padding-left: 8px; }
@@ -868,14 +868,14 @@ img { max-width: 100%; }
   background: rgba(47, 191, 113, 0.14); color: var(--ok);
   font-size: 16px; font-weight: 700; cursor: pointer;
 }
-.screenshot-pick--blink { animation: screenshot-pick-blink 0.9s ease-in-out infinite; }
+.screenshot-pick--blink { animation: screenshot-pick-blink 1s ease-in-out infinite; }
 @keyframes screenshot-pick-blink {
   0%, 100% { background: rgba(47, 191, 113, 0.14); box-shadow: 0 0 0 0 rgba(47, 191, 113, 0); }
   50% { background: rgba(47, 191, 113, 0.45); box-shadow: 0 0 0 6px rgba(47, 191, 113, 0.18); color: #fff; }
 }
 
 /* ДОБАВЛЕНО (2026-10): подсветка следующего шага при заказе песни. */
-.step-blink { animation: step-blink 0.9s ease-in-out infinite; }
+.step-blink { animation: step-blink 1s ease-in-out infinite; }
 @keyframes step-blink {
   0%, 100% { box-shadow: 0 0 0 0 rgba(47, 191, 113, 0); }
   50% { box-shadow: 0 0 0 4px rgba(47, 191, 113, 0.6); border-color: var(--ok); }
@@ -895,7 +895,7 @@ img { max-width: 100%; }
 .song-confirm--no { background: transparent; color: var(--muted); border: 1px solid var(--border); font-weight: 600; }
 
 /* Кнопка "Заказать" моргает целиком (сама кнопка, а не обводка). */
-button[type="submit"].step-blink { animation: button-fill-blink 0.9s ease-in-out infinite; }
+button[type="submit"].step-blink { animation: button-fill-blink 1s ease-in-out infinite; }
 @keyframes button-fill-blink {
   0%, 100% { opacity: 1; filter: brightness(1.15); }
   50% { opacity: 0.4; filter: brightness(1); }
@@ -906,16 +906,16 @@ button[type="submit"].step-blink { animation: button-fill-blink 0.9s ease-in-out
   margin: 0 0 10px; padding: 12px 14px; border-radius: 10px;
   border: 2px solid var(--accent); background: rgba(255, 176, 32, 0.16);
   color: var(--text); font-size: 15px; font-weight: 700; line-height: 1.35;
-  animation: button-fill-blink 0.9s ease-in-out infinite;
+  animation: button-fill-blink 1s ease-in-out infinite;
 }
 .table-group-who { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .table-group-who__photo { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
 
 /* Кнопка "Заказать снова" в избранном моргает целиком, когда категория выбрана. */
-button.step-blink-fill { animation: button-fill-blink 0.9s ease-in-out infinite; }
+button.step-blink-fill { animation: button-fill-blink 1s ease-in-out infinite; }
 
 /* Треугольник раскрытого профиля моргает — подсказка, что блок можно закрыть. */
-.collapsible-caret--blink { color: var(--ok); font-size: 1.25em; animation: button-fill-blink 0.9s ease-in-out infinite; }
+.collapsible-caret--blink { color: var(--ok); font-size: 1.25em; animation: button-fill-blink 1s ease-in-out infinite; }
 
 /* "Удалить мои данные" — неброско; "Финансы" в профиле — заметнее. */
 .profile-legal-row button.btn-link {
@@ -944,7 +944,7 @@ button.step-blink-fill { animation: button-fill-blink 0.9s ease-in-out infinite;
 .tone-badge {
   display: inline-block; padding: 2px 8px; border-radius: 999px; font-weight: 700; font-size: 13px;
   background: rgba(47, 191, 113, 0.2); color: var(--ok); border: 1px solid var(--ok);
-  animation: button-fill-blink 0.9s ease-in-out infinite;
+  animation: button-fill-blink 1s ease-in-out infinite;
 }
 
 /* ДОБАВЛЕНО (2026-10): лёгкая кнопка "Сообщения" в шапке и ровные рамки кнопок на телефоне. */
