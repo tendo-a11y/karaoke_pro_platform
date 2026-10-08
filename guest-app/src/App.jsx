@@ -422,6 +422,172 @@ function ServiceSelect({ services, value, onChange, disabled, highlight = false 
   );
 }
 
+// ДОБАВЛЕНО (2026-10, запрос пользователя): небольшие кнопки над живой
+// очередью — "История за час", "Популярные" (по 10 в блоке), "Новинки".
+// Песню можно сразу заказать: категория -> "Заказать", с подсказками.
+const SONG_LIST_TABS = [
+  { key: "recent", label: "История за час", empty: "За последний час ещё ничего не спели." },
+  { key: "popular", label: "Популярные", empty: "Пока нет данных." },
+  { key: "new", label: "Новинки", empty: "Новинок пока нет." },
+];
+const SONG_LIST_PAGE = 10;
+
+function SongListRow({ song, token, services, canOrder, open, onOpen, onOrdered }) {
+  const [serviceId, setServiceId] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const [done, setDone] = useState(false);
+  async function handleOrder() {
+    setBusy(true);
+    setError(null);
+    setDone(false);
+    try {
+      await api.createOrder(token, song.song_title, song.artist || null, Number(serviceId));
+      setServiceId("");
+      setDone(true);
+      if (onOrdered) await onOrdered();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <li className="song-lists__row">
+      <div className="song-lists__line">
+        <span className="song-lists__title">
+          {song.artist ? `${song.artist} — ` : ""}
+          {song.song_title}
+        </span>
+        {canOrder && services.length > 0 && (
+          <button type="button" className={`link-btn${open ? "" : " step-blink"}`} onClick={onOpen}>
+            {open ? "Скрыть" : "Заказать"}
+          </button>
+        )}
+      </div>
+      {open && canOrder && (
+        <>
+          <ServiceSelect
+            services={services}
+            value={serviceId}
+            onChange={(v) => {
+              setServiceId(v);
+              setDone(false);
+            }}
+            disabled={busy}
+            highlight
+          />
+          <div className="favorite-actions">
+            <button
+              type="button"
+              disabled={busy || !serviceId}
+              className={!busy && serviceId ? "step-blink-fill" : undefined}
+              onClick={handleOrder}
+            >
+              {busy ? "Отправляем…" : "Заказать"}
+            </button>
+          </div>
+          {error && <div className="banner banner--error">{error}</div>}
+          {done && <div className="banner banner--ok">Заказ отправлен ✅</div>}
+        </>
+      )}
+    </li>
+  );
+}
+
+function SongListsPanel({ token, services, canOrder, onOrdered }) {
+  const [tab, setTab] = useState(null);
+  const [lists, setLists] = useState(null);
+  const [error, setError] = useState(null);
+  const [page, setPage] = useState(0);
+  const [openKey, setOpenKey] = useState(null);
+
+  const load = useCallback(async () => {
+    try {
+      setLists(await api.getSongLists(token));
+      setError(null);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : String(err));
+    }
+  }, [token]);
+
+  useEffect(() => {
+    if (!tab) return undefined;
+    load();
+    const id = setInterval(load, 30000);
+    return () => clearInterval(id);
+  }, [tab, load]);
+
+  const current = SONG_LIST_TABS.find((t) => t.key === tab);
+  const items = (lists && tab && lists[tab]) || [];
+  const pages = tab === "popular" ? Math.ceil(items.length / SONG_LIST_PAGE) : 1;
+  const shown = tab === "popular" ? items.slice(page * SONG_LIST_PAGE, (page + 1) * SONG_LIST_PAGE) : items;
+
+  return (
+    <div className="song-lists">
+      <div className="song-lists__tabs">
+        {SONG_LIST_TABS.map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            className={`song-lists__tab${tab === t.key ? " song-lists__tab--active" : ""}`}
+            onClick={() => {
+              setTab(tab === t.key ? null : t.key);
+              setPage(0);
+              setOpenKey(null);
+            }}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+      {current && (
+        <div className="song-lists__body">
+          {error && <div className="banner banner--error">{error}</div>}
+          {!lists && !error && <p className="empty-hint">Загрузка…</p>}
+          {lists && items.length === 0 && <p className="empty-hint">{current.empty}</p>}
+          {shown.length > 0 && (
+            <ol className="song-lists__list" start={tab === "popular" ? page * SONG_LIST_PAGE + 1 : 1}>
+              {shown.map((song, i) => {
+                const key = `${tab}-${page}-${i}-${song.song_title}`;
+                return (
+                  <SongListRow
+                    key={key}
+                    song={song}
+                    token={token}
+                    services={services}
+                    canOrder={canOrder}
+                    open={openKey === key}
+                    onOpen={() => setOpenKey(openKey === key ? null : key)}
+                    onOrdered={onOrdered}
+                  />
+                );
+              })}
+            </ol>
+          )}
+          {pages > 1 && (
+            <div className="song-lists__pages">
+              {Array.from({ length: pages }, (_, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  className={`song-lists__page${page === i ? " song-lists__page--active" : ""}`}
+                  onClick={() => {
+                    setPage(i);
+                    setOpenKey(null);
+                  }}
+                >
+                  {i * SONG_LIST_PAGE + 1}–{Math.min((i + 1) * SONG_LIST_PAGE, items.length)}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function OrderRow({
   order, onFavorite, favoriteBusy,
   token, services, isReplacing, onToggleReplace, onReplace, replaceBusy,
@@ -3362,6 +3528,7 @@ export default function App() {
             <span className="turn-toast__close">Нажмите, чтобы закрыть</span>
           </button>
         ) : null}
+        <SongListsPanel token={session.token} services={services} canOrder={canOrder} onOrdered={refreshOrders} />
         <h2>Живая очередь</h2>
         {queue.length === 0 ? (
           <p className="empty-hint">Очередь пуста.</p>
