@@ -243,23 +243,6 @@ function QueueTable({ queue, token, clubId }) {
 
   return (
     <div className="queue-dropzone">
-      {queue.length > 0 && (
-        <div className="queue-new-help">
-          <button
-            type="button"
-            className="queue-new-help__btn"
-            title="Что такое «Новинка»?"
-            onClick={() => setNewSongHelpOpen((v) => !v)}
-          >
-            ? Новинка
-          </button>
-          {newSongHelpOpen && (
-            <span className="queue-new-help__text">
-              Отметьте новинку — и она будет рекомендована гостям в очереди гостей (кнопка «Новинки»).
-            </span>
-          )}
-        </div>
-      )}
       {queue.length === 0 ? (
         <p className="empty-hint">Очередь пока пуста.</p>
       ) : (
@@ -278,6 +261,28 @@ function QueueTable({ queue, token, clubId }) {
               <span className="queue-row__song">{item.song_title}</span>
               {item.song_title && (
                 <label className="queue-row__new" title="Показывать гостям в «Новинках»">
+                  {/* Один красный знак вопроса — над галочкой первой песни. */}
+                  {idx === queue.findIndex((q) => q.song_title) && (
+                    <span className="queue-new-help">
+                      <button
+                        type="button"
+                        className="queue-new-help__btn"
+                        title="Что такое «Новинка»?"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setNewSongHelpOpen((v) => !v);
+                        }}
+                      >
+                        ?
+                      </button>
+                      {newSongHelpOpen && (
+                        <span className="queue-new-help__text">
+                          Отметьте новинку — и она будет рекомендована гостям в очереди гостей (кнопка «Новинки»).
+                        </span>
+                      )}
+                    </span>
+                  )}
                   <input
                     type="checkbox"
                     checked={newSongKeys.has(newSongKey(item.song_title, item.artist))}
