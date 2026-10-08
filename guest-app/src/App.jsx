@@ -491,7 +491,11 @@ function SongListsPanel({ token, onPick }) {
               setPage(0);
             }}
           >
-            {t.label}
+            {t.label}{" "}
+            {/* Треугольничек как у "Профиля": открыт — моргает, чтобы закрыли. */}
+            <span className={`collapsible-caret${tab === t.key ? " collapsible-caret--blink" : ""}`}>
+              {tab === t.key ? "▲" : "▼"}
+            </span>
           </button>
         ))}
       </div>
