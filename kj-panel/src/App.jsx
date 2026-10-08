@@ -62,6 +62,28 @@ function QueueTable({ queue, token, clubId }) {
   // такие песни гость видит в списке "Новинки" над живой очередью.
   const [newSongKeys, setNewSongKeys] = useState(() => new Set());
   const [newSongHelpOpen, setNewSongHelpOpen] = useState(false);
+  // Знак вопроса "Новинка" — на одной линии с заголовком "Живая очередь
+  // VirtualDJ" и ровно над словом "Новинка" (запрос пользователя 2026-10).
+  const dropzoneRef = useRef(null);
+  const [newHelpPos, setNewHelpPos] = useState(null);
+  useEffect(() => {
+    function place() {
+      const dz = dropzoneRef.current;
+      const word = dz && dz.querySelector(".queue-row__new-word--first");
+      const heading = dz && dz.closest("section") && dz.closest("section").querySelector("h2");
+      if (!dz || !word || !heading) {
+        setNewHelpPos(null);
+        return;
+      }
+      const d = dz.getBoundingClientRect();
+      const w = word.getBoundingClientRect();
+      const h = heading.getBoundingClientRect();
+      setNewHelpPos({ left: w.left + w.width / 2 - d.left, top: h.top + h.height / 2 - d.top });
+    }
+    place();
+    window.addEventListener("resize", place);
+    return () => window.removeEventListener("resize", place);
+  }, [queue]);
   useEffect(() => {
     let cancelled = false;
     const load = () =>
@@ -242,7 +264,18 @@ function QueueTable({ queue, token, clubId }) {
   }
 
   return (
-    <div className="queue-dropzone">
+    <div className="queue-dropzone" ref={dropzoneRef}>
+      {newHelpPos && (
+        <button
+          type="button"
+          className="queue-new-help__btn"
+          title="Что такое «Новинка»?"
+          style={{ left: newHelpPos.left, top: newHelpPos.top }}
+          onClick={() => setNewSongHelpOpen(true)}
+        >
+          ❓
+        </button>
+      )}
       {newSongHelpOpen && (
         <div className="service-card-overlay" onClick={() => setNewSongHelpOpen(false)}>
           <div className="service-card" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
@@ -279,23 +312,11 @@ function QueueTable({ queue, token, clubId }) {
                     checked={newSongKeys.has(newSongKey(item.song_title, item.artist))}
                     onChange={(e) => toggleNewSong(item, e.target.checked)}
                   />
-                  <span className="queue-row__new-word">
-                    {/* Один знак вопроса (как у категорий) — над рамкой первой песни,
-                    по центру слова "Новинка". Открывает карточку с пояснением. */}
-                    {idx === queue.findIndex((q) => q.song_title) && (
-                      <button
-                        type="button"
-                        className="queue-new-help__btn"
-                        title="Что такое «Новинка»?"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          setNewSongHelpOpen(true);
-                        }}
-                      >
-                        ❓
-                      </button>
-                    )}
+                  <span
+                    className={`queue-row__new-word${
+                      idx === queue.findIndex((q) => q.song_title) ? " queue-row__new-word--first" : ""
+                    }`}
+                  >
                     Новинка
                   </span>
                 </label>
