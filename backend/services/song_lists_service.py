@@ -12,7 +12,7 @@ from collections import Counter
 from datetime import datetime, timedelta, timezone
 
 from extensions import db
-from models import NewSong, Order
+from models import NewSong, Order, SongListHidden
 
 POPULAR_DAYS = 30
 POPULAR_LIMIT = 50
@@ -26,8 +26,21 @@ def norm_key(song_title, artist) -> str:
     return f"{norm(artist)}|{norm(song_title)}"
 
 
+def _hidden_history_ids(club_id: int) -> set:
+    return {
+        r.order_id
+        for r in SongListHidden.query.filter_by(club_id=club_id, kind="history").all()
+        if r.order_id is not None
+    }
+
+
+def _hidden_popular_keys(club_id: int) -> set:
+    return {r.norm_key for r in SongListHidden.query.filter_by(club_id=club_id, kind="popular").all()}
+
+
 def recent_hour(club_id: int, now=None) -> list[dict]:
     now = now or datetime.now(timezone.utc)
+    hidden = _hidden_history_ids(club_id)
     rows = (
         Order.query
         .filter(
@@ -39,8 +52,9 @@ def recent_hour(club_id: int, now=None) -> list[dict]:
         .all()
     )
     return [
-        {"song_title": o.song_title, "artist": o.artist, "played_at": o.playing_at.isoformat()}
+        {"order_id": o.id, "song_title": o.song_title, "artist": o.artist, "played_at": o.playing_at.isoformat()}
         for o in rows
+        if o.id not in hidden
     ]
 
 
@@ -57,9 +71,10 @@ def popular(club_id: int, now=None) -> list[dict]:
     )
     counter = Counter()
     label = {}
+    hidden = _hidden_popular_keys(club_id)
     for song_title, artist in rows:
         key = norm_key(song_title, artist)
-        if key == "|":
+        if key == "|" or key in hidden:
             continue
         counter[key] += 1
         label.setdefault(key, (song_title, artist))
@@ -71,6 +86,44 @@ def popular(club_id: int, now=None) -> list[dict]:
 
 def new_songs(club_id: int) -> list[dict]:
     rows = NewSong.query.filter_by(club_id=club_id).order_by(NewSong.created_at.desc(), NewSong.id.desc()).all()
+    return [r.to_dict() for r in rows]
+
+
+def hide(club_id: int, kind: str, song_title=None, artist=None, order_id=None) -> None:
+    """KJ: скрыть песню из "Популярных" (kind="popular") или одну спетую
+    песню из "Истории за час" (kind="history")."""
+    if kind == "popular":
+        key = norm_key(song_title, artist)
+        if SongListHidden.query.filter_by(club_id=club_id, kind="popular", norm_key=key).first() is None:
+            db.session.add(SongListHidden(
+                club_id=club_id, kind="popular", norm_key=key,
+                song_title=(song_title or "").strip() or None, artist=(artist or "").strip() or None,
+            ))
+            db.session.commit()
+    elif kind == "history" and order_id is not None:
+        if SongListHidden.query.filter_by(club_id=club_id, kind="history", order_id=order_id).first() is None:
+            order = db.session.get(Order, order_id)
+            db.session.add(SongListHidden(
+                club_id=club_id, kind="history", order_id=order_id,
+                song_title=order.song_title if order is not None else None,
+                artist=order.artist if order is not None else None,
+            ))
+            db.session.commit()
+
+
+def unhide(club_id: int, hidden_id: int) -> None:
+    row = SongListHidden.query.filter_by(club_id=club_id, id=hidden_id).first()
+    if row is not None:
+        db.session.delete(row)
+        db.session.commit()
+
+
+def hidden_popular(club_id: int) -> list[dict]:
+    rows = (
+        SongListHidden.query.filter_by(club_id=club_id, kind="popular")
+        .order_by(SongListHidden.created_at.desc())
+        .all()
+    )
     return [r.to_dict() for r in rows]
 
 
