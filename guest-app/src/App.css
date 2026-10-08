@@ -882,8 +882,8 @@ img { max-width: 100%; }
 }
 .step-blink-item { animation: step-wave 1.8s ease-in-out infinite; }
 @keyframes step-wave {
-  0%, 60%, 100% { background: transparent; }
-  30% { background: rgba(47, 191, 113, 0.38); }
+  0%, 14%, 100% { background: transparent; }
+  7% { background: rgba(47, 191, 113, 0.38); }
 }
 
 /* ДОБАВЛЕНО (2026-10): "Эта?" / "Не эта" под найденной песней. */
