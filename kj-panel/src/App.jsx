@@ -83,7 +83,7 @@ function QueueTable({ queue, token, clubId }) {
     place();
     window.addEventListener("resize", place);
     return () => window.removeEventListener("resize", place);
-  }, [queue]);
+  }, [queue, newSongKeys]);
   useEffect(() => {
     let cancelled = false;
     const load = () =>
@@ -305,16 +305,19 @@ function QueueTable({ queue, token, clubId }) {
               <span className="queue-row__position">{idx + 1}</span>
               <span className="queue-row__artist">{item.artist || "—"}</span>
               <span className="queue-row__song">{item.song_title}</span>
-              {item.song_title && (
+              {/* Уже в "Новинках" — галочку и слово "Новинка" не показываем. */}
+              {item.song_title && !newSongKeys.has(newSongKey(item.song_title, item.artist)) && (
                 <label className="queue-row__new" title="Показывать гостям в «Новинках»">
                   <input
                     type="checkbox"
-                    checked={newSongKeys.has(newSongKey(item.song_title, item.artist))}
+                    checked={false}
                     onChange={(e) => toggleNewSong(item, e.target.checked)}
                   />
                   <span
                     className={`queue-row__new-word${
-                      idx === queue.findIndex((q) => q.song_title) ? " queue-row__new-word--first" : ""
+                      idx === queue.findIndex((q) => q.song_title && !newSongKeys.has(newSongKey(q.song_title, q.artist)))
+                        ? " queue-row__new-word--first"
+                        : ""
                     }`}
                   >
                     Новинка
