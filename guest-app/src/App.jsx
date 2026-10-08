@@ -3545,11 +3545,11 @@ export default function App() {
               }
             }}
           >
-            Живая очередь
+            Активная очередь
             <span className="collapsible-caret">▼</span>
           </h2>
         ) : (
-          <h2>Живая очередь</h2>
+          <h2>Активная очередь</h2>
         )}
         {songListsOpen ? null : queue.length === 0 ? (
           <p className="empty-hint">Очередь пуста.</p>
