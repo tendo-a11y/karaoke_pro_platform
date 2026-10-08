@@ -763,6 +763,305 @@ function TableCloseRequestsPanel({ token, clubId, socket }) {
 // со всем механизмом access_code/redeem (см. отчёт по п.45 и routes/kj.py
 // ::list_vip_clients). VIP теперь появляется только через заявку гостя,
 // уже подтвердившего личность через Google, + одобрение здесь.
+// ДОБАВЛЕНО (2026-10, запрос пользователя): статистика своего клуба.
+// Экран пока СКРЫТ — кнопка "Статистика" видна только если панель открыта
+// по адресу с ?stats=1 (решение пользователя: "подготовить, проверить, но
+// не включать, пока всё не закончим").
+const STATS_ENABLED = new URLSearchParams(window.location.search).has("stats");
+
+function statsDay(offsetDays) {
+  // "Клубный день" начинается в 08:00 — до утра считается вчерашний вечер.
+  const d = new Date(Date.now() - 8 * 3600 * 1000);
+  d.setDate(d.getDate() + offsetDays);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+const STATS_PERIODS = [
+  { key: "today", label: "Сегодня", from: () => statsDay(0), to: () => statsDay(0) },
+  { key: "yesterday", label: "Вчера", from: () => statsDay(-1), to: () => statsDay(-1) },
+  { key: "week", label: "7 дней", from: () => statsDay(-6), to: () => statsDay(0) },
+  { key: "month", label: "30 дней", from: () => statsDay(-29), to: () => statsDay(0) },
+];
+
+function statsMoney(value) {
+  return Number(value || 0).toLocaleString("ru-RU", { maximumFractionDigits: 2 });
+}
+
+function StatsDelta({ current, previous }) {
+  if (!previous) return <span className="stats-delta">—</span>;
+  const diff = Math.round(((current - previous) / previous) * 100);
+  const cls = diff > 0 ? "stats-delta stats-delta--up" : diff < 0 ? "stats-delta stats-delta--down" : "stats-delta";
+  return <span className={cls}>{diff > 0 ? "+" : ""}{diff}%</span>;
+}
+
+function StatsTiles({ items }) {
+  return (
+    <div className="stats-tiles">
+      {items.map((item) => (
+        <div key={item.label} className="stats-tile">
+          <div className="stats-tile__value">{item.value}</div>
+          <div className="stats-tile__label">{item.label}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function StatsTable({ head, rows, empty }) {
+  if (!rows || rows.length === 0) return <p className="empty-hint">{empty || "Нет данных за период."}</p>;
+  return (
+    <table className="stats-table">
+      <thead>
+        <tr>{head.map((h) => <th key={h}>{h}</th>)}</tr>
+      </thead>
+      <tbody>
+        {rows.map((row, i) => (
+          <tr key={i}>{row.map((cell, j) => <td key={j}>{cell}</td>)}</tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+function StatsBars({ rows }) {
+  const max = Math.max(1, ...rows.map((r) => r.count));
+  return (
+    <div className="stats-bars">
+      {rows.map((r) => (
+        <div key={r.label} className="stats-bars__row">
+          <span className="stats-bars__label">{r.label}</span>
+          <span className="stats-bars__track">
+            <span className="stats-bars__fill" style={{ width: `${(r.count / max) * 100}%` }} />
+          </span>
+          <span className="stats-bars__count">{r.count}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function StatsPanel({ token, clubId }) {
+  const [period, setPeriod] = useState("today");
+  const [from, setFrom] = useState(statsDay(0));
+  const [to, setTo] = useState(statsDay(0));
+  const [data, setData] = useState(null);
+  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    api.getClubStats(token, clubId, from, to)
+      .then((result) => {
+        if (cancelled) return;
+        setData(result);
+        setError(null);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err instanceof ApiError ? err.message : String(err));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token, clubId, from, to]);
+
+  function choosePeriod(p) {
+    setPeriod(p.key);
+    setFrom(p.from());
+    setTo(p.to());
+  }
+
+  const ev = data?.evening;
+  const cmp = data?.compare;
+
+  return (
+    <main className="app-main stats-panel">
+      <section>
+        <h2>Статистика клуба</h2>
+        <div className="guest-type-filters">
+          {STATS_PERIODS.map((p) => (
+            <button
+              key={p.key}
+              type="button"
+              className={`btn-link${period === p.key ? " guest-type-filters__active" : ""}`}
+              onClick={() => choosePeriod(p)}
+            >
+              {p.label}
+            </button>
+          ))}
+          <label className="stats-date">
+            с <input type="date" value={from} onChange={(e) => { setPeriod("custom"); setFrom(e.target.value); }} />
+          </label>
+          <label className="stats-date">
+            по <input type="date" value={to} onChange={(e) => { setPeriod("custom"); setTo(e.target.value); }} />
+          </label>
+        </div>
+        <p className="empty-hint">
+          Вечер считается с 08:00 до 08:00 — песни после полуночи относятся к тому же вечеру. Суммы — по ценам категорий
+          спетых песен.
+        </p>
+        {error && <div className="banner banner--error">{error}</div>}
+        {loading && !data && <p className="empty-hint">Загрузка…</p>}
+      </section>
+
+      {data && (
+        <>
+          <section>
+            <h2>Итоги периода</h2>
+            <StatsTiles
+              items={[
+                { label: "Спето песен", value: ev.sung },
+                { label: "Заказано", value: ev.ordered },
+                { label: "Отклонено", value: ev.rejected },
+                { label: "Ждут очереди", value: ev.waiting },
+                { label: "Столов пело", value: ev.tables },
+                { label: "Гостей пело", value: ev.singers },
+                { label: "Сумма", value: statsMoney(ev.revenue) },
+                { label: "от VIP", value: statsMoney(ev.revenue_vip) },
+                { label: "от обычных", value: statsMoney(ev.revenue_regular) },
+                { label: "В среднем на стол", value: statsMoney(ev.avg_table) },
+              ]}
+            />
+            {ev.top_table && (
+              <p>
+                Самый поющий стол: <b>№{ev.top_table.table_no}</b> — {ev.top_table.songs} песен, {statsMoney(ev.top_table.sum)}
+              </p>
+            )}
+            {ev.top_guest && (
+              <p>
+                Самый активный гость: <b>{ev.top_guest.name}</b> — {ev.top_guest.songs} песен, {statsMoney(ev.top_guest.sum)}
+              </p>
+            )}
+          </section>
+
+          <section>
+            <h2>Сравнение с прошлым периодом</h2>
+            <p className="empty-hint">Прошлый период: {cmp.previous_from} — {cmp.previous_to}</p>
+            <StatsTable
+              head={["", "Сейчас", "Было", "Изменение"]}
+              rows={[
+                ["Спето песен", cmp.current.sung, cmp.previous.sung, <StatsDelta current={cmp.current.sung} previous={cmp.previous.sung} />],
+                ["Сумма", statsMoney(cmp.current.revenue), statsMoney(cmp.previous.revenue), <StatsDelta current={cmp.current.revenue} previous={cmp.previous.revenue} />],
+                ["Гостей пело", cmp.current.guests, cmp.previous.guests, <StatsDelta current={cmp.current.guests} previous={cmp.previous.guests} />],
+              ]}
+            />
+          </section>
+
+          <section>
+            <h2>Гости</h2>
+            <StatsTiles
+              items={[
+                { label: "Всего в базе", value: data.guests.total },
+                { label: "VIP", value: data.guests.vip },
+                { label: "Обычных", value: data.guests.regular },
+                { label: "Были за период", value: data.guests.active_in_period },
+                { label: "Новых", value: data.guests.new_in_period },
+                { label: "Вернулись", value: data.guests.returning_in_period },
+              ]}
+            />
+            <h3>Топ гостей по песням</h3>
+            <StatsTable
+              head={["Гость", "Песен", "Сумма"]}
+              rows={data.guests.top_by_songs.map((g) => [g.name, g.songs, statsMoney(g.sum)])}
+            />
+            <h3>Топ гостей по сумме</h3>
+            <StatsTable
+              head={["Гость", "Песен", "Сумма"]}
+              rows={data.guests.top_by_sum.map((g) => [g.name, g.songs, statsMoney(g.sum)])}
+            />
+            <h3>VIP, которых не было больше {data.guests.lapsed_vip_days} дней</h3>
+            <StatsTable
+              head={["Гость", "Последний визит", "Баланс"]}
+              rows={data.guests.lapsed_vips.map((g) => [
+                g.name,
+                g.last_visit ? new Date(g.last_visit).toLocaleDateString("ru-RU") : "ни разу не заказывал",
+                statsMoney(g.balance),
+              ])}
+              empty="Все VIP приходили недавно."
+            />
+          </section>
+
+          <section>
+            <h2>VIP</h2>
+            <StatsTiles
+              items={[
+                { label: "VIP-гостей", value: data.vip.count },
+                { label: "На балансах сейчас", value: statsMoney(data.vip.balance_total) },
+                { label: "Пополнено за период", value: statsMoney(data.vip.topups) },
+                { label: "Потрачено за период", value: statsMoney(data.vip.spent) },
+                { label: "Заявок стать VIP", value: data.vip.requests },
+                { label: "Одобрено", value: data.vip.requests_approved },
+              ]}
+            />
+          </section>
+
+          <section>
+            <h2>Песни по категориям</h2>
+            <StatsTable
+              head={["Категория", "Песен", "Сумма"]}
+              rows={[
+                ...data.songs.by_category.map((c) => [c.name, c.songs, statsMoney(c.sum)]),
+                ...(data.songs.by_category.length > 0 ? [[<b>Итого</b>, <b>{ev.sung}</b>, <b>{statsMoney(ev.revenue)}</b>]] : []),
+              ]}
+            />
+          </section>
+
+          <section>
+            <h2>Топ песен</h2>
+            <StatsTable
+              head={["Исполнитель", "Песня", "Раз"]}
+              rows={data.songs.top_songs.map((s) => [s.artist || "—", s.title, s.count])}
+            />
+            <h3>Топ исполнителей</h3>
+            <StatsTable head={["Исполнитель", "Раз"]} rows={data.songs.top_artists.map((a) => [a.artist, a.count])} />
+            <StatsTiles
+              items={[
+                { label: "Заказов с тональностью", value: data.songs.tone_total },
+                { label: "Тон ниже", value: data.songs.tone_down },
+                { label: "Тон выше", value: data.songs.tone_up },
+                { label: "Название исправлял KJ", value: data.songs.renamed_by_kj },
+              ]}
+            />
+          </section>
+
+          <section>
+            <h2>Откуда заказы</h2>
+            <StatsTiles
+              items={[
+                { label: "Заказали гости", value: data.how.by_guests },
+                { label: "Добавил KJ вручную", value: data.how.by_kj },
+                { label: "Из VirtualDJ без заказа", value: data.how.from_virtualdj },
+                { label: "«Готово» автоматически", value: data.how.done_auto },
+                { label: "«Готово» вручную", value: data.how.done_manual },
+              ]}
+            />
+          </section>
+
+          <section>
+            <h2>Время</h2>
+            <p>
+              Среднее ожидание от заказа до выхода:{" "}
+              <b>{data.timing.avg_wait_minutes == null ? "—" : `${data.timing.avg_wait_minutes} мин`}</b>
+            </p>
+            <h3>Заказы по часам</h3>
+            {data.timing.by_hour.length === 0 ? (
+              <p className="empty-hint">Нет данных за период.</p>
+            ) : (
+              <StatsBars rows={data.timing.by_hour.map((h) => ({ label: `${String(h.hour).padStart(2, "0")}:00`, count: h.count }))} />
+            )}
+            <h3>Заказы по дням недели</h3>
+            <StatsBars rows={data.timing.by_weekday.map((d) => ({ label: d.day, count: d.count }))} />
+          </section>
+        </>
+      )}
+    </main>
+  );
+}
+
 // ДОБАВЛЕНО (2026-10): переключатель "Общий чат" (ссылка на группу в
 // Telegram у гостя) — Вкл/Откл.
 function GeneralChatToggle({ token }) {
@@ -3839,6 +4138,11 @@ export default function App() {
               👥 Гости
             </button>
           )}
+          {STATS_ENABLED && view !== "stats" && (
+            <button type="button" className="btn-link" onClick={() => setView("stats")}>
+              Статистика
+            </button>
+          )}
         </div>
       </header>
 
@@ -3868,6 +4172,8 @@ export default function App() {
         <TableSettingsPanel token={token} clubId={me.club_id} />
       ) : view === "guests" ? (
         <GuestsPanel token={token} clubId={me.club_id} />
+      ) : view === "stats" && STATS_ENABLED ? (
+        <StatsPanel token={token} clubId={me.club_id} />
       ) : view === "manual" ? (
         <main className="app-main">
           <section>
