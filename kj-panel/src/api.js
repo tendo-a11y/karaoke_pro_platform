@@ -192,6 +192,9 @@ export const api = {
     params.set("tz", String(-new Date().getTimezoneOffset()));
     return request(`/api/kj/stats/${clubId}?${params.toString()}`, { token });
   },
+  getSongListsAdmin: (token) => request("/api/kj/song-lists", { token }),
+  hideSongListItem: (token, body) => request("/api/kj/song-lists/hide", { method: "POST", token, body }),
+  unhideSongListItem: (token, id) => request(`/api/kj/song-lists/unhide/${id}`, { method: "POST", token }),
   listNewSongs: (token) => request("/api/kj/new-songs", { token }),
   setNewSong: (token, songTitle, artist, isNew) =>
     request("/api/kj/new-songs", {
