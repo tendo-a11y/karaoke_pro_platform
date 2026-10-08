@@ -44,6 +44,14 @@ class Club(db.Model):
     # (ТЗ §20, §49) включается/выключается на уровне клуба, как и раньше.
     chat_enabled = db.Column(db.Boolean, nullable=False, default=False)
 
+    # ДОБАВЛЕНО (2026-10, запрос пользователя): автозакрытие столов в
+    # заданное время по часам компьютера KJ — см.
+    # services/auto_close_service.py.
+    auto_close_enabled = db.Column(db.Boolean, nullable=True)
+    auto_close_time = db.Column(db.String(5), nullable=True)        # "07:00"
+    auto_close_tz_offset = db.Column(db.Integer, nullable=True)     # минуты от UTC
+    auto_close_last_date = db.Column(db.Date, nullable=True)        # когда уже сработало
+
     # Перенос полей старой Venue (handlers/admin.py: venue_add_*/venue_show_details/
     # venue_contacts_list) — контактные данные клуба и число столов. В старой
     # SQLite были NOT NULL (заполнялись при создании venue пошаговой формой),
