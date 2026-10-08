@@ -997,8 +997,13 @@ button.step-blink-fill { animation: button-fill-blink 1s ease-in-out infinite; }
   border-radius: 12px;
   background: var(--panel-alt);
 }
-.panel .song-lists h2 { margin: 0; }
-.song-lists__tabs { margin-top: 10px; }
+/* Кнопки списков — как "ИИ-поиск / Ссылка / Скриншот", рамка у всего блока. */
+.song-lists .finder-modes { margin: 0; }
+.song-lists .finder-group { border: none; background: none; padding: 0; width: 100%; }
+.song-lists .finder-modes .finder-group .link-btn { flex: 0 1 auto; overflow: visible; text-overflow: clip; }
+/* Рамка блока — как у "ИИ-поиск / Ссылка / Скриншот". */
+.song-lists, .panel.table-group-panel { background: rgba(255, 176, 32, 0.10); border-color: rgba(255, 176, 32, 0.45); }
+.song-lists .finder-modes__active .collapsible-caret { color: #1a1400; }
 /* Заголовок "Активная очередь" — красноватый. */
 .panel h2.active-queue-title { color: #ff7a7a; }
 .song-lists__tabs { display: flex; flex-wrap: wrap; gap: 6px; }
