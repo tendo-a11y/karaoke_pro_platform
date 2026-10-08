@@ -2461,7 +2461,7 @@ function GuestCard({ token, clubId, guestId, onBack, onChanged }) {
                       <ul className="song-search__results">
                         {day.songs.map((s) => (
                           <li key={s.order_id} style={{ padding: "6px 12px" }}>
-                            🎵 {s.artist ? `${s.artist} — ${s.song_title}` : s.song_title}
+                            {s.artist ? `${s.artist} — ${s.song_title}` : s.song_title}
                             {s.category ? ` · ${s.category}` : ""} · стол {s.table_no ?? "—"}
                           </li>
                         ))}
@@ -2479,7 +2479,7 @@ function GuestCard({ token, clubId, guestId, onBack, onChanged }) {
             <ul className="song-search__results">
               {guest.favorites.map((f) => (
                 <li key={f.id} style={{ padding: "8px 12px" }}>
-                  🎵 {f.artist ? `${f.artist} — ${f.song_title}` : f.song_title}
+                  {f.artist ? `${f.artist} — ${f.song_title}` : f.song_title}
                 </li>
               ))}
             </ul>
@@ -2715,7 +2715,7 @@ function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged, auto
                 {group.played_orders.map((order) => (
                   <li key={order.id} className="vip-row vip-row--client">
                     <div>
-                      🎵 {order.song_title}
+                      {order.song_title}
                       {order.artist && <span> — {order.artist}</span>}
                       <br />
                       <span className="empty-hint">Гость #{order.telegram_user_id}</span>
@@ -2942,8 +2942,8 @@ function OrdersBoardSlot({ slot, categories, busy, onAccept, onReject, onComplet
         {slot.queue_position != null && (
           <div className="table-slot__queue-position">№{slot.queue_position}</div>
         )}
-        <div className="table-slot__song">🎵 {slot.song_title}</div>
-        {slot.artist && <div className="table-slot__artist">🎤 {slot.artist}</div>}
+        <div className="table-slot__song">{slot.song_title}</div>
+        {slot.artist && <div className="table-slot__artist">{slot.artist}</div>}
         {slot.tone ? (
           <div className="tone-badge">🎚 Тон {slot.tone > 0 ? `+${slot.tone}` : slot.tone}</div>
         ) : null}
