@@ -932,14 +932,23 @@ img { max-width: 100%; }
 
 
 /* ДОБАВЛЕНО (2026-10): один знак вопроса с пояснением про "Новинку" над живой очередью. */
-.queue-row__new { position: relative; }
-.queue-new-help { position: absolute; left: 0; bottom: 100%; margin-bottom: 2px; z-index: 5; }
+.queue-row__new-word { position: relative; }
 .queue-new-help__btn {
-  width: 18px; height: 18px; margin: 0; padding: 0; font-size: 12px; font-weight: 800; line-height: 18px;
-  border-radius: 50%; background: #e53935; color: #fff; border: none; cursor: pointer; text-align: center;
+  position: absolute; left: 50%; bottom: calc(100% + 14px); transform: translateX(-50%);
+  width: auto; margin: 0; padding: 0; background: none; border: none; font-size: 15px; line-height: 1; cursor: pointer;
 }
-.queue-new-help__text {
-  position: absolute; left: 0; bottom: 100%; margin-bottom: 6px; width: 260px; white-space: normal;
-  padding: 8px 10px; border-radius: 8px; font-size: 13px; line-height: 1.35; opacity: 1;
-  background: #2a2d36; color: #fff; border: 1px solid #e53935; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+/* Карточка с пояснением поверх экрана — как у категорий. */
+.service-card-overlay {
+  position: fixed; inset: 0; z-index: 1000;
+  background: rgba(0, 0, 0, 0.65);
+  display: flex; align-items: center; justify-content: center; padding: 16px;
 }
+.service-card {
+  width: 100%; max-width: 420px; max-height: 90vh; overflow-y: auto;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+  padding: 20px; display: flex; flex-direction: column; gap: 10px;
+}
+.service-card__title { margin: 0; font-size: 20px; color: var(--accent); }
+.service-card__desc { margin: 0; font-size: 15px; line-height: 1.45; color: var(--text); white-space: pre-wrap; }
+.service-card__buttons { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+.service-card__close { background: none; color: var(--muted); border: 1px solid var(--border); font-weight: 600; padding: 10px; border-radius: 8px; cursor: pointer; }
