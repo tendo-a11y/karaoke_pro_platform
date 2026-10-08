@@ -376,7 +376,7 @@ function ServiceSelect({ services, value, onChange, disabled, highlight = false 
                     ? "step-blink-item"
                     : undefined
               }
-              style={highlight && !value ? { animationDelay: `${index * 0.3}s` } : undefined}
+              style={highlight && !value ? { animationDelay: `${index}s`, animationDuration: `${Math.max(services.length, 3)}s` } : undefined}
             >
               <div className="service-picker__row">
                 <button type="button" className="service-picker__option" onClick={() => choose(s)}>
