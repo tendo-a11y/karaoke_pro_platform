@@ -1284,6 +1284,51 @@ def set_new_song():
     return api_ok(song_lists_service.new_songs(g.club_id))
 
 
+# ДОБАВЛЕНО (2026-10, запрос пользователя): KJ управляет списками гостя
+# "История за час" / "Популярные" / "Новинки" — скрыть / вернуть песню.
+@bp.get("/song-lists")
+@require_kj
+def kj_song_lists():
+    from services import song_lists_service
+    return api_ok({
+        "recent": song_lists_service.recent_hour(g.club_id),
+        "popular": song_lists_service.popular(g.club_id),
+        "new": song_lists_service.new_songs(g.club_id),
+        "hidden_popular": song_lists_service.hidden_popular(g.club_id),
+    })
+
+
+@bp.post("/song-lists/hide")
+@require_kj
+def kj_song_lists_hide():
+    from services import song_lists_service
+    payload = request.get_json(silent=True) or {}
+    kind = payload.get("kind")
+    if kind == "popular":
+        song_title = payload.get("song_title")
+        if not isinstance(song_title, str) or not song_title.strip():
+            return api_error(400, "VALIDATION_ERROR", "song_title обязателен")
+        artist = payload.get("artist")
+        song_lists_service.hide(g.club_id, "popular", song_title=song_title,
+                                artist=artist if isinstance(artist, str) else None)
+    elif kind == "history":
+        order_id = payload.get("order_id")
+        if not isinstance(order_id, int) or isinstance(order_id, bool):
+            return api_error(400, "VALIDATION_ERROR", "order_id обязателен")
+        song_lists_service.hide(g.club_id, "history", order_id=order_id)
+    else:
+        return api_error(400, "VALIDATION_ERROR", "kind должен быть popular или history")
+    return api_ok({"hidden": True})
+
+
+@bp.post("/song-lists/unhide/<int:hidden_id>")
+@require_kj
+def kj_song_lists_unhide(hidden_id):
+    from services import song_lists_service
+    song_lists_service.unhide(g.club_id, hidden_id)
+    return api_ok({"unhidden": True})
+
+
 # ДОБАВЛЕНО (2026-10, запрос пользователя): автозакрытие столов в заданное
 # время по часам компьютера KJ — см. services/auto_close_service.py.
 def _auto_close_view(club):
