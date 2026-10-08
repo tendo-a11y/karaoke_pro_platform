@@ -1235,7 +1235,7 @@ function SongListsAdminPanel({ token }) {
       <section>
         <h2>Списки для гостей</h2>
         <p className="empty-hint">
-          То, что гость видит над живой очередью. Крестик убирает песню у гостей. В чеках и статистике ничего не меняется.
+          То, что гость видит над активной очередью. Крестик убирает песню у гостей. В чеках и статистике ничего не меняется.
         </p>
         <div className="guest-type-filters">
           {SONG_ADMIN_TABS.map((t) => (
@@ -4578,7 +4578,7 @@ export default function App() {
           </section>
 
           <section>
-            <h2>Живая очередь VirtualDJ</h2>
+            <h2>Активная очередь VirtualDJ</h2>
             <QueueTable queue={queue} token={token} clubId={me.club_id} />
           </section>
         </main>
