@@ -1439,6 +1439,9 @@ def remove_guest_from_table(guest_id):
     if parsed_id is None:
         return api_error(400, "VALIDATION_ERROR", "guest_id должен быть числом")
     status = guest_status_service.set_table(g.club_id, parsed_id, None)
+    # ДОБАВЛЕНО (2026-10): сняли со стола — его неспетые песни убираются.
+    from services import vdj_service as _vdj_service
+    _vdj_service.close_guest_orders(g.club_id, parsed_id)
     return api_ok(status.to_dict())
 
 
