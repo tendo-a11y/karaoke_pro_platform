@@ -48,6 +48,17 @@ def create_app(config_object=Config):
     import sockets
     sockets.register_handlers()
 
+    # ДОБАВЛЕНО (2026-10, запрос пользователя): автозакрытие столов в
+    # заданное время — проверка идёт попутно с обычными запросами, не чаще
+    # раза в минуту (см. services/auto_close_service.py).
+    @app.before_request
+    def _auto_close_tick():
+        if request.method == "OPTIONS" or not request.path.startswith("/api/"):
+            return None
+        from services import auto_close_service
+        auto_close_service.maybe_run()
+        return None
+
     # 2026-09-16 (вторая, независимая причина обрывов у моста и KJ Panel —
     # видна в логах Railway отдельно от бага выше, повторяется каждые
     # ~80-140с: "Error handling request /socket.io/?...&sid=..." +
