@@ -192,6 +192,11 @@ export const api = {
     params.set("tz", String(-new Date().getTimezoneOffset()));
     return request(`/api/kj/stats/${clubId}?${params.toString()}`, { token });
   },
+  listNewSongs: (token) => request("/api/kj/new-songs", { token }),
+  setNewSong: (token, songTitle, artist, isNew) =>
+    request("/api/kj/new-songs", {
+      method: "PUT", token, body: { song_title: songTitle, artist: artist || null, is_new: isNew },
+    }),
   getAutoClose: (token) => request("/api/kj/auto-close", { token }),
   setAutoClose: (token, enabled, time) =>
     request("/api/kj/auto-close", {
