@@ -1024,7 +1024,30 @@ def _merged_live_queue(club_id: int, persist: bool):
     except Exception:  # порядок — не повод ронять показ очереди
         positions = {}
     waiting.sort(key=lambda o: (positions.get(o.id, 10**9), o.queued_at or o.created_at, o.id))
+    _SEQ_POSITIONS[club_id] = positions
     return [(item, matched) for item, matched in rows], waiting
+
+
+# ДОБАВЛЕНО (2026-10, запрос пользователя: "сначала песни стола 2, потом 10" при
+# начале очереди со стола 11): в режиме "Последовательно" по кругу столов
+# выстраиваются ВСЕ заказы — и те, что уже стоят в VirtualDJ. Песни из
+# VirtualDJ без заказа (их поставил сам диджей) остаются сверху, как были.
+_SEQ_POSITIONS: dict = {}
+
+
+def _apply_table_round(club_id: int, entries: list) -> list[dict]:
+    """entries — [(order_id или None, строка очереди)] в исходном порядке."""
+    positions = _SEQ_POSITIONS.get(club_id) or {}
+    if not positions:
+        return [row for _order_id, row in entries]
+    indexed = list(enumerate(entries))
+    indexed.sort(
+        key=lambda pair: (
+            (0, 0, pair[0]) if pair[1][0] is None
+            else (1, positions.get(pair[1][0], 10**9), pair[0])
+        )
+    )
+    return [row for _index, (_order_id, row) in indexed]
 
 
 def rename_order(order_id: int, kj, song_title: str, artist):
@@ -1199,7 +1222,7 @@ def get_kj_queue_view(club_id: int) -> list[dict]:
                 "tone": order.tone,
             }
         )
-    return result
+    return _apply_table_round(club_id, [(row["order_id"], row) for row in result])
 
 
 def get_guest_queue_view(club_id: int, guest_id: int) -> list[dict]:
@@ -1241,7 +1264,9 @@ def get_guest_queue_view(club_id: int, guest_id: int) -> list[dict]:
         return name.upper() == "CRAZY"
 
     result = []
+    order_ids = []
     for item, matched in rows:
+        order_ids.append(matched.id if matched else None)
         result.append(
             {
                 "key": f"vdj-{item.vdj_item_id}",
@@ -1255,6 +1280,7 @@ def get_guest_queue_view(club_id: int, guest_id: int) -> list[dict]:
             }
         )
     for order in waiting:
+        order_ids.append(order.id)
         result.append(
             {
                 "key": f"order-{order.id}",
@@ -1267,6 +1293,8 @@ def get_guest_queue_view(club_id: int, guest_id: int) -> list[dict]:
                 "is_crazy": _is_crazy(order.service_id),
             }
         )
+
+    result = _apply_table_round(club_id, list(zip(order_ids, result)))
 
     try:
         _notify_guest_turn_soon(club_id, guest_id, result)
