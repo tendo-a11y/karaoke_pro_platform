@@ -41,6 +41,23 @@ function newSongKey(title, artist) {
 
 function QueueTable({ queue, token, clubId }) {
   const [categories, setCategories] = useState([]);
+  // Кнопка "Копировать" у песни: копирует "Исполнитель — Название".
+  const [copiedIdx, setCopiedIdx] = useState(null);
+  async function copySong(item, idx) {
+    const text = item.artist ? `${item.artist} — ${item.song_title}` : item.song_title;
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand("copy"); } catch { /* ignore */ }
+      document.body.removeChild(ta);
+    }
+    setCopiedIdx(idx);
+    setTimeout(() => setCopiedIdx((cur) => (cur === idx ? null : cur)), 1500);
+  }
   const [tableDrafts, setTableDrafts] = useState({});
   const [busyKey, setBusyKey] = useState(null);
   const [rowErrors, setRowErrors] = useState({});
@@ -314,6 +331,16 @@ function QueueTable({ queue, token, clubId }) {
               <span className="queue-row__position">{idx + 1}</span>
               <span className="queue-row__artist">{item.artist || "—"}</span>
               <span className="queue-row__song">{item.song_title}</span>
+              {item.song_title && (
+                <button
+                  type="button"
+                  className="queue-row__copy"
+                  title="Скопировать исполнителя и название"
+                  onClick={() => copySong(item, idx)}
+                >
+                  {copiedIdx === idx ? "✓ Скопировано" : "📋 Копировать"}
+                </button>
+              )}
               {/* Уже в "Новинках" — галочку и слово "Новинка" не видно, но место
               под них остаётся, чтобы знак вопроса стоял всегда на одном месте. */}
               {item.song_title && (
