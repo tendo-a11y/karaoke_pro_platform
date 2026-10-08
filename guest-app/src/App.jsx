@@ -1265,8 +1265,11 @@ function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra }) {
       const data = await api.screenshotSearchSongs(token, base64, mediaType);
       setResults(data);
       setSearched(true);
+      // Не нашли — подсказываем другие способы (моргают "Ссылка" и "Скриншот").
+      if (!data || data.length === 0) setSuggestOther(true);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : String(err));
+      setSuggestOther(true);
     } finally {
       setSearching(false);
       event.target.value = "";
@@ -1283,8 +1286,12 @@ function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra }) {
       const data = await api.aiSearchSongs(token, text.trim());
       setResults(data);
       setSearched(true);
+      // ДОБАВЛЕНО (2026-10, запрос пользователя): неудачный поиск — сразу
+      // моргают "Ссылка" и "Скриншот", как после "Не эта".
+      if (!data || data.length === 0) setSuggestOther(true);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : String(err));
+      setSuggestOther(true);
     } finally {
       setSearching(false);
     }
