@@ -1047,6 +1047,33 @@ def _merged_live_queue(club_id: int, persist: bool):
                     changed = True
                 break
 
+    # ДОБАВЛЕНО (2026-10, жалоба пользователя "одна и та же песня — почему не
+    # прошла автосклейка"): песня в VirtualDJ уже привязана к "ничьему" заказу
+    # (KJ добавил её сам — без гостя и без стола), а гость заказал ту же песню.
+    # Склеиваем: строка VirtualDJ переходит к заказу гостя (стол, чек,
+    # уведомления), а "ничей" дубль снимается.
+    for row in rows:
+        item, matched = row
+        if (
+            matched is None
+            or not item.vdj_item_id
+            or matched.telegram_user_id != -1
+            or matched.source not in ("manual", "virtualdj")
+        ):
+            continue
+        for order in waiting:
+            if order.telegram_user_id == -1 or not _order_matches_vdj_item(order, item):
+                continue
+            row[1] = order
+            waiting.remove(order)
+            if persist:
+                order.vdj_item_id = item.vdj_item_id
+                matched.status = STATUS_REJECTED
+                matched.rejected_at = _utcnow()
+                matched.vdj_item_id = None
+                changed = True
+            break
+
     if changed:
         db.session.commit()
 
