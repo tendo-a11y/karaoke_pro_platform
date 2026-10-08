@@ -17,6 +17,7 @@ from models import NewSong, Order
 POPULAR_DAYS = 30
 POPULAR_LIMIT = 50
 RECENT_MINUTES = 60
+NEW_SONGS_LIMIT = 30
 
 
 def norm_key(song_title, artist) -> str:
@@ -80,6 +81,18 @@ def set_new(club_id: int, song_title: str, artist, is_new: bool) -> bool:
     if is_new and existing is None:
         db.session.add(NewSong(club_id=club_id, song_title=song_title.strip(), artist=(artist or "").strip() or None, norm_key=key))
         db.session.commit()
+        # ДОБАВЛЕНО (2026-10, запрос пользователя): в "Новинках" не больше
+        # NEW_SONGS_LIMIT песен — новая вытесняет самую старую.
+        extra = (
+            NewSong.query.filter_by(club_id=club_id)
+            .order_by(NewSong.created_at.desc(), NewSong.id.desc())
+            .offset(NEW_SONGS_LIMIT)
+            .all()
+        )
+        if extra:
+            for row in extra:
+                db.session.delete(row)
+            db.session.commit()
     elif not is_new and existing is not None:
         db.session.delete(existing)
         db.session.commit()
