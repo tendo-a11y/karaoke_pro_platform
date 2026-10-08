@@ -71,14 +71,23 @@ function QueueTable({ queue, token, clubId }) {
       const dz = dropzoneRef.current;
       const word = dz && dz.querySelector(".queue-row__new-word--first");
       const heading = dz && dz.closest("section") && dz.closest("section").querySelector("h2");
-      if (!dz || !word || !heading) {
+      // Если у всех песен галочки нет (все уже в "Новинках") — знак вопроса
+      // всё равно стоит, у правого края первой песни.
+      const firstRow = dz && dz.querySelector(".queue-row");
+      if (!dz || !heading || (!word && !firstRow)) {
         setNewHelpPos(null);
         return;
       }
       const d = dz.getBoundingClientRect();
-      const w = word.getBoundingClientRect();
       const h = heading.getBoundingClientRect();
-      setNewHelpPos({ left: w.left + w.width / 2 - d.left, top: h.top + h.height / 2 - d.top });
+      let left;
+      if (word) {
+        const w = word.getBoundingClientRect();
+        left = w.left + w.width / 2 - d.left;
+      } else {
+        left = firstRow.getBoundingClientRect().right - d.left - 40;
+      }
+      setNewHelpPos({ left, top: h.top + h.height / 2 - d.top });
     }
     place();
     window.addEventListener("resize", place);
