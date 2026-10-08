@@ -2077,29 +2077,51 @@ function ScreenshotOrderPanel({ token, services, autoFocus, onFocused }) {
     setBusy(true);
     setError(null);
     setSent(false);
+    // ИЗМЕНЕНО (2026-10, запрос пользователя: "читать скриншот не надо —
+    // картинка просто уходит ведущему"): картинку только уменьшаем, чтобы
+    // быстрее ушла. Если телефон отдал формат, который браузер не умеет
+    // уменьшить, отправляем файл как есть — без ошибки "не удалось прочитать".
     try {
-      const resized = await new Promise((resolve, reject) => {
+      const original = await new Promise((resolve, reject) => {
         const reader = new FileReader();
-        reader.onerror = () => reject(reader.error || new Error("Не удалось прочитать файл"));
-        reader.onload = () => {
-          const img = new Image();
-          img.onerror = () => reject(new Error("Не удалось прочитать изображение"));
-          img.onload = () => {
-            const maxSide = 800;
-            const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
-            const canvas = document.createElement("canvas");
-            canvas.width = Math.round(img.width * scale);
-            canvas.height = Math.round(img.height * scale);
-            canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
-            resolve(canvas.toDataURL("image/jpeg", 0.82));
-          };
-          img.src = reader.result;
-        };
+        reader.onerror = () => reject(new Error("Не удалось открыть файл — попробуйте другой скриншот"));
+        reader.onload = () => resolve(reader.result);
         reader.readAsDataURL(file);
       });
-      setPendingImage(resized);
+      const shrink = (source) => {
+        const maxSide = 1200;
+        const scale = Math.min(1, maxSide / Math.max(source.width, source.height));
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(source.width * scale));
+        canvas.height = Math.max(1, Math.round(source.height * scale));
+        canvas.getContext("2d").drawImage(source, 0, 0, canvas.width, canvas.height);
+        return canvas.toDataURL("image/jpeg", 0.85);
+      };
+      let result = null;
+      try {
+        result = await new Promise((resolve, reject) => {
+          const img = new Image();
+          img.onerror = () => reject(new Error("decode"));
+          img.onload = () => resolve(shrink(img));
+          img.src = original;
+        });
+      } catch {
+        try {
+          if (window.createImageBitmap) result = shrink(await window.createImageBitmap(file));
+        } catch {
+          result = null;
+        }
+      }
+      if (!result) {
+        if (typeof original === "string" && original.startsWith("data:image/") && original.length <= 1900000) {
+          result = original;
+        } else {
+          throw new Error("Это фото слишком большое — сделайте обычный скриншот экрана и выберите его.");
+        }
+      }
+      setPendingImage(result);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : String(err));
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(false);
     }
