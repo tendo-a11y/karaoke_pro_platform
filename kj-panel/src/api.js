@@ -181,6 +181,9 @@ export const api = {
     request(`/api/kj/guests/${guestId}/photo`, {
       method: "PUT", token, body: { photo_data_url: photoDataUrl },
     }),
+  getGeneralChat: (token) => request("/api/kj/general-chat", { token }),
+  setGeneralChat: (token, enabled) =>
+    request("/api/kj/general-chat", { method: "PUT", token, body: { enabled } }),
   makeGuestVip: (token, guestId) =>
     request(`/api/kj/guests/${encodeURIComponent(guestId)}/make-vip`, { method: "POST", token }),
   renameGuest: (token, guestId, displayName) =>
