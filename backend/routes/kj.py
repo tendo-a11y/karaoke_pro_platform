@@ -555,6 +555,31 @@ def mark_admin_messages_read(club_id):
     return api_ok({"marked_read": True})
 
 
+# ДОБАВЛЕНО (2026-10, запрос пользователя "совсем удаляем у обоих"):
+# удаление переписки с администрацией — одно сообщение или вся целиком.
+# Удаляется насовсем, у KJ и у администрации.
+@bp.delete("/admin-messages/<int:club_id>/<int:message_id>")
+@require_kj
+def delete_admin_message(club_id, message_id):
+    denied = _ensure_own_club(club_id)
+    if denied:
+        return denied
+    AdminKjMessage.query.filter_by(club_id=club_id, id=message_id).delete()
+    db.session.commit()
+    return api_ok({"deleted": True})
+
+
+@bp.delete("/admin-messages/<int:club_id>")
+@require_kj
+def clear_admin_messages(club_id):
+    denied = _ensure_own_club(club_id)
+    if denied:
+        return denied
+    AdminKjMessage.query.filter_by(club_id=club_id).delete()
+    db.session.commit()
+    return api_ok({"cleared": True})
+
+
 @bp.get("/vip-requests/<int:club_id>")
 @require_kj
 def list_vip_requests(club_id):
