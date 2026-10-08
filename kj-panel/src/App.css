@@ -903,3 +903,24 @@ img { max-width: 100%; }
 .table-settings-field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
 .table-settings-form .table-settings-field input { width: 150px; flex: none; }
 .table-settings-panel p, .categories-panel p { margin-top: 6px; }
+
+
+/* ДОБАВЛЕНО (2026-10): экран "Статистика клуба" (пока скрыт, ?stats=1). */
+.stats-panel h3 { margin: 16px 0 6px; font-size: 14px; }
+.stats-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; margin: 8px 0; }
+.stats-tile { padding: 10px; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.12); background: rgba(255, 255, 255, 0.04); }
+.stats-tile__value { font-size: 22px; font-weight: 700; }
+.stats-tile__label { font-size: 12px; opacity: 0.75; }
+.stats-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.stats-table th, .stats-table td { text-align: left; padding: 6px 8px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
+.stats-table th { font-size: 12px; opacity: 0.7; font-weight: 600; }
+.stats-table td:not(:first-child), .stats-table th:not(:first-child) { white-space: nowrap; }
+.stats-delta { font-weight: 700; }
+.stats-delta--up { color: #2fbf71; }
+.stats-delta--down { color: #ff6b6b; }
+.stats-date { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+.stats-bars__row { display: flex; align-items: center; gap: 8px; font-size: 13px; margin: 3px 0; }
+.stats-bars__label { width: 48px; opacity: 0.8; }
+.stats-bars__track { flex: 1; height: 10px; border-radius: 5px; background: rgba(255, 255, 255, 0.08); overflow: hidden; }
+.stats-bars__fill { display: block; height: 100%; border-radius: 5px; background: #2fbf71; }
+.stats-bars__count { width: 36px; text-align: right; }
