@@ -1260,6 +1260,48 @@ def set_general_chat():
     return api_ok({"enabled": bool(club.chat_enabled)})
 
 
+# ДОБАВЛЕНО (2026-10, запрос пользователя): автозакрытие столов в заданное
+# время по часам компьютера KJ — см. services/auto_close_service.py.
+def _auto_close_view(club):
+    return {
+        "enabled": bool(club.auto_close_enabled),
+        "time": club.auto_close_time or "07:00",
+    }
+
+
+@bp.get("/auto-close")
+@require_kj
+def get_auto_close():
+    club = db.session.get(Club, g.club_id)
+    if club is None:
+        return api_error(404, "NOT_FOUND", "Клуб не найден")
+    return api_ok(_auto_close_view(club))
+
+
+@bp.put("/auto-close")
+@require_kj
+def set_auto_close():
+    from services import auto_close_service
+    club = db.session.get(Club, g.club_id)
+    if club is None:
+        return api_error(404, "NOT_FOUND", "Клуб не найден")
+    payload = request.get_json(silent=True) or {}
+    time_value = payload.get("time")
+    if auto_close_service.parse_time(time_value) is None:
+        return api_error(400, "VALIDATION_ERROR", "Время должно быть в формате ЧЧ:ММ")
+    tz_offset = payload.get("tz_offset")
+    if isinstance(tz_offset, bool) or not isinstance(tz_offset, int) or not -840 <= tz_offset <= 840:
+        return api_error(400, "VALIDATION_ERROR", "tz_offset должен быть числом минут")
+    club.auto_close_enabled = bool(payload.get("enabled"))
+    club.auto_close_time = time_value.strip()
+    club.auto_close_tz_offset = tz_offset
+    # Уже прошедшее сегодня время не должно сработать сразу после
+    # сохранения — первое автозакрытие будет в следующий раз.
+    club.auto_close_last_date = auto_close_service.last_occurrence_date(club)
+    db.session.commit()
+    return api_ok(_auto_close_view(club))
+
+
 # ДОБАВЛЕНО (2026-10, запрос пользователя): статистика своего клуба для
 # KJ Panel. Только чтение. Экран в панели пока скрыт (открывается только
 # по адресу с ?stats=1), см. services/club_stats_service.py.
