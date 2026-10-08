@@ -243,6 +243,19 @@ function QueueTable({ queue, token, clubId }) {
 
   return (
     <div className="queue-dropzone">
+      {newSongHelpOpen && (
+        <div className="service-card-overlay" onClick={() => setNewSongHelpOpen(false)}>
+          <div className="service-card" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+            <h3 className="service-card__title">Новинка</h3>
+            <p className="service-card__desc">Отметьте новинку и она будет рекомендована гостям в очереди гостей.</p>
+            <div className="service-card__buttons">
+              <button type="button" className="service-card__close" onClick={() => setNewSongHelpOpen(false)}>
+                Закрыть
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {queue.length === 0 ? (
         <p className="empty-hint">Очередь пока пуста.</p>
       ) : (
@@ -261,9 +274,15 @@ function QueueTable({ queue, token, clubId }) {
               <span className="queue-row__song">{item.song_title}</span>
               {item.song_title && (
                 <label className="queue-row__new" title="Показывать гостям в «Новинках»">
-                  {/* Один красный знак вопроса — над галочкой первой песни. */}
-                  {idx === queue.findIndex((q) => q.song_title) && (
-                    <span className="queue-new-help">
+                  <input
+                    type="checkbox"
+                    checked={newSongKeys.has(newSongKey(item.song_title, item.artist))}
+                    onChange={(e) => toggleNewSong(item, e.target.checked)}
+                  />
+                  <span className="queue-row__new-word">
+                    {/* Один знак вопроса (как у категорий) — над рамкой первой песни,
+                    по центру слова "Новинка". Открывает карточку с пояснением. */}
+                    {idx === queue.findIndex((q) => q.song_title) && (
                       <button
                         type="button"
                         className="queue-new-help__btn"
@@ -271,24 +290,14 @@ function QueueTable({ queue, token, clubId }) {
                         onClick={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
-                          setNewSongHelpOpen((v) => !v);
+                          setNewSongHelpOpen(true);
                         }}
                       >
-                        ?
+                        ❓
                       </button>
-                      {newSongHelpOpen && (
-                        <span className="queue-new-help__text">
-                          Отметьте новинку — и она будет рекомендована гостям в очереди гостей (кнопка «Новинки»).
-                        </span>
-                      )}
-                    </span>
-                  )}
-                  <input
-                    type="checkbox"
-                    checked={newSongKeys.has(newSongKey(item.song_title, item.artist))}
-                    onChange={(e) => toggleNewSong(item, e.target.checked)}
-                  />
-                  Новинка
+                    )}
+                    Новинка
+                  </span>
                 </label>
               )}
               {item.orphaned && (
