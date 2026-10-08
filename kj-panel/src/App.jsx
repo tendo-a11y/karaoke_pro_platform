@@ -2232,6 +2232,69 @@ const QUEUE_MODE_OPTIONS = [
   { value: "sequential", label: "Последовательно", hint: "Круговой обход столов по номерам, CRAZY — всегда первой" },
 ];
 
+// ДОБАВЛЕНО (2026-10, запрос пользователя): автозакрытие столов в заданное
+// время по часам этого компьютера.
+function AutoClosePanel({ token }) {
+  const [enabled, setEnabled] = useState(false);
+  const [time, setTime] = useState("07:00");
+  const [loaded, setLoaded] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    api.getAutoClose(token)
+      .then((data) => {
+        setEnabled(Boolean(data?.enabled));
+        setTime(data?.time || "07:00");
+        setLoaded(true);
+      })
+      .catch((err) => setError(err instanceof ApiError ? err.message : String(err)));
+  }, [token]);
+
+  async function save(nextEnabled, nextTime) {
+    setBusy(true);
+    setError(null);
+    setSaved(false);
+    try {
+      const data = await api.setAutoClose(token, nextEnabled, nextTime);
+      setEnabled(Boolean(data?.enabled));
+      setTime(data?.time || nextTime);
+      setSaved(true);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="table-settings-panel">
+      <section>
+        <h2>Автозакрытие столов: {!loaded ? "…" : enabled ? "Вкл" : "Откл"}</h2>
+        <p className="empty-hint">
+          В указанное время все столы закроются сами — так же, как кнопкой «Закрыть все столы». Время — по часам этого
+          компьютера. Если в последние 30 минут в клубе ещё заказывали или пели, закрытие подождёт, пока станет тихо.
+        </p>
+        {error && <div className="banner banner--error">{error}</div>}
+        <div className="guest-type-filters">
+          <label className="stats-date">
+            Время{" "}
+            <input type="time" value={time} disabled={!loaded || busy} onChange={(e) => setTime(e.target.value)} />
+          </label>
+          <button type="button" className="btn-link" disabled={!loaded || busy || !time} onClick={() => save(enabled, time)}>
+            Сохранить время
+          </button>
+          <button type="button" className="btn-link" disabled={!loaded || busy || !time} onClick={() => save(!enabled, time)}>
+            {enabled ? "Отключить" : "Включить"}
+          </button>
+          {saved && <span className="empty-hint">Сохранено</span>}
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function TableSettingsPanel({ token, clubId }) {
   const [tableCountDraft, setTableCountDraft] = useState("");
   const [songsPerTableDraft, setSongsPerTableDraft] = useState("");
@@ -4197,7 +4260,10 @@ export default function App() {
       ) : view === "categories" ? (
         <CategoriesPanel token={token} clubId={me.club_id} />
       ) : view === "tables" ? (
-        <TableSettingsPanel token={token} clubId={me.club_id} />
+        <>
+          <TableSettingsPanel token={token} clubId={me.club_id} />
+          <AutoClosePanel token={token} />
+        </>
       ) : view === "guests" ? (
         <GuestsPanel token={token} clubId={me.club_id} />
       ) : view === "stats" && STATS_ENABLED ? (
