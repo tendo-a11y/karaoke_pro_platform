@@ -3533,7 +3533,7 @@ export default function App() {
         />
         {songListsOpen ? (
           <h2
-            className="collapsible-header"
+            className="collapsible-header active-queue-title"
             role="button"
             tabIndex={0}
             aria-expanded={false}
@@ -3549,7 +3549,7 @@ export default function App() {
             <span className="collapsible-caret">▼</span>
           </h2>
         ) : (
-          <h2>Активная очередь</h2>
+          <h2 className="active-queue-title">Активная очередь</h2>
         )}
         {songListsOpen ? null : queue.length === 0 ? (
           <p className="empty-hint">Очередь пуста.</p>
