@@ -129,6 +129,7 @@ export const api = {
   cancelOrder: (token, orderId) =>
     request(`/api/guest/order/${orderId}/cancel`, { method: "POST", token }),
   getQueue: (token) => request("/api/guest/queue", { token }),
+  getSongLists: (token) => request("/api/guest/song-lists", { token }),
   sendChatMessage: (token, messageText, imageDataUrl, serviceId) =>
     request("/api/guest/chat", {
       method: "POST",
