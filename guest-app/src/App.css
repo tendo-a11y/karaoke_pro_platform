@@ -981,3 +981,25 @@ button.step-blink-fill { animation: button-fill-blink 1s ease-in-out infinite; }
   content: "By Absolutis"; display: block; margin-top: auto; padding-top: 24px;
   text-align: center; font-size: 12px; letter-spacing: 0.04em; color: var(--muted); opacity: 0.8;
 }
+
+
+/* ДОБАВЛЕНО (2026-10): кнопки "История за час / Популярные / Новинки" над живой очередью. */
+.song-lists { margin: 0 0 12px; }
+.song-lists__tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.song-lists__tab {
+  width: auto; margin: 0; padding: 5px 10px; font-size: 12px; font-weight: 600;
+  border-radius: 999px; background: transparent; color: var(--accent); border: 1px solid var(--accent);
+}
+.song-lists__tab--active { background: var(--accent); color: #1a1a1a; }
+.song-lists__body { margin-top: 8px; }
+.song-lists__list { margin: 0; padding-left: 22px; }
+.song-lists__row { padding: 4px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.06); }
+.song-lists__line { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.song-lists__title { font-size: 14px; }
+.song-lists__line .link-btn { flex: 0 0 auto; width: auto; margin: 0; padding: 2px 8px; }
+.song-lists__pages { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.song-lists__page {
+  width: auto; margin: 0; padding: 3px 8px; font-size: 12px; border-radius: 6px;
+  background: transparent; color: var(--text); border: 1px solid rgba(255, 255, 255, 0.2);
+}
+.song-lists__page--active { border-color: var(--accent); color: var(--accent); }
