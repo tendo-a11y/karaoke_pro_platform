@@ -2608,19 +2608,22 @@ function AutoClosePanel({ token }) {
           компьютера. Если в последние 30 минут в клубе ещё заказывали или пели, закрытие подождёт, пока станет тихо.
         </p>
         {error && <div className="banner banner--error">{error}</div>}
-        <div className="guest-type-filters">
-          <label className="stats-date">
-            Время{" "}
+        {/* Выровнено как "Настройки столов" выше (запрос пользователя 2026-10-09). */}
+        <div className="table-settings-form">
+          <label className="table-settings-field">
+            <span>Время закрытия</span>
             <input type="time" value={time} disabled={!loaded || busy} onChange={(e) => setTime(e.target.value)} />
           </label>
-          <button type="button" className="btn-link" disabled={!loaded || busy || !time} onClick={() => save(enabled, time)}>
-            Сохранить время
-          </button>
-          <button type="button" className="btn-link" disabled={!loaded || busy || !time} onClick={() => save(!enabled, time)}>
-            {enabled ? "Отключить" : "Включить"}
-          </button>
-          {saved && <span className="empty-hint">Сохранено</span>}
+          <div className="table-settings-actions">
+            <button type="button" className="btn btn--accent" disabled={!loaded || busy || !time} onClick={() => save(enabled, time)}>
+              Сохранить время
+            </button>
+            <button type="button" className="btn" disabled={!loaded || busy || !time} onClick={() => save(!enabled, time)}>
+              {enabled ? "Отключить" : "Включить"}
+            </button>
+          </div>
         </div>
+        {saved && <p className="empty-hint">Сохранено.</p>}
       </section>
     </div>
   );
