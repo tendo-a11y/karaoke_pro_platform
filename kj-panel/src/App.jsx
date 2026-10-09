@@ -1501,6 +1501,57 @@ function AdminMessagesPanel({ token, clubId, socket }) {
   );
 }
 
+// ДОБАВЛЕНО (2026-10-09, запрос пользователя): KJ предлагает улучшение
+// приложения. Уходит администрации отдельно от переписки; в ответ сразу
+// приходит автоответ в "Сообщения от администрации".
+function SuggestionPanel({ token, clubId }) {
+  const [draft, setDraft] = useState("");
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState(null);
+  const [sent, setSent] = useState(false);
+
+  async function handleSend() {
+    const text = draft.trim();
+    if (!text) return;
+    setSending(true);
+    setError(null);
+    setSent(false);
+    try {
+      await api.sendSuggestion(token, clubId, text);
+      setDraft("");
+      setSent(true);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <section className="order-change-requests-panel suggestion-panel">
+      <h2>💡 Предложить улучшение</h2>
+      <p className="empty-hint">Идея, как сделать приложение удобнее? Напишите — администрация её получит.</p>
+      {error && <div className="banner banner--error">{error}</div>}
+      {sent && <p className="suggestion-panel__sent">✅ Предложение отправлено администрации.</p>}
+      <div className="suggestion-panel__form">
+        <textarea
+          className="suggestion-panel__input"
+          rows={3}
+          placeholder="Ваше предложение…"
+          value={draft}
+          onChange={(e) => {
+            setDraft(e.target.value);
+            setSent(false);
+          }}
+        />
+        <button type="button" className="btn btn--accent" disabled={sending || !draft.trim()} onClick={handleSend}>
+          {sending ? "Отправляем…" : "Отправить"}
+        </button>
+      </div>
+    </section>
+  );
+}
+
 function KjChatPanel({ token, clubId, socket }) {
   // ДОБАВЛЕНО (2026-10-01, запрос пользователя "кнопка Сообщения,
   // собирающая все обращения, включая личный чат с гостями") — сам чат
@@ -3651,6 +3702,7 @@ function OrdersBoardSlot({ slot, categories, busy, onAccept, onReject, onComplet
         {slot.tone ? (
           <div className="tone-badge">🎚 Тон {slot.tone > 0 ? `+${slot.tone}` : slot.tone}</div>
         ) : null}
+        {slot.song_url ? <div className="table-slot__youtube">▶ ссылка YouTube</div> : null}
         {!canEditCategory && categoryName && <div className="table-slot__category">{categoryName}</div>}
         {slot.status === "error" && slot.error_message && (
           <div className="table-slot__error">{slot.error_message}</div>
@@ -3673,7 +3725,17 @@ function OrdersBoardSlot({ slot, categories, busy, onAccept, onReject, onComplet
       )}
       {needsDecision && (
         <div className="table-slot__actions">
-          <button type="button" className="btn btn--accept" disabled={busy} onClick={() => onAccept(slot.order_id)}>
+          <button
+            type="button"
+            className="btn btn--accept"
+            disabled={busy}
+            onClick={() => {
+              // Гость прислал ссылку YouTube — после "Принять" она сразу
+              // открывается в новой вкладке (запрос пользователя 2026-10-09).
+              if (slot.song_url) window.open(slot.song_url, "_blank", "noopener");
+              onAccept(slot.order_id);
+            }}
+          >
             ✅ Принять
           </button>
           <button type="button" className="btn btn--reject" disabled={busy} onClick={() => onReject(slot.order_id)}>
@@ -4533,6 +4595,7 @@ export default function App() {
           пополнение баланса были спрятаны внутри вкладки VIP; личного чата
           с гостем у KJ Panel не было вообще. Теперь всё в одном месте. */}
           <AdminMessagesPanel token={token} clubId={me.club_id} socket={socketInstance} />
+          <SuggestionPanel token={token} clubId={me.club_id} />
           <GeneralChatToggle token={token} />
           <OrderChangeRequestsPanel token={token} clubId={me.club_id} socket={socketInstance} />
           <TableCloseRequestsPanel token={token} clubId={me.club_id} socket={socketInstance} />
