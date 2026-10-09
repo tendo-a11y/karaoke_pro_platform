@@ -1240,9 +1240,13 @@ function resizeImageToBase64(file) {
   });
 }
 
-function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra }) {
+function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSuggestOther }) {
   // "Не эта" под найденной песней: подсказываем другие способы — моргают "Ссылка" и "Скриншот".
   const [suggestOther, setSuggestOther] = useState(false);
+  // Неудачный поиск — пусть ещё моргает поле "Название песни" (запрос пользователя 2026-10).
+  useEffect(() => {
+    if (onSuggestOther) onSuggestOther(suggestOther);
+  }, [suggestOther, onSuggestOther]);
   const [mode, setMode] = useState("text");
   const [text, setText] = useState("");
   const [results, setResults] = useState([]);
@@ -2834,6 +2838,7 @@ export default function App() {
   // две песни и за одну песню до выхода гостя, один раз на песню.
   const [turnToast, setTurnToast] = useState(null);
   const [songListsTab, setSongListsTab] = useState(null);
+  const [titleHint, setTitleHint] = useState(false);
   const songListsOpen = songListsTab != null;
   const turnToastShownRef = useRef(new Set());
   useEffect(() => {
@@ -3355,6 +3360,7 @@ export default function App() {
           onScreenshotHelp={() => {
             setView("screenshot");
           }}
+          onSuggestOther={setTitleHint}
           onPick={(song) => {
             setSongTitle(song.title);
             setArtist(song.artist || "");
@@ -3446,6 +3452,7 @@ export default function App() {
                 value={songTitle}
                 onChange={(e) => setSongTitle(e.target.value)}
                 placeholder="Название песни"
+                className={titleHint && !songTitle.trim() ? "step-blink" : undefined}
                 maxLength={200}
                 required
               />
