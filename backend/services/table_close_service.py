@@ -33,6 +33,7 @@ complete_table_orders ниже и правило дословно от поль�
 — та же самая функция, просто вызывается теперь отсюда для всех заказов
 стола сразу в момент закрытия, а не по одному за раз по кнопке "Готово").
 """
+import logging
 from datetime import datetime, timedelta, timezone
 
 from extensions import db
@@ -579,6 +580,17 @@ def close_all_tables(club_id: int, kj) -> CloseAllResult:
     # нельзя, пока это поле не выбрано заново).
     club = db.session.get(Club, club_id)
     if club is not None:
+        # ДОБАВЛЕНО (2026-10-09): конец вечера — начисляем кешбек клуба
+        # супер-админу за этот вечер. Ошибка начисления не должна мешать
+        # закрытию столов.
+        end_at = datetime.now(timezone.utc)
+        try:
+            from services import cashback_service
+            cashback_service.accrue_evening(club, cashback_service.evening_start(club, end_at), end_at)
+        except Exception:
+            db.session.rollback()
+            logging.getLogger(__name__).exception("cashback accrual failed for club %s", club_id)
+            club = db.session.get(Club, club_id)
         club.queue_start_table = None
         # ДОБАВЛЕНО (2026-10, запрос пользователя): "Закрыть все столы"
         # полностью завершает вечер — следующий вечер начинается с чистого
