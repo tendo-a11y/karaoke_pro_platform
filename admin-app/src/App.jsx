@@ -55,7 +55,7 @@ function QrCodeImage({ url }) {
   );
 }
 
-function ClubForm({ initial, submitLabel, onSubmit, busy, error }) {
+function ClubForm({ initial, submitLabel, onSubmit, busy, error, showCashback = false }) {
   const [name, setName] = useState(initial?.name ?? "");
   const [city, setCity] = useState(initial?.city ?? "");
   const [phone, setPhone] = useState(initial?.phone ?? "");
@@ -63,6 +63,11 @@ function ClubForm({ initial, submitLabel, onSubmit, busy, error }) {
   const [tableCount, setTableCount] = useState(
     initial?.table_count != null ? String(initial.table_count) : "",
   );
+  // Кешбек от клуба (2026-10-09) — только для супер-админа.
+  const [cashbackPercent, setCashbackPercent] = useState(
+    initial?.cashback_percent != null ? String(initial.cashback_percent) : "",
+  );
+  const [cashbackVipOnly, setCashbackVipOnly] = useState(Boolean(initial?.cashback_vip_only));
 
   function handleSubmit(e) {
     e.preventDefault();
@@ -72,6 +77,9 @@ function ClubForm({ initial, submitLabel, onSubmit, busy, error }) {
       phone: phone || null,
       email: email || null,
       table_count: tableCount === "" ? null : Number(tableCount),
+      ...(showCashback
+        ? { cashback_percent: cashbackPercent === "" ? null : cashbackPercent, cashback_vip_only: cashbackVipOnly }
+        : {}),
     });
   }
 
@@ -88,6 +96,32 @@ function ClubForm({ initial, submitLabel, onSubmit, busy, error }) {
         value={tableCount}
         onChange={(e) => setTableCount(e.target.value)}
       />
+      {showCashback && (
+        <fieldset className="cashback-block">
+          <legend>💰 Кешбек от клуба</legend>
+          <label className="cashback-block__field">
+            <span>Процент с выручки вечера</span>
+            <input
+              type="number"
+              min="0"
+              max="100"
+              step="0.01"
+              placeholder="10"
+              value={cashbackPercent}
+              onChange={(e) => setCashbackPercent(e.target.value)}
+            />
+            <span>%</span>
+          </label>
+          <label className="cashback-block__radio">
+            <input type="radio" checked={!cashbackVipOnly} onChange={() => setCashbackVipOnly(false)} />
+            Со всей выручки (VIP и не VIP)
+          </label>
+          <label className="cashback-block__radio">
+            <input type="radio" checked={cashbackVipOnly} onChange={() => setCashbackVipOnly(true)} />
+            Только с VIP
+          </label>
+        </fieldset>
+      )}
       {error && <div className="banner banner--error">{error}</div>}
       <button type="submit" disabled={busy}>{submitLabel}</button>
     </form>
@@ -578,13 +612,29 @@ function ClubDetail({ token, clubId, isSuperAdmin, onClubChanged, onBack }) {
       <div className="vip-stat-row"><span>Выручка за 7 дней</span><span>{formatMoney(club.revenue_week)}</span></div>
       <div className="vip-stat-row"><span>Выручка за 30 дней</span><span>{formatMoney(club.revenue_month)}</span></div>
       <div className="vip-stat-row"><span>Комиссия админа (30 дней)</span><span>{formatMoney(club.admin_cashback)}</span></div>
+      {isSuperAdmin && (
+        <div className="vip-stat-row">
+          <span>Кешбек от клуба</span>
+          <span>
+            {club.cashback_percent != null ? `${club.cashback_percent}%` : "не задан"}
+            {club.cashback_percent != null && (club.cashback_vip_only ? " (только VIP)" : " (вся выручка)")}
+          </span>
+        </div>
+      )}
       <div className="vip-stat-row"><span>Песен в каталоге</span><span>{club.songs_count}</span></div>
 
       <h3>KJ клуба</h3>
       <KjManagementPanel token={token} clubId={club.club_id} isSuperAdmin={isSuperAdmin} />
 
       <h3>Редактировать</h3>
-      <ClubForm initial={club} submitLabel="Сохранить" onSubmit={handleEdit} busy={busy} error={actionError} />
+      <ClubForm
+        initial={club}
+        submitLabel="Сохранить"
+        onSubmit={handleEdit}
+        busy={busy}
+        error={actionError}
+        showCashback={isSuperAdmin}
+      />
 
       {isSuperAdmin && (
         <div className="club-detail__admin-actions">
@@ -684,15 +734,102 @@ function ClearStatsControl({ onClear }) {
   );
 }
 
+function formatEvening(startIso, endIso) {
+  const opts = { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" };
+  const start = new Date(startIso).toLocaleString("ru-RU", opts);
+  const end = new Date(endIso).toLocaleString("ru-RU", opts);
+  return `${start} — ${end}`;
+}
+
+// ДОБАВЛЕНО (2026-10-09, запрос пользователя): кешбек клуба супер-админу —
+// по клику на клуб в "Отчётах" видно процент, долг и начисления за вечера
+// (VIP / не VIP: гости и суммы), с отметкой "Выплачено".
+function ClubCashbackDetails({ token, info, onChanged }) {
+  const [busyId, setBusyId] = useState(null);
+  const [error, setError] = useState(null);
+
+  async function togglePaid(ev) {
+    const paid = !ev.paid_at;
+    const question = paid
+      ? `Отметить кешбек ${formatMoney(ev.amount)} как выплаченный?`
+      : `Снять отметку «Выплачено» с ${formatMoney(ev.amount)}?`;
+    if (!window.confirm(question)) return;
+    setBusyId(ev.id);
+    setError(null);
+    try {
+      await api.setCashbackPaid(token, ev.id, paid);
+      await onChanged();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  if (!info) return <p className="empty-hint">Загрузка…</p>;
+  return (
+    <div className="cashback-details">
+      <div className="vip-stat-row">
+        <span>Кешбек от клуба</span>
+        <span>
+          {info.cashback_percent != null ? `${info.cashback_percent}%` : "не задан"}
+          {info.cashback_percent != null && (info.cashback_vip_only ? " (только VIP)" : " (вся выручка)")}
+        </span>
+      </div>
+      <div className="vip-stat-row"><span>К выплате</span><strong>{formatMoney(info.owed)}</strong></div>
+      <div className="vip-stat-row"><span>Уже выплачено</span><span>{formatMoney(info.paid)}</span></div>
+      {error && <div className="banner banner--error">{error}</div>}
+      {info.evenings.length === 0 ? (
+        <p className="empty-hint">Начислений пока нет — они появятся после закрытия вечера.</p>
+      ) : (
+        <ul className="cashback-evenings">
+          {info.evenings.map((ev) => (
+            <li key={ev.id} className="cashback-evening">
+              <div className="cashback-evening__head">
+                <span>{formatEvening(ev.start_at, ev.end_at)}</span>
+                <strong>{formatMoney(ev.amount)}</strong>
+              </div>
+              <div className="cashback-evening__stats">
+                VIP: {ev.guests_vip} гост. · {formatMoney(ev.revenue_vip)} ·
+                {" "}не VIP: {ev.guests_regular} гост. · {formatMoney(ev.revenue_regular)} ·
+                {" "}всего: {formatMoney(ev.revenue_total)} · {ev.percent}%{ev.vip_only ? " с VIP" : ""}
+              </div>
+              <button
+                type="button"
+                className="link-btn"
+                disabled={busyId === ev.id}
+                onClick={() => togglePaid(ev)}
+              >
+                {ev.paid_at ? "✅ Выплачено" : "Отметить «Выплачено»"}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function ReportsPanel({ token }) {
   const [data, setData] = useState(null);
   const [loadError, setLoadError] = useState(null);
+  const [cashback, setCashback] = useState(null);
+  const [openClubId, setOpenClubId] = useState(null);
+
+  async function reloadCashback() {
+    try {
+      setCashback(await api.getCashback(token));
+    } catch (err) {
+      setLoadError(err instanceof ApiError ? err.message : String(err));
+    }
+  }
 
   async function reload() {
     try {
       const overview = await api.getReportsOverview(token);
       setData(overview);
       setLoadError(null);
+      reloadCashback();
     } catch (err) {
       setLoadError(err instanceof ApiError ? err.message : String(err));
     }
@@ -755,14 +892,26 @@ function ReportsPanel({ token }) {
         <ul className="order-list">
           {data.clubs.map((row) => (
             <li key={row.club_id} className="order-row">
-              <div className="kj-row__main">
+              <button
+                type="button"
+                className="report-club__toggle"
+                onClick={() => setOpenClubId(openClubId === row.club_id ? null : row.club_id)}
+              >
                 <span>{row.is_active ? "🟢" : "🔴"} {row.name}{row.city ? ` (${row.city})` : ""}</span>
-              </div>
+                <span>{openClubId === row.club_id ? "▲" : "▼"}</span>
+              </button>
               <div className="kj-row__stats">
                 Сегодня: {formatMoney(row.revenue_today)} ({row.percent_of_total_today.toFixed(1)}% от общей) ·
                 {" "}7д: {formatMoney(row.revenue_week)} · 30д: {formatMoney(row.revenue_month)} ·
                 {" "}заказов сегодня: {row.orders_completed_today}
               </div>
+              {openClubId === row.club_id && (
+                <ClubCashbackDetails
+                  token={token}
+                  info={cashback ? cashback.find((c) => c.club_id === row.club_id) : null}
+                  onChanged={reloadCashback}
+                />
+              )}
             </li>
           ))}
         </ul>
@@ -1345,6 +1494,7 @@ export default function App() {
                       onSubmit={handleCreate}
                       busy={createBusy}
                       error={createError}
+                      showCashback
                     />
                   )}
                 </>
