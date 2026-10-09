@@ -1726,6 +1726,14 @@ function TableGroupPanel({ token, guestId, hasTable, status, onGroupChanged, tab
     status === "not_joined" ||
     Boolean(view && view.is_admin && view.pending_requests && view.pending_requests.length > 0);
   const open = needsAttention || groupOpen;
+  // Надпись под "Групповой стол" для админа (запрос пользователя 2026-10):
+  // с именем из профиля, если оно задано; без имени — просто "Вы".
+  const myMember = view && Array.isArray(view.members) ? view.members.find((m) => m.guest_id === guestId) : null;
+  const adminLine = status === "admin"
+    ? (myMember && myMember.display_name
+      ? `Вы «${myMember.display_name}» — админ стола. Только вы разрешаете, кому сесть за стол. Чужие сесть не могут.`
+      : "Вы — админ стола. Только вы разрешаете, кому сесть за стол. Чужие сесть не могут.")
+    : null;
   const acceptsText = tableAdmin && tableAdmin.display_name
     ? `Принимает на стол ${tableAdmin.display_name}.`
     : "Тот, кто первым сел за стол, должен подтвердить.";
@@ -1754,6 +1762,7 @@ function TableGroupPanel({ token, guestId, hasTable, status, onGroupChanged, tab
         👥 Групповой стол{tableNo != null ? ` · ${tableNo}` : ""}
         <span className={`collapsible-caret${open ? " collapsible-caret--blink" : ""}`}>{open ? "▲" : "▼"}</span>
       </h2>
+      {adminLine && <p className="table-admin-line">{adminLine}</p>}
       {open && (
       <>
       {error && <div className="banner banner--error">{error}</div>}
