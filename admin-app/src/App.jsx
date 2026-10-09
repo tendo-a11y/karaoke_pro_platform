@@ -631,6 +631,59 @@ function ClubDetail({ token, clubId, isSuperAdmin, onClubChanged, onBack }) {
 // (см. согласованный план: обычная ссылка <a href> не может нести
 // Bearer-токен). Excel-экспорт старого бота (export_excel/admin_excel_soon)
 // был лишь заглушкой "скоро" и сюда не переносится — только CSV.
+// ДОБАВЛЕНО (2026-10-09, запрос пользователя): очистка статистики за
+// день/неделю/месяц/год с двойным подтверждением. Очищается только в этой
+// панели — в других (и в чеках/балансах) всё остаётся.
+const CLEAR_PERIODS = [
+  { key: "day", label: "За день" },
+  { key: "week", label: "За неделю" },
+  { key: "month", label: "За месяц" },
+  { key: "year", label: "За год" },
+];
+
+function ClearStatsControl({ onClear }) {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+
+  async function choose(p) {
+    if (!window.confirm(`Очистить статистику: ${p.label.toLowerCase()}? Она пропадёт только здесь.`)) return;
+    if (!window.confirm("Точно очистить? Вернуть будет нельзя.")) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await onClear(p.key);
+      setOpen(false);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="clear-stats">
+      {!open ? (
+        <button type="button" className="link-btn clear-stats__toggle" onClick={() => setOpen(true)}>
+          🗑 Очистить
+        </button>
+      ) : (
+        <div className="clear-stats__periods clear-stats__row">
+          {CLEAR_PERIODS.map((p) => (
+            <button key={p.key} type="button" className="link-btn" disabled={busy} onClick={() => choose(p)}>
+              {p.label}
+            </button>
+          ))}
+          <button type="button" className="link-btn" disabled={busy} onClick={() => setOpen(false)}>
+            Отмена
+          </button>
+        </div>
+      )}
+      {error && <div className="banner banner--error">{error}</div>}
+    </div>
+  );
+}
+
 function ReportsPanel({ token }) {
   const [data, setData] = useState(null);
   const [loadError, setLoadError] = useState(null);
@@ -681,6 +734,12 @@ function ReportsPanel({ token }) {
 
   return (
     <div>
+      <ClearStatsControl
+        onClear={async (period) => {
+          await api.clearReports(token, period);
+          await reload();
+        }}
+      />
       <div className="vip-stat-row"><span>Выручка сегодня (все клубы)</span><span>{formatMoney(data.totals.revenue_today)}</span></div>
       <div className="vip-stat-row"><span>Выручка за 7 дней</span><span>{formatMoney(data.totals.revenue_week)}</span></div>
       <div className="vip-stat-row"><span>Выручка за 30 дней</span><span>{formatMoney(data.totals.revenue_month)}</span></div>
