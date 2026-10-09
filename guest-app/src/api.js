@@ -100,9 +100,9 @@ export const api = {
     request("/api/guest/profile/link-google", {
       method: "POST", token, body: { table_no: tableNo, google_credential: googleCredential },
     }),
-  createOrder: (token, songTitle, artist, serviceId, tone = null) =>
+  createOrder: (token, songTitle, artist, serviceId, tone = null, songUrl = null) =>
     request("/api/guest/order", {
-      method: "POST", token, body: { song_title: songTitle, artist, service_id: serviceId, tone },
+      method: "POST", token, body: { song_title: songTitle, artist, service_id: serviceId, tone, song_url: songUrl },
     }),
   // ИЗМЕНЕНО (2026-09-24, запрос пользователя "правильно разделить на две
   // вкладки история и мои заказы. Мои заказы это то что происходит в рамках
