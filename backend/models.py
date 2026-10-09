@@ -1333,3 +1333,24 @@ class KjSuggestion(db.Model):
             "message_text": self.message_text,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
+
+
+class StatsClear(db.Model):
+    """
+    ДОБАВЛЕНО (2026-10-09, запрос пользователя): "очистка статистики" за
+    день/неделю/месяц/год — у каждого только в его панели (KJ — статистика
+    клуба, гость — история и финансы, админ — отчёты). Сами заказы и деньги
+    не удаляются: панель просто не показывает данные за очищенный отрезок.
+    scope: kj | guest_history | guest_finance | admin; owner — чей это отрезок.
+    """
+    __tablename__ = "stats_clears"
+
+    id = db.Column(db.Integer, primary_key=True)
+    scope = db.Column(db.String(20), nullable=False)
+    owner = db.Column(db.String(64), nullable=False)
+    start_at = db.Column(db.DateTime(timezone=True), nullable=False)
+    end_at = db.Column(db.DateTime(timezone=True), nullable=False)
+    created_at = db.Column(db.DateTime(timezone=True), default=utcnow, nullable=False)
+
+    __table_args__ = (db.Index("ix_stats_clears_scope_owner", "scope", "owner"),)
+
