@@ -140,6 +140,10 @@ def get_club_detail(admin, club_id: int) -> dict:
         # авторизован, а не в общем списке.
         "bridge_token": club.bridge_token,
     })
+    # Кешбек от клуба (2026-10-09) — видит только супер-админ.
+    if admin.is_super_admin:
+        data["cashback_percent"] = float(club.cashback_percent) if club.cashback_percent is not None else None
+        data["cashback_vip_only"] = bool(club.cashback_vip_only)
     return data
 
 
@@ -157,7 +161,8 @@ def _validate_optional_string(value, field_name):
     return value
 
 
-def create_club(admin, *, name, city=None, phone=None, email=None, table_count=None) -> Club:
+def create_club(admin, *, name, city=None, phone=None, email=None, table_count=None,
+                cashback_percent=None, cashback_vip_only=False) -> Club:
     """
     Создание клуба — только супер-админ (обычный админ уже привязан к
     своему клубу через provisioning, см. manage.py add-admin, и не создаёт
@@ -179,6 +184,7 @@ def create_club(admin, *, name, city=None, phone=None, email=None, table_count=N
     phone = _validate_optional_string(phone, "phone")
     email = _validate_optional_string(email, "email")
     table_count = _validate_table_count(table_count)
+    cashback_percent = _parse_cashback_percent(cashback_percent)
 
     next_id = (db.session.query(db.func.max(Club.club_id)).scalar() or 0) + 1
     club = Club(
@@ -188,6 +194,9 @@ def create_club(admin, *, name, city=None, phone=None, email=None, table_count=N
         phone=phone,
         email=email,
         table_count=table_count,
+        # Кешбек от клуба (2026-10-09) — задаёт супер-админ при создании.
+        cashback_percent=cashback_percent,
+        cashback_vip_only=bool(cashback_vip_only),
         is_active=True,
         # Запрос пользователя 2026-09-14: код доступа для программы-моста
         # VirtualDJ (см. Club.bridge_token в models.py) создаётся сразу при
@@ -225,8 +234,24 @@ def update_club(admin, club_id: int, **fields) -> Club:
     if "table_count" in fields:
         club.table_count = _validate_table_count(fields["table_count"])
 
+    # Кешбек от клуба (2026-10-09) — менять может только супер-админ.
+    if "cashback_percent" in fields or "cashback_vip_only" in fields:
+        _require_super_admin(admin, "Кешбек клуба меняет только супер-админ")
+        if "cashback_percent" in fields:
+            club.cashback_percent = _parse_cashback_percent(fields["cashback_percent"])
+        if "cashback_vip_only" in fields:
+            club.cashback_vip_only = bool(fields["cashback_vip_only"])
+
     db.session.commit()
     return club
+
+
+def _parse_cashback_percent(value):
+    from services.cashback_service import CashbackError, parse_percent
+    try:
+        return parse_percent(value)
+    except CashbackError as exc:
+        raise ClubServiceError("VALIDATION_ERROR", exc.message)
 
 
 def set_club_status(admin, club_id: int, is_active) -> Club:
