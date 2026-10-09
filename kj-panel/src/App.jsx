@@ -1530,7 +1530,7 @@ function SuggestionPanel({ token, clubId }) {
   return (
     <section className="order-change-requests-panel suggestion-panel">
       <h2>💡 Предложить улучшение</h2>
-      <p className="empty-hint">Идея, как сделать приложение удобнее? Напишите — администрация её получит.</p>
+      <p className="empty-hint">KJ, есть идея, как сделать приложение удобнее? Напишите — администрация её получит.</p>
       {error && <div className="banner banner--error">{error}</div>}
       {sent && <p className="suggestion-panel__sent">✅ Предложение отправлено администрации.</p>}
       <div className="suggestion-panel__form">
