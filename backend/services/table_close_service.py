@@ -54,6 +54,7 @@ from models import (
     TX_TYPE_ORDER_PAYMENT,
 )
 from services import billing_service, guest_status_service, table_group_service
+from services.category_service import not_bonus_filter
 from services.table_board_service import ACTIVE_TABLE_STATUSES, get_table_capacity, partition_table_orders
 from sockets import emit_table_close_request_created, emit_table_close_request_decided
 
@@ -155,6 +156,8 @@ def _build_receipt(club_id: int, table_no: int, since) -> dict:
             Order.table_no == table_no,
             Order.status == STATUS_COMPLETED,
             Order.created_at >= since,
+            # Bonus от KJ в чеке не показывается (2026-10-09).
+            not_bonus_filter(),
         )
         .all()
     )
