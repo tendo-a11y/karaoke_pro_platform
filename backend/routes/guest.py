@@ -8,7 +8,7 @@ from auth import issue_guest_token, require_guest
 from errors import api_error, api_ok
 from extensions import db
 from models import STATUS_COMPLETED, STATUS_ERROR, STATUS_ORDER_CHANGE_PENDING, STATUS_REJECTED, ChatMessage, Club, GuestAccount, Order, OrderChangeRequest, Service
-from services import ai_search_service, billing_service, guest_account_service, guest_status_service, song_service, table_board_service, table_close_service, table_group_service, vdj_service, vip_service, vip_topup_request_service
+from services import ai_search_service, billing_service, guest_account_service, guest_status_service, song_service, stats_clear_service, table_board_service, table_close_service, table_group_service, vdj_service, vip_service, vip_topup_request_service
 from services.google_auth_service import GoogleAuthError, verify_google_credential
 from sockets import emit_chat_message, emit_order_created, emit_vip_request_created
 from vdj import get_vdj_client
@@ -742,6 +742,9 @@ def list_vip_transactions():
     """
     days = request.args.get("days", type=int)
     transactions = vip_service.list_transactions(g.club_id, g.guest_id, days=days)
+    # Очищенные гостем отрезки "Финансов" (2026-10-09) не показываются; баланс не меняется.
+    cleared = stats_clear_service.ranges("guest_finance", f"{g.club_id}:{g.guest_id}")
+    transactions = [tx for tx in transactions if not stats_clear_service.is_cleared(tx.created_at, cleared)]
     return api_ok([
         {
             "id": tx.id,
@@ -753,6 +756,23 @@ def list_vip_transactions():
         }
         for tx in transactions
     ])
+
+
+# ДОБАВЛЕНО (2026-10-09): гость очищает у себя "Историю" или "Финансы"
+# за день/неделю/месяц/год. Только у себя: KJ и админка видят всё.
+@bp.post("/history/clear")
+@require_guest
+def clear_history():
+    payload = request.get_json(silent=True) or {}
+    kind = payload.get("kind")
+    scope = {"history": "guest_history", "finance": "guest_finance"}.get(kind)
+    if scope is None:
+        return api_error(400, "VALIDATION_ERROR", "kind: history или finance")
+    try:
+        stats_clear_service.clear(scope, f"{g.club_id}:{g.guest_id}", payload.get("period"))
+    except ValueError:
+        return api_error(400, "VALIDATION_ERROR", "period: day, week, month или year")
+    return api_ok({"cleared": True})
 
 
 @bp.post("/favorites")
@@ -1071,6 +1091,10 @@ def list_my_orders():
             from datetime import datetime, timedelta, timezone
             cutoff = datetime.now(timezone.utc) - timedelta(days=days)
             query = query.filter(Order.created_at >= cutoff)
+        # Очищенные гостем отрезки "Истории" (2026-10-09) не показываются.
+        query = query.filter(
+            stats_clear_service.exclude(Order.created_at, "guest_history", f"{g.club_id}:{g.guest_id}")
+        )
     orders = query.order_by(Order.created_at.asc()).all()
     vdj = get_vdj_client(g.club_id)
     waiting_positions = table_board_service.get_waiting_positions(g.club_id, g.guest_id)
