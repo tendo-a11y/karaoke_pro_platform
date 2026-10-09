@@ -1043,3 +1043,7 @@ button.step-blink-fill { animation: button-fill-blink 1s ease-in-out infinite; }
   border-left: 3px solid var(--accent); background: rgba(255, 176, 32, 0.12);
   color: var(--text); font-size: 14px; font-weight: 600; line-height: 1.35;
 }
+
+.clear-stats {
+  margin: 0.25rem 0 0.75rem;
+}
