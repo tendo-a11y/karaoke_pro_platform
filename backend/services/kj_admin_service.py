@@ -36,6 +36,7 @@ from decimal import Decimal
 
 from extensions import db
 from models import Club, KJOperator, Order, STATUS_COMPLETED, Transaction, TX_TYPE_ORDER_PAYMENT
+from services.category_service import not_bonus_filter
 
 
 class KjAdminServiceError(Exception):
@@ -58,6 +59,7 @@ def _stats_since(kj_id: int, since: datetime) -> dict:
             Order.confirmed_by == kj_id,
             Order.status == STATUS_COMPLETED,
             Order.completed_at >= since,
+            not_bonus_filter(),
         ).count()
     )
     revenue = (
