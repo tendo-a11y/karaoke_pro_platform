@@ -1,3 +1,4 @@
+import re
 import secrets
 from datetime import datetime, timedelta, timezone
 
@@ -11,6 +12,8 @@ from services import ai_search_service, billing_service, guest_account_service, 
 from services.google_auth_service import GoogleAuthError, verify_google_credential
 from sockets import emit_chat_message, emit_order_created, emit_vip_request_created
 from vdj import get_vdj_client
+
+YOUTUBE_URL_RE = re.compile(r"^https?://(www\.|m\.|music\.)?(youtube\.com|youtu\.be)/", re.IGNORECASE)
 
 bp = Blueprint("guest", __name__, url_prefix="/api/guest")
 
@@ -280,6 +283,14 @@ def create_order():
         if tone == 0:
             tone = None
 
+    # ДОБАВЛЕНО (2026-10-09): ссылка YouTube, по которой гость нашёл песню.
+    # Сохраняется только ссылка на YouTube (решение пользователя), иначе — нет.
+    song_url = payload.get("song_url")
+    if not isinstance(song_url, str) or not YOUTUBE_URL_RE.match(song_url.strip()) or len(song_url.strip()) > 500:
+        song_url = None
+    else:
+        song_url = song_url.strip()
+
     active_count = vip_service.count_active_orders(g.club_id, g.guest_id)
     max_active = current_app.config["MAX_ACTIVE_SONGS_PER_GUEST"]
     if active_count >= max_active:
@@ -317,6 +328,7 @@ def create_order():
         artist=artist,
         service_id=service_id,
         tone=tone,
+        song_url=song_url,
         source="guest",
         channel="webapp",
     )
