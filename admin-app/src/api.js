@@ -103,6 +103,12 @@ export const api = {
   listKjMessages: (token, clubId) => request(`/api/admin/clubs/${clubId}/kj-messages`, { token }),
   sendKjMessage: (token, clubId, messageText) =>
     request(`/api/admin/clubs/${clubId}/kj-messages`, { method: "POST", token, body: { message_text: messageText } }),
+  // ДОБАВЛЕНО (2026-10-09): одно сообщение сразу всем KJ и предложения KJ по улучшению.
+  broadcastKjMessage: (token, messageText) =>
+    request("/api/admin/kj-messages/broadcast", { method: "POST", token, body: { message_text: messageText } }),
+  listSuggestions: (token) => request("/api/admin/suggestions", { token }),
+  deleteSuggestion: (token, suggestionId) =>
+    request(`/api/admin/suggestions/${suggestionId}`, { method: "DELETE", token }),
   getReportsOverview: (token) => request("/api/admin/reports/overview", { token }),
   getSystemOverview: (token) => request("/api/admin/system/overview", { token }),
   getSystemLogs: (token) => request("/api/admin/system/logs", { token }),
