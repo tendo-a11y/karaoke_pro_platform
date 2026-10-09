@@ -1036,3 +1036,10 @@ button.step-blink-fill { animation: button-fill-blink 1s ease-in-out infinite; }
 .lang-switch__btn { display: inline-flex; flex-direction: column; align-items: center; gap: 3px; border-radius: 8px; padding: 3px 7px 4px; line-height: 1; }
 .lang-switch__flag { display: block; width: 18px; height: 12px; }
 .lang-switch__flag svg { display: block; width: 18px; height: 12px; border-radius: 2px; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35); }
+
+/* Надпись "Вы — админ стола…" под заголовком "Групповой стол". */
+.table-admin-line {
+  margin: -4px 0 10px; padding: 8px 10px; border-radius: 8px;
+  border-left: 3px solid var(--accent); background: rgba(255, 176, 32, 0.12);
+  color: var(--text); font-size: 14px; font-weight: 600; line-height: 1.35;
+}
