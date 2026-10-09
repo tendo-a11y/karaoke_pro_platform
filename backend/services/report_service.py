@@ -22,6 +22,7 @@ from decimal import Decimal
 
 from extensions import db
 from models import Club, Order, STATUS_COMPLETED
+from services.category_service import not_bonus_filter
 from services.club_service import _revenue_since
 
 
@@ -38,6 +39,7 @@ def _orders_completed_since(club_id: int, since: datetime) -> int:
         Order.club_id == club_id,
         Order.status == STATUS_COMPLETED,
         Order.completed_at >= since,
+        not_bonus_filter(),
     ).count()
 
 
