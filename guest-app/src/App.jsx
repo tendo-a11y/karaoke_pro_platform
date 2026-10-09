@@ -4,6 +4,42 @@ import "./App.css";
 import { LANG, LANGS, setLang } from "./i18n.js";
 import { LEGAL_HTML } from "./i18n_legal.js";
 
+// Флажки под кнопками языков (рисунком, чтобы были видны на любом телефоне).
+const LANG_FLAGS = {
+  ru: (
+    <svg viewBox="0 0 9 6" aria-hidden="true">
+      <rect width="9" height="2" fill="#fff" />
+      <rect y="2" width="9" height="2" fill="#0039a6" />
+      <rect y="4" width="9" height="2" fill="#d52b1e" />
+    </svg>
+  ),
+  ro: (
+    <svg viewBox="0 0 9 6" aria-hidden="true">
+      <rect width="3" height="6" fill="#002b7f" />
+      <rect x="3" width="3" height="6" fill="#fcd116" />
+      <rect x="6" width="3" height="6" fill="#ce1126" />
+    </svg>
+  ),
+  en: (
+    <svg viewBox="0 0 60 30" aria-hidden="true">
+      <clipPath id="lang-flag-gb">
+        <path d="M30,15 h30 v15 z v15 h-30 z h-30 v-15 z v-15 h30 z" />
+      </clipPath>
+      <path d="M0,0 v30 h60 v-30 z" fill="#012169" />
+      <path d="M0,0 L60,30 M60,0 L0,30" stroke="#fff" strokeWidth="6" />
+      <path d="M0,0 L60,30 M60,0 L0,30" clipPath="url(#lang-flag-gb)" stroke="#c8102e" strokeWidth="4" />
+      <path d="M30,0 v30 M0,15 h60" stroke="#fff" strokeWidth="10" />
+      <path d="M30,0 v30 M0,15 h60" stroke="#c8102e" strokeWidth="6" />
+    </svg>
+  ),
+  uk: (
+    <svg viewBox="0 0 3 2" aria-hidden="true">
+      <rect width="3" height="1" fill="#0057b7" />
+      <rect y="1" width="3" height="1" fill="#ffd700" />
+    </svg>
+  ),
+};
+
 // Переключатель языка RU / RO / EN / UA (запрос пользователя 2026-10).
 function LangSwitcher() {
   return (
@@ -17,7 +53,8 @@ function LangSwitcher() {
             if (LANG !== l.code) setLang(l.code);
           }}
         >
-          {l.label}
+          <span>{l.label}</span>
+          <span className="lang-switch__flag">{LANG_FLAGS[l.code]}</span>
         </button>
       ))}
     </div>
