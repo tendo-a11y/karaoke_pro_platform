@@ -185,6 +185,9 @@ export const api = {
   // и docstring backend/services/table_close_service.py. Только заявка;
   // реальное закрытие стола происходит после подтверждения KJ в KJ Panel.
   requestTableClose: (token) => request("/api/guest/table-group/request-close", { method: "POST", token }),
+  // ДОБАВЛЕНО (2026-10-09): гость очищает у себя "Историю" или "Финансы".
+  clearMyHistory: (token, kind, period) =>
+    request("/api/guest/history/clear", { method: "POST", token, body: { kind, period } }),
   listVipTransactions: (token, days) =>
     request(`/api/guest/vip/transactions${days ? `?days=${days}` : ""}`, { token }),
 };
