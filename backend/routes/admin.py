@@ -113,6 +113,8 @@ def create_club():
             phone=payload.get("phone"),
             email=payload.get("email"),
             table_count=payload.get("table_count"),
+            cashback_percent=payload.get("cashback_percent"),
+            cashback_vip_only=payload.get("cashback_vip_only", False),
         )
     except ClubServiceError as exc:
         return _service_error_response(exc)
@@ -147,7 +149,7 @@ def update_club(club_id):
     payload = request.get_json(silent=True) or {}
     fields = {
         key: payload[key]
-        for key in ("name", "city", "phone", "email", "table_count")
+        for key in ("name", "city", "phone", "email", "table_count", "cashback_percent", "cashback_vip_only")
         if key in payload
     }
     try:
@@ -353,6 +355,31 @@ def delete_suggestion(suggestion_id):
 
 
 # --- Отчёты (Block #3, только super_admin) ---
+
+# ДОБАВЛЕНО (2026-10-09, запрос пользователя): кешбек от клубов супер-админу —
+# по каждому клубу процент, долг и начисления за вечера; отметка "Выплачено".
+@bp.get("/cashback")
+@require_admin
+def cashback_overview():
+    if not g.admin.is_super_admin:
+        return api_error(403, "FORBIDDEN", "Кешбек видит только супер-админ")
+    from services import cashback_service
+    return api_ok(cashback_service.overview())
+
+
+@bp.post("/cashback/<int:cashback_id>/paid")
+@require_admin
+def cashback_set_paid(cashback_id):
+    if not g.admin.is_super_admin:
+        return api_error(403, "FORBIDDEN", "Отмечать выплаты может только супер-админ")
+    from services import cashback_service
+    paid = (request.get_json(silent=True) or {}).get("paid", True)
+    try:
+        row = cashback_service.set_paid(cashback_id, bool(paid))
+    except cashback_service.CashbackError as exc:
+        return api_error(exc.status, exc.code, exc.message)
+    return api_ok(row.to_dict())
+
 
 # ДОБАВЛЕНО (2026-10-09): админ очищает свои отчёты за день/неделю/месяц/год —
 # только у себя; данные клубов, чеки и панели KJ/гостей не меняются.
