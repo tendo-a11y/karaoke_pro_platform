@@ -1429,6 +1429,23 @@ def club_stats(club_id):
     return api_ok(club_stats_service.get_stats(club_id, date_from, date_to, tz_offset))
 
 
+# ДОБАВЛЕНО (2026-10-09): очистка статистики клуба за день/неделю/месяц/год —
+# только в панели KJ (чеки, история гостей и отчёты админки не меняются).
+@bp.post("/stats/<int:club_id>/clear")
+@require_kj
+def clear_club_stats(club_id):
+    denied = _ensure_own_club(club_id)
+    if denied:
+        return denied
+    from services import stats_clear_service
+    period = (request.get_json(silent=True) or {}).get("period")
+    try:
+        stats_clear_service.clear("kj", club_id, period)
+    except ValueError:
+        return api_error(400, "VALIDATION_ERROR", "period: day, week, month или year")
+    return api_ok({"cleared": True})
+
+
 # ДОБАВЛЕНО (2026-10-04, запрос пользователя "бот и приложение — два
 # отдельных инструмента, что в боте то и в приложении, во вкладку VIP надо
 # добавить то, что есть в боте") — перенос handlers/kj.py::
