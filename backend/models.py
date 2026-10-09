@@ -131,6 +131,13 @@ class Club(db.Model):
     # доверенного процесса (не для людей), генерируется через manage.py.
     bridge_token = db.Column(db.String(64), nullable=True, unique=True)
 
+    # ДОБАВЛЕНО (2026-10-09, запрос пользователя): "Кешбек от клуба" — процент
+    # с выручки каждого вечера, который клуб должен супер-админу. Вводит и
+    # меняет только супер-админ. cashback_vip_only — считать только с VIP или
+    # со всей выручки. Намеренно НЕ в to_dict() (его видят и гости/KJ).
+    cashback_percent = db.Column(db.Numeric(5, 2), nullable=True)
+    cashback_vip_only = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
+
     kj_operators = db.relationship("KJOperator", back_populates="club")
     admin_users = db.relationship("AdminUser", back_populates="club")
     orders = db.relationship("Order", back_populates="club")
@@ -1354,3 +1361,45 @@ class StatsClear(db.Model):
 
     __table_args__ = (db.Index("ix_stats_clears_scope_owner", "scope", "owner"),)
 
+
+class ClubCashback(db.Model):
+    """
+    ДОБАВЛЕНО (2026-10-09, запрос пользователя): начисление кешбека клуба
+    супер-админу за один вечер. Запись создаётся в момент конца вечера —
+    автозакрытие или "Закрыть все столы" (table_close_service.close_all_tables).
+    Деньги никуда не переводятся: это учёт "к выплате"; когда клуб заплатил,
+    супер-админ ставит отметку paid_at.
+    """
+    __tablename__ = "club_cashbacks"
+
+    id = db.Column(db.Integer, primary_key=True)
+    club_id = db.Column(db.Integer, db.ForeignKey("clubs.club_id"), nullable=False, index=True)
+    start_at = db.Column(db.DateTime(timezone=True), nullable=False)
+    end_at = db.Column(db.DateTime(timezone=True), nullable=False)
+    revenue_total = db.Column(db.Numeric(10, 2), nullable=False, default=0)
+    revenue_vip = db.Column(db.Numeric(10, 2), nullable=False, default=0)
+    revenue_regular = db.Column(db.Numeric(10, 2), nullable=False, default=0)
+    guests_vip = db.Column(db.Integer, nullable=False, default=0)
+    guests_regular = db.Column(db.Integer, nullable=False, default=0)
+    percent = db.Column(db.Numeric(5, 2), nullable=False, default=0)
+    vip_only = db.Column(db.Boolean, nullable=False, default=False)
+    amount = db.Column(db.Numeric(10, 2), nullable=False, default=0)
+    paid_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    created_at = db.Column(db.DateTime(timezone=True), default=utcnow, nullable=False)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "club_id": self.club_id,
+            "start_at": self.start_at.isoformat() if self.start_at else None,
+            "end_at": self.end_at.isoformat() if self.end_at else None,
+            "revenue_total": float(self.revenue_total or 0),
+            "revenue_vip": float(self.revenue_vip or 0),
+            "revenue_regular": float(self.revenue_regular or 0),
+            "guests_vip": self.guests_vip,
+            "guests_regular": self.guests_regular,
+            "percent": float(self.percent or 0),
+            "vip_only": self.vip_only,
+            "amount": float(self.amount or 0),
+            "paid_at": self.paid_at.isoformat() if self.paid_at else None,
+        }
