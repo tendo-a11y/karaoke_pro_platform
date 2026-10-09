@@ -17,6 +17,7 @@
 from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta, timezone
 
+from services.category_service import not_bonus_filter
 from models import (
     STATUS_COMPLETED,
     STATUS_ERROR,
@@ -85,7 +86,7 @@ def _summary(orders, services) -> dict:
 def _orders_between(club_id: int, start, end):
     return (
         Order.query
-        .filter(Order.club_id == club_id, Order.created_at >= start, Order.created_at < end)
+        .filter(Order.club_id == club_id, Order.created_at >= start, Order.created_at < end, not_bonus_filter())
         .all()
     )
 
