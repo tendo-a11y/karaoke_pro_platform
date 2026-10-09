@@ -354,6 +354,20 @@ def delete_suggestion(suggestion_id):
 
 # --- Отчёты (Block #3, только super_admin) ---
 
+# ДОБАВЛЕНО (2026-10-09): админ очищает свои отчёты за день/неделю/месяц/год —
+# только у себя; данные клубов, чеки и панели KJ/гостей не меняются.
+@bp.post("/reports/clear")
+@require_admin
+def clear_reports():
+    from services import stats_clear_service
+    period = (request.get_json(silent=True) or {}).get("period")
+    try:
+        stats_clear_service.clear("admin", g.admin.id, period)
+    except ValueError:
+        return api_error(400, "VALIDATION_ERROR", "period: day, week, month или year")
+    return api_ok({"cleared": True})
+
+
 @bp.get("/reports/overview")
 @require_admin
 def reports_overview():
