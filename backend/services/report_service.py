@@ -24,6 +24,7 @@ from extensions import db
 from models import Club, Order, STATUS_COMPLETED
 from services.category_service import not_bonus_filter
 from services.club_service import _revenue_since
+from services.stats_clear_service import exclude as _cleared_exclude
 
 
 class ReportServiceError(Exception):
@@ -34,8 +35,9 @@ class ReportServiceError(Exception):
         super().__init__(message)
 
 
-def _orders_completed_since(club_id: int, since: datetime) -> int:
+def _orders_completed_since(club_id: int, since: datetime, extra=None) -> int:
     return Order.query.filter(
+        extra if extra is not None else db.true(),
         Order.club_id == club_id,
         Order.status == STATUS_COMPLETED,
         Order.completed_at >= since,
@@ -53,6 +55,10 @@ def get_overview(admin) -> dict:
     since_month = now - timedelta(days=30)
 
     clubs = Club.query.all()
+    # Очищенные этим админом отрезки (2026-10-09) в его отчётах не считаются.
+    from models import Transaction
+    tx_extra = _cleared_exclude(Transaction.created_at, "admin", admin.id)
+    order_extra = _cleared_exclude(Order.completed_at, "admin", admin.id)
     rows = []
     for club in clubs:
         rows.append({
@@ -60,10 +66,10 @@ def get_overview(admin) -> dict:
             "name": club.name,
             "city": club.city,
             "is_active": club.is_active,
-            "revenue_today": _revenue_since(club.club_id, since_today),
-            "revenue_week": _revenue_since(club.club_id, since_week),
-            "revenue_month": _revenue_since(club.club_id, since_month),
-            "orders_completed_today": _orders_completed_since(club.club_id, since_today),
+            "revenue_today": _revenue_since(club.club_id, since_today, tx_extra),
+            "revenue_week": _revenue_since(club.club_id, since_week, tx_extra),
+            "revenue_month": _revenue_since(club.club_id, since_month, tx_extra),
+            "orders_completed_today": _orders_completed_since(club.club_id, since_today, order_extra),
         })
 
     rows.sort(key=lambda r: r["revenue_month"], reverse=True)
