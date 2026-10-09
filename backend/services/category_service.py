@@ -66,6 +66,17 @@ DEFAULT_CATEGORIES = [
 ]
 
 
+def not_bonus_filter():
+    """
+    ДОБАВЛЕНО (2026-10-09, запрос пользователя: "категория Bonus от KJ не
+    должна отображаться нигде в отчётах и чеках"). Условие для запросов
+    Order: заказ НЕ в категории "ставит только KJ" (Service.kj_only, это
+    BONUS). Заказы без категории остаются.
+    """
+    bonus_ids = db.select(Service.id).where(Service.kj_only.is_(True))
+    return db.or_(Order.service_id.is_(None), Order.service_id.not_in(bonus_ids))
+
+
 class CategoryServiceError(Exception):
     def __init__(self, code: str, message: str):
         self.code = code
