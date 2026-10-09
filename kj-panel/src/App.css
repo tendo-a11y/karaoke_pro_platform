@@ -988,3 +988,7 @@ img { max-width: 100%; }
 .table-settings-actions { display: flex; gap: 8px; flex-basis: 100%; }
 .table-settings-actions .btn { flex: 0 0 auto; padding: 8px 16px; width: auto; }
 .table-settings-actions .btn:not(.btn--accent) { background: var(--panel-alt); color: var(--text); border: 1px solid var(--border); }
+
+.clear-stats {
+  margin: 0.25rem 0 0.75rem;
+}
