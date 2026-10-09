@@ -160,6 +160,8 @@ export const api = {
   markAdminMessagesRead: (token, clubId) =>
     request(`/api/kj/admin-messages/${clubId}/read`, { method: "PUT", token }),
   // ДОБАВЛЕНО (2026-10-09): предложение по улучшению приложения для администрации.
+  clearClubStats: (token, clubId, period) =>
+    request(`/api/kj/stats/${clubId}/clear`, { method: "POST", token, body: { period } }),
   sendSuggestion: (token, clubId, messageText) =>
     request(`/api/kj/suggestions/${clubId}`, { method: "POST", token, body: { message_text: messageText } }),
   // ДОБАВЛЕНО (2026-09-20, решение пользователя "Нужно одобрение KJ (запрос
