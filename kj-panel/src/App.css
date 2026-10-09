@@ -983,3 +983,8 @@ img { max-width: 100%; }
 .suggestion-panel__form .btn { align-self: flex-start; width: auto; }
 .suggestion-panel__sent { color: var(--ok, #2fbf71); font-weight: 600; margin: 0 0 8px; }
 .table-slot__youtube { font-size: 12px; color: #ff4e45; font-weight: 600; margin-top: 2px; }
+/* Автозакрытие — в одном стиле с "Настройками столов" (2026-10-09). */
+.table-settings-form input[type="time"] { color-scheme: dark; }
+.table-settings-actions { display: flex; gap: 8px; flex-basis: 100%; }
+.table-settings-actions .btn { flex: 0 0 auto; padding: 8px 16px; width: auto; }
+.table-settings-actions .btn:not(.btn--accent) { background: var(--panel-alt); color: var(--text); border: 1px solid var(--border); }
