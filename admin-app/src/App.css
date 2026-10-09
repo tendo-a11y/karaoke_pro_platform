@@ -313,3 +313,13 @@ img { max-width: 100%; height: auto; }
 .suggestion-row { border: 1px solid rgba(255, 176, 32, 0.45); border-radius: 10px; padding: 10px 12px; }
 .suggestion-row__meta { font-size: 12px; opacity: 0.7; margin-bottom: 4px; }
 .suggestion-row__text { white-space: pre-wrap; margin-bottom: 6px; }
+
+.clear-stats {
+  margin: 0.25rem 0 0.75rem;
+}
+
+.clear-stats__periods {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
