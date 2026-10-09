@@ -193,6 +193,12 @@ const D = {
     "🔗 Paste a YouTube, Apple Music or Spotify link",
     "🔗 Вставте посилання на YouTube, Apple Music або Spotify",
   ],
+  "🔗 Вставьте ссылку на песню с YouTube": ["🔗 Lipiți linkul melodiei de pe YouTube", "🔗 Paste the song's YouTube link", "🔗 Вставте посилання на пісню з YouTube"],
+  "Нужна ссылка с YouTube — откройте песню в YouTube, нажмите «Поделиться» и вставьте ссылку сюда.": [
+    "Este nevoie de un link de pe YouTube — deschideți melodia în YouTube, apăsați „Distribuie” și lipiți linkul aici.",
+    "A YouTube link is needed — open the song in YouTube, tap “Share” and paste the link here.",
+    "Потрібне посилання з YouTube — відкрийте пісню в YouTube, натисніть «Поділитися» і вставте посилання сюди.",
+  ],
   "🤖 Опишите песню своими словами": ["🤖 Descrieți melodia cu propriile cuvinte", "🤖 Describe the song in your own words", "🤖 Опишіть пісню своїми словами"],
   "По этой ссылке не удалось определить песню — проверьте, что это ссылка на конкретный трек.": [
     "Nu am putut identifica melodia după acest link — verificați că este linkul unei piese anume.",
