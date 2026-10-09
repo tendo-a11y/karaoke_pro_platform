@@ -1290,6 +1290,13 @@ function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSu
   async function handleSearch(event) {
     event.preventDefault();
     if (!text.trim()) return;
+    // Режим "Ссылка": принимаем только ссылку с YouTube (запрос пользователя 2026-10-09).
+    if (mode === "link" && !/^https?:\/\/(www\.|m\.|music\.)?(youtube\.com|youtu\.be)\//i.test(text.trim())) {
+      setError("Нужна ссылка с YouTube — откройте песню в YouTube, нажмите «Поделиться» и вставьте ссылку сюда.");
+      setResults([]);
+      setSearched(false);
+      return;
+    }
     setSearching(true);
     setError(null);
     setSearched(false);
@@ -1309,7 +1316,7 @@ function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSu
   }
 
   const placeholder = mode === "link"
-    ? "🔗 Вставьте ссылку на YouTube, Apple Music или Spotify"
+    ? "🔗 Вставьте ссылку на песню с YouTube"
     : "🤖 Опишите песню своими словами";
   const emptyHint = mode === "link"
     ? "По этой ссылке не удалось определить песню — проверьте, что это ссылка на конкретный трек."
@@ -1383,7 +1390,7 @@ function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSu
                     type="button"
                     className="link-btn"
                     onClick={() => {
-                      onPick(s);
+                      onPick(mode === "link" ? { ...s, link: text.trim() } : s);
                       setResults([]);
                       setSearched(false);
                       if (screenshotInputRef.current) screenshotInputRef.current.value = "";
@@ -1397,7 +1404,7 @@ function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSu
                       type="button"
                       className="song-confirm song-confirm--yes step-blink"
                       onClick={() => {
-                        onPick(s);
+                        onPick(mode === "link" ? { ...s, link: text.trim() } : s);
                         setResults([]);
                         setSearched(false);
                         setSuggestOther(false);
@@ -1452,7 +1459,7 @@ function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSu
                     type="button"
                     className="link-btn"
                     onClick={() => {
-                      onPick(s);
+                      onPick(mode === "link" ? { ...s, link: text.trim() } : s);
                       setText("");
                       setResults([]);
                       setSearched(false);
@@ -1466,7 +1473,7 @@ function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSu
                       type="button"
                       className="song-confirm song-confirm--yes step-blink"
                       onClick={() => {
-                        onPick(s);
+                        onPick(mode === "link" ? { ...s, link: text.trim() } : s);
                         setResults([]);
                         setSearched(false);
                         setSuggestOther(false);
@@ -2850,6 +2857,8 @@ export default function App() {
   const [turnToast, setTurnToast] = useState(null);
   const [songListsTab, setSongListsTab] = useState(null);
   const [titleHint, setTitleHint] = useState(false);
+  // Ссылка, по которой гость нашёл песню ("🔗 Ссылка") — уходит с заказом.
+  const [songUrl, setSongUrl] = useState(null);
   const songListsOpen = songListsTab != null;
   const turnToastShownRef = useRef(new Set());
   useEffect(() => {
@@ -3062,9 +3071,11 @@ export default function App() {
         token, songTitle.trim(), artist.trim() || null,
         serviceId ? Number(serviceId) : null,
         toneOn && tone != null ? tone : null,
+        songUrl,
       );
       setSongTitle("");
       setArtist("");
+      setSongUrl(null);
       setServiceId("");
       setToneOn(false);
       setTone(null);
@@ -3375,6 +3386,7 @@ export default function App() {
           onPick={(song) => {
             setSongTitle(song.title);
             setArtist(song.artist || "");
+            setSongUrl(song.link || null);
           }}
           extra={orderExtra}
           onExtra={(key) => {
@@ -3592,6 +3604,7 @@ export default function App() {
           onPick={(song) => {
             setSongTitle(song.song_title);
             setArtist(song.artist || "");
+            setSongUrl(null);
             setOrderExtra(null);
             const panel = document.querySelector(".order-form-panel");
             if (panel) panel.scrollIntoView({ behavior: "smooth", block: "start" });
