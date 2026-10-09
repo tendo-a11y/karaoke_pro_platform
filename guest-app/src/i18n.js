@@ -490,6 +490,7 @@ const D = {
   "Нет доступа к этому сообщению": ["Nu aveți acces la acest mesaj", "No access to this message", "Немає доступу до цього повідомлення"],
   "Фото слишком большое": ["Fotografia este prea mare", "The photo is too large", "Фото завелике"],
   "У вас нет стола — групповой стол недоступен": ["Nu aveți masă — masa de grup nu este disponibilă", "You have no table — group table is unavailable", "У вас немає столу — груповий стіл недоступний"],
+  "Распознавание скриншота отключено": ["Recunoașterea capturii este dezactivată", "Screenshot recognition is turned off", "Розпізнавання скриншота вимкнено"],
   "Такой категории нет": ["Nu există o astfel de categorie", "No such category", "Такої категорії немає"],
   "table_no обязателен — сначала выберите стол": ["Alegeți mai întâi masa", "Choose a table first", "Спочатку оберіть стіл"],
   "table_no должен быть положительным числом": ["Numărul mesei trebuie să fie un număr pozitiv", "Table number must be a positive number", "Номер столу має бути додатним числом"],
