@@ -117,6 +117,59 @@ const POLL_VIP_TRANSACTIONS_MS = 8000;
 // handlers/vip.py::vip_order_history (days_map = {"today":1,"week":7,
 // "month":30}, только VIP). Здесь тот же набор периодов, но доступно всем
 // ролям.
+// ДОБАВЛЕНО (2026-10-09, запрос пользователя): очистка статистики за
+// день/неделю/месяц/год с двойным подтверждением. Очищается только в этой
+// панели — в других (и в чеках/балансах) всё остаётся.
+const CLEAR_PERIODS = [
+  { key: "day", label: "За день" },
+  { key: "week", label: "За неделю" },
+  { key: "month", label: "За месяц" },
+  { key: "year", label: "За год" },
+];
+
+function ClearStatsControl({ onClear }) {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+
+  async function choose(p) {
+    if (!window.confirm(`Очистить статистику: ${p.label.toLowerCase()}? Она пропадёт только здесь.`)) return;
+    if (!window.confirm("Точно очистить? Вернуть будет нельзя.")) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await onClear(p.key);
+      setOpen(false);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="clear-stats">
+      {!open ? (
+        <button type="button" className="link-btn clear-stats__toggle" onClick={() => setOpen(true)}>
+          🗑 Очистить
+        </button>
+      ) : (
+        <div className="order-history-periods clear-stats__row">
+          {CLEAR_PERIODS.map((p) => (
+            <button key={p.key} type="button" className="link-btn" disabled={busy} onClick={() => choose(p)}>
+              {p.label}
+            </button>
+          ))}
+          <button type="button" className="link-btn" disabled={busy} onClick={() => setOpen(false)}>
+            Отмена
+          </button>
+        </div>
+      )}
+      {error && <div className="banner banner--error">{error}</div>}
+    </div>
+  );
+}
+
 const ORDER_HISTORY_PERIODS = [
   { label: "Сегодня", days: 1 },
   { label: "Неделя", days: 7 },
@@ -909,6 +962,12 @@ function VipHistoryPanel({ token, embedded = false }) {
       </h2>
       {open && (
         <>
+          <ClearStatsControl
+            onClear={async (period) => {
+              await api.clearMyHistory(token, "finance", period);
+              await refresh();
+            }}
+          />
           <div className="order-history-periods">
             {[
               { label: "Сегодня", days: 1 },
@@ -3407,6 +3466,14 @@ export default function App() {
         {orderExtra === "orders" || orderExtra === "history" ? (
           <div className="profile-finance">
           <h2>{ordersTab === "history" ? "История" : "Мои заказы"}</h2>
+        {ordersTab === "history" && (
+          <ClearStatsControl
+            onClear={async (period) => {
+              await api.clearMyHistory(session.token, "history", period);
+              await refreshOrders();
+            }}
+          />
+        )}
         {ordersTab === "history" && (
           <div className="order-history-periods">
             {ORDER_HISTORY_PERIODS.map((p) => (
