@@ -304,3 +304,12 @@ img { max-width: 100%; height: auto; }
   .qr-card { width: auto; flex: 1 1 140px; }
   .vip-stat-row { gap: 10px; }
 }
+
+/* Галочка "Отправить всем KJ" и предложения KJ (2026-10-09). */
+.kj-row__chat-all { display: flex; align-items: center; gap: 6px; margin: 6px 0; font-size: 14px; cursor: pointer; }
+.kj-row__chat-all input { width: auto; margin: 0; }
+.kj-row__chat-sent { color: #2fbf71; font-weight: 600; margin: 6px 0; }
+.suggestion-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.suggestion-row { border: 1px solid rgba(255, 176, 32, 0.45); border-radius: 10px; padding: 10px 12px; }
+.suggestion-row__meta { font-size: 12px; opacity: 0.7; margin-bottom: 4px; }
+.suggestion-row__text { white-space: pre-wrap; margin-bottom: 6px; }
