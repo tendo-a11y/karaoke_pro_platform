@@ -911,7 +911,8 @@ function TableCloseRequestsPanel({ token, clubId, socket }) {
 // Экран пока СКРЫТ — кнопка "Статистика" видна только если панель открыта
 // по адресу с ?stats=1 (решение пользователя: "подготовить, проверить, но
 // не включать, пока всё не закончим").
-const STATS_ENABLED = new URLSearchParams(window.location.search).has("stats");
+// Статистика включена для всех KJ (запрос пользователя 2026-10-09: "показываем").
+const STATS_ENABLED = true;
 
 function statsDay(offsetDays) {
   // "Клубный день" начинается в 08:00 — до утра считается вчерашний вечер.
@@ -985,6 +986,59 @@ function StatsBars({ rows }) {
   );
 }
 
+// ДОБАВЛЕНО (2026-10-09, запрос пользователя): очистка статистики за
+// день/неделю/месяц/год с двойным подтверждением. Очищается только в этой
+// панели — в других (и в чеках/балансах) всё остаётся.
+const CLEAR_PERIODS = [
+  { key: "day", label: "За день" },
+  { key: "week", label: "За неделю" },
+  { key: "month", label: "За месяц" },
+  { key: "year", label: "За год" },
+];
+
+function ClearStatsControl({ onClear }) {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+
+  async function choose(p) {
+    if (!window.confirm(`Очистить статистику: ${p.label.toLowerCase()}? Она пропадёт только здесь.`)) return;
+    if (!window.confirm("Точно очистить? Вернуть будет нельзя.")) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await onClear(p.key);
+      setOpen(false);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="clear-stats">
+      {!open ? (
+        <button type="button" className="btn-link clear-stats__toggle" onClick={() => setOpen(true)}>
+          🗑 Очистить
+        </button>
+      ) : (
+        <div className="guest-type-filters clear-stats__row">
+          {CLEAR_PERIODS.map((p) => (
+            <button key={p.key} type="button" className="btn-link" disabled={busy} onClick={() => choose(p)}>
+              {p.label}
+            </button>
+          ))}
+          <button type="button" className="btn-link" disabled={busy} onClick={() => setOpen(false)}>
+            Отмена
+          </button>
+        </div>
+      )}
+      {error && <div className="banner banner--error">{error}</div>}
+    </div>
+  );
+}
+
 function StatsPanel({ token, clubId }) {
   const [period, setPeriod] = useState("today");
   const [from, setFrom] = useState(statsDay(0));
@@ -992,6 +1046,7 @@ function StatsPanel({ token, clubId }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -1011,7 +1066,7 @@ function StatsPanel({ token, clubId }) {
     return () => {
       cancelled = true;
     };
-  }, [token, clubId, from, to]);
+  }, [token, clubId, from, to, reloadKey]);
 
   function choosePeriod(p) {
     setPeriod(p.key);
@@ -1026,6 +1081,12 @@ function StatsPanel({ token, clubId }) {
     <main className="app-main stats-panel">
       <section>
         <h2>Статистика клуба</h2>
+        <ClearStatsControl
+          onClear={async (period) => {
+            await api.clearClubStats(token, clubId, period);
+            setReloadKey((k) => k + 1);
+          }}
+        />
         <div className="guest-type-filters">
           {STATS_PERIODS.map((p) => (
             <button
