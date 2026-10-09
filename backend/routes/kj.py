@@ -6,7 +6,7 @@ from flask import Blueprint, current_app, g, jsonify, request
 from auth import issue_kj_google_token, require_kj
 from errors import api_error, api_ok
 from extensions import db
-from models import AdminKjMessage, ChatMessage, Club, GuestAccount, KJOperator, Order, STATUS_PLAYING, TableGroupMember, VipClient, VipRequest
+from models import AdminKjMessage, ChatMessage, Club, GuestAccount, KJOperator, KjSuggestion, Order, STATUS_PLAYING, TableGroupMember, VipClient, VipRequest
 from services import category_service, guest_account_service, guest_directory_service, guest_status_service, song_service, table_close_service, table_group_service, vip_service, vip_topup_request_service
 from services.guest_directory_service import GUEST_TYPES, GuestDirectoryError
 from services.category_service import CategoryServiceError
@@ -578,6 +578,36 @@ def clear_admin_messages(club_id):
     AdminKjMessage.query.filter_by(club_id=club_id).delete()
     db.session.commit()
     return api_ok({"cleared": True})
+
+
+# ДОБАВЛЕНО (2026-10-09, запрос пользователя): предложение KJ по улучшению
+# приложения для администрации. Ответа нет — KJ сразу получает автоответ
+# в "Сообщениях от администрации".
+SUGGESTION_AUTO_REPLY = "Спасибо! Ваше предложение принято и будет учтено при ближайшем обновлении."
+
+
+@bp.post("/suggestions/<int:club_id>")
+@require_kj
+def send_suggestion(club_id):
+    denied = _ensure_own_club(club_id)
+    if denied:
+        return denied
+    payload = request.get_json(silent=True) or {}
+    message_text = payload.get("message_text")
+    if not message_text or not isinstance(message_text, str) or not message_text.strip():
+        return api_error(400, "VALIDATION_ERROR", "Напишите предложение")
+    kj = getattr(g, "kj", None)
+    suggestion = KjSuggestion(
+        club_id=club_id,
+        kj_name=(kj.display_name if kj is not None else None),
+        message_text=message_text.strip(),
+    )
+    reply = AdminKjMessage(club_id=club_id, from_admin=True, message_text=SUGGESTION_AUTO_REPLY)
+    db.session.add(suggestion)
+    db.session.add(reply)
+    db.session.commit()
+    emit_admin_message(reply)
+    return api_ok({"suggestion": suggestion.to_dict(), "reply": reply.to_dict()}, status_code=201)
 
 
 @bp.get("/vip-requests/<int:club_id>")
