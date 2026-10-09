@@ -43,7 +43,7 @@ class ClubServiceError(Exception):
         super().__init__(message)
 
 
-def _revenue_since(club_id: int, since: datetime) -> Decimal:
+def _revenue_since(club_id: int, since: datetime, extra=None) -> Decimal:
     """
     "Выручка" клуба = сумма Transaction.type=order_payment за окно — то есть
     реально списанные с гостей деньги за услуги (см. billing_service.py::
@@ -57,6 +57,8 @@ def _revenue_since(club_id: int, since: datetime) -> Decimal:
             Transaction.club_id == club_id,
             Transaction.type == TX_TYPE_ORDER_PAYMENT,
             Transaction.created_at >= since,
+            # extra — дополнительное условие (очистка отчётов админа, 2026-10-09).
+            extra if extra is not None else db.true(),
         )
         .scalar()
     )
