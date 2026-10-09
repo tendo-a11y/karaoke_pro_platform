@@ -110,6 +110,10 @@ export const api = {
   deleteSuggestion: (token, suggestionId) =>
     request(`/api/admin/suggestions/${suggestionId}`, { method: "DELETE", token }),
   getReportsOverview: (token) => request("/api/admin/reports/overview", { token }),
+  // Кешбек от клубов супер-админу (2026-10-09).
+  getCashback: (token) => request("/api/admin/cashback", { token }),
+  setCashbackPaid: (token, id, paid) =>
+    request(`/api/admin/cashback/${id}/paid`, { method: "POST", token, body: { paid } }),
   clearReports: (token, period) => request("/api/admin/reports/clear", { method: "POST", token, body: { period } }),
   getSystemOverview: (token) => request("/api/admin/system/overview", { token }),
   getSystemLogs: (token) => request("/api/admin/system/logs", { token }),
