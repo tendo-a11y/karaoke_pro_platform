@@ -517,6 +517,11 @@ const P = [
   ["Принимает на стол $1.", ["La masă primește: $1.", "Admitted by: $1.", "Приймає за стіл: $1."]],
   ["🙋 Присоединиться к столу", ["🙋 Alăturați-vă mesei", "🙋 Join the table", "🙋 Приєднатися до столу"]],
   ["🙋 Присоединиться к столу %1", ["🙋 Alăturați-vă mesei $1", "🙋 Join table $1", "🙋 Приєднатися до столу $1"]],
+  ["Вы «$1» — админ стола. Только вы разрешаете, кому сесть за стол. Чужие сесть не могут.", [
+    "Dvs. „$1” sunteți admin masă. Doar dvs. permiteți cine se așază la masă. Străinii nu se pot așeza.",
+    "You (“$1”) are the table admin. Only you allow who sits at the table. Strangers can't join.",
+    "Ви «$1» — адмін столу. Тільки ви дозволяєте, хто сяде за стіл. Чужі сісти не можуть.",
+  ]],
   ["Вы · $1", ["Dvs. · $1", "You · $1", "Ви · $1"]],
   ["Гость #%1", ["Oaspete #$1", "Guest #$1", "Гість #$1"]],
   ["Гость %1", ["Oaspete $1", "Guest $1", "Гість $1"]],
