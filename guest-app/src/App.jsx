@@ -1319,7 +1319,9 @@ function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSu
     <div className="ai-search">
       <div className="finder-modes">
         <div className="finder-group">
-        {FINDER_MODES.map((m) => (
+        {/* Распознавание скриншота отключено (2026-10-09): кнопка "Скриншот"
+        есть только там, где она отправляет картинку ведущему. */}
+        {FINDER_MODES.filter((m) => m.key !== "screenshot" || onScreenshotHelp).map((m) => (
           <button
             key={m.key}
             type="button"
