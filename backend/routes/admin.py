@@ -2,7 +2,7 @@ from flask import Blueprint, Response, current_app, g, request
 
 from auth import issue_admin_google_token, require_admin
 from errors import api_error, api_ok
-from models import AdminUser, Club, AdminKjMessage
+from models import AdminUser, Club, AdminKjMessage, KjSuggestion
 from extensions import db
 from services import admin_admin_service, club_service, kj_admin_service, report_service, system_admin_service
 from services.admin_admin_service import AdminAdminServiceError
@@ -296,6 +296,60 @@ def send_kj_message(club_id):
     db.session.add(message)
     db.session.commit()
     return api_ok(message.to_dict(), status_code=201)
+
+
+# ДОБАВЛЕНО (2026-10-09, запрос пользователя): одно сообщение сразу всем KJ —
+# копия уходит в переписку каждого клуба (супер-админ — все активные клубы,
+# обычный админ — только свой).
+@bp.post("/kj-messages/broadcast")
+@require_admin
+def broadcast_kj_message():
+    payload = request.get_json(silent=True) or {}
+    message_text = payload.get("message_text")
+    if not message_text or not isinstance(message_text, str) or not message_text.strip():
+        return api_error(400, "VALIDATION_ERROR", "message_text обязателен")
+    admin = g.admin
+    if admin.is_super_admin:
+        clubs = Club.query.filter_by(is_active=True).all()
+    else:
+        club = db.session.get(Club, admin.club_id)
+        clubs = [club] if club is not None else []
+    for club in clubs:
+        db.session.add(AdminKjMessage(club_id=club.club_id, from_admin=True, message_text=message_text.strip()))
+    db.session.commit()
+    return api_ok({"sent_to_clubs": len(clubs)}, status_code=201)
+
+
+# ДОБАВЛЕНО (2026-10-09): предложения KJ по улучшению приложения.
+@bp.get("/suggestions")
+@require_admin
+def list_suggestions():
+    admin = g.admin
+    query = KjSuggestion.query
+    if not admin.is_super_admin:
+        query = query.filter_by(club_id=admin.club_id)
+    items = query.order_by(KjSuggestion.created_at.desc()).all()
+    names = {c.club_id: c.name for c in Club.query.all()}
+    result = []
+    for item in items:
+        data = item.to_dict()
+        data["club_name"] = names.get(item.club_id)
+        result.append(data)
+    return api_ok(result)
+
+
+@bp.delete("/suggestions/<int:suggestion_id>")
+@require_admin
+def delete_suggestion(suggestion_id):
+    admin = g.admin
+    item = db.session.get(KjSuggestion, suggestion_id)
+    if item is None:
+        return api_error(404, "NOT_FOUND", "Предложение не найдено")
+    if not admin.is_super_admin and item.club_id != admin.club_id:
+        return api_error(403, "FORBIDDEN", "Нет доступа к этому клубу")
+    db.session.delete(item)
+    db.session.commit()
+    return api_ok({"deleted": True})
 
 
 # --- Отчёты (Block #3, только super_admin) ---
