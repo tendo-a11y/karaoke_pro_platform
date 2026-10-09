@@ -330,6 +330,9 @@ class Order(db.Model):
     # ДОБАВЛЕНО (2026-10, запрос пользователя): тональность, которую гость
     # выбрал при заказе (от -6 до +6, без нуля). NULL — тон не выбран.
     tone = db.Column(db.Integer, nullable=True)
+    # ДОБАВЛЕНО (2026-10-09, запрос пользователя): ссылка YouTube, по которой
+    # гость нашёл песню ("🔗 Ссылка"). KJ после "Принять" сразу её открывает.
+    song_url = db.Column(db.String(500), nullable=True)
     confirmed_by = db.Column(db.Integer, db.ForeignKey("kj_operators.id"), nullable=True)
 
     # automatic (по VirtualDJ History) | manual (KJ нажал вручную, fallback) — новое ТЗ §14
@@ -370,6 +373,7 @@ class Order(db.Model):
             "error_message": self.error_message,
             "guest_song_text": self.guest_song_text,
             "tone": self.tone,
+            "song_url": self.song_url,
             "completion_source": self.completion_source,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "confirmed_at": self.confirmed_at.isoformat() if self.confirmed_at else None,
@@ -1303,4 +1307,29 @@ class SongListHidden(db.Model):
             "song_title": self.song_title,
             "artist": self.artist,
             "order_id": self.order_id,
+        }
+
+
+class KjSuggestion(db.Model):
+    """
+    ДОБАВЛЕНО (2026-10-09, запрос пользователя): предложения KJ по улучшению
+    приложения для администрации. Отдельно от переписки (AdminKjMessage):
+    администрация читает их в своём разделе, ответа нет — KJ сразу получает
+    автоответ в "Сообщениях от администрации".
+    """
+    __tablename__ = "kj_suggestions"
+
+    id = db.Column(db.Integer, primary_key=True)
+    club_id = db.Column(db.Integer, db.ForeignKey("clubs.club_id"), nullable=False, index=True)
+    kj_name = db.Column(db.String(255), nullable=True)
+    message_text = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime(timezone=True), default=utcnow, nullable=False)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "club_id": self.club_id,
+            "kj_name": self.kj_name,
+            "message_text": self.message_text,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
         }
