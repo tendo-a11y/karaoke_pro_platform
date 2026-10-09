@@ -159,6 +159,9 @@ export const api = {
     request(`/api/kj/admin-messages/${clubId}`, { method: "DELETE", token }),
   markAdminMessagesRead: (token, clubId) =>
     request(`/api/kj/admin-messages/${clubId}/read`, { method: "PUT", token }),
+  // ДОБАВЛЕНО (2026-10-09): предложение по улучшению приложения для администрации.
+  sendSuggestion: (token, clubId, messageText) =>
+    request(`/api/kj/suggestions/${clubId}`, { method: "POST", token, body: { message_text: messageText } }),
   // ДОБАВЛЕНО (2026-09-20, решение пользователя "Нужно одобрение KJ (запрос
   // → Одобрить/Отклонить)") — заявки гостей на отмену/замену уже принятого
   // заказа, см. backend/routes/kj.py::list_order_change_requests и
