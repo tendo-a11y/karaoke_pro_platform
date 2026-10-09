@@ -18,6 +18,7 @@ from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta, timezone
 
 from services.category_service import not_bonus_filter
+from services.stats_clear_service import exclude as _cleared_exclude
 from models import (
     STATUS_COMPLETED,
     STATUS_ERROR,
@@ -86,7 +87,11 @@ def _summary(orders, services) -> dict:
 def _orders_between(club_id: int, start, end):
     return (
         Order.query
-        .filter(Order.club_id == club_id, Order.created_at >= start, Order.created_at < end, not_bonus_filter())
+        .filter(
+            Order.club_id == club_id, Order.created_at >= start, Order.created_at < end, not_bonus_filter(),
+            # Очищенные KJ отрезки (2026-10-09) в статистике не показываются.
+            _cleared_exclude(Order.created_at, "kj", club_id),
+        )
         .all()
     )
 
@@ -209,12 +214,18 @@ def get_stats(club_id: int, date_from: date, date_to: date, tz_offset_minutes: i
     # --- VIP ---
     transactions = (
         Transaction.query
-        .filter(Transaction.club_id == club_id, Transaction.created_at >= start, Transaction.created_at < end)
+        .filter(
+            Transaction.club_id == club_id, Transaction.created_at >= start, Transaction.created_at < end,
+            _cleared_exclude(Transaction.created_at, "kj", club_id),
+        )
         .all()
     )
     vip_requests = (
         VipRequest.query
-        .filter(VipRequest.club_id == club_id, VipRequest.created_at >= start, VipRequest.created_at < end)
+        .filter(
+            VipRequest.club_id == club_id, VipRequest.created_at >= start, VipRequest.created_at < end,
+            _cleared_exclude(VipRequest.created_at, "kj", club_id),
+        )
         .all()
     )
     vip = {
