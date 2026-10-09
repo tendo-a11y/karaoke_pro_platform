@@ -110,6 +110,7 @@ export const api = {
   deleteSuggestion: (token, suggestionId) =>
     request(`/api/admin/suggestions/${suggestionId}`, { method: "DELETE", token }),
   getReportsOverview: (token) => request("/api/admin/reports/overview", { token }),
+  clearReports: (token, period) => request("/api/admin/reports/clear", { method: "POST", token, body: { period } }),
   getSystemOverview: (token) => request("/api/admin/system/overview", { token }),
   getSystemLogs: (token) => request("/api/admin/system/logs", { token }),
   // Блок "Управление администраторами" (2026-09, только super_admin — см.
