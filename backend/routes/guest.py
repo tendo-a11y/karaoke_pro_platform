@@ -471,6 +471,11 @@ def screenshot_search_songs():
     а остальной путь (iTunes-поиск, выбор варианта гостем, обычный
     /api/guest/order) не отличается от ai_search_songs.
     """
+    # ОТКЛЮЧЕНО (запрос пользователя 2026-10-09: "распознавание скриншота в
+    # поиске вообще удали, не нужно тратить на это баланс"). Claude больше не
+    # вызывается; скриншот гость отправляет ведущему ("📷 Заказ через скриншот").
+    return api_error(410, "SCREENSHOT_SEARCH_DISABLED", "Распознавание скриншота отключено")
+
     payload = request.get_json(silent=True) or {}
     image_base64 = payload.get("image_base64", "")
     media_type = payload.get("media_type", "")
