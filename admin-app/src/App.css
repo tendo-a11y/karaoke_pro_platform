@@ -323,3 +323,37 @@ img { max-width: 100%; height: auto; }
   flex-wrap: wrap;
   gap: 0.75rem;
 }
+
+/* Кешбек от клуба (2026-10-09) */
+.cashback-block {
+  border: 1px solid rgba(255, 176, 32, 0.45);
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cashback-block legend { padding: 0 6px; font-weight: 600; }
+.cashback-block__field { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cashback-block__field > span:first-child { flex-basis: 100%; }
+.cashback-block__field input { width: 110px; }
+.cashback-block__radio { display: flex; align-items: center; gap: 8px; }
+
+.report-club__toggle {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+}
+.cashback-details { margin-top: 10px; padding-top: 8px; border-top: 1px solid rgba(255, 255, 255, 0.12); }
+.cashback-evenings { list-style: none; padding: 0; margin: 8px 0 0; display: flex; flex-direction: column; gap: 8px; }
+.cashback-evening { border: 1px solid rgba(255, 176, 32, 0.3); border-radius: 8px; padding: 8px 10px; }
+.cashback-evening__head { display: flex; justify-content: space-between; gap: 8px; }
+.cashback-evening__stats { font-size: 13px; opacity: 0.8; margin: 4px 0; }
