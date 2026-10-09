@@ -111,6 +111,9 @@ function KjMessagesThread({ token, clubId }) {
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState(null);
+  // ДОБАВЛЕНО (2026-10-09): галочка "Отправить всем KJ" — копия в каждый клуб.
+  const [toAll, setToAll] = useState(false);
+  const [sentInfo, setSentInfo] = useState(null);
 
   async function reload() {
     try {
@@ -133,8 +136,15 @@ function KjMessagesThread({ token, clubId }) {
     if (!text) return;
     setSending(true);
     setSendError(null);
+    setSentInfo(null);
     try {
-      await api.sendKjMessage(token, clubId, text);
+      if (toAll) {
+        const result = await api.broadcastKjMessage(token, text);
+        setSentInfo(`Отправлено всем KJ (клубов: ${result ? result.sent_to_clubs : "?"}).`);
+        setToAll(false);
+      } else {
+        await api.sendKjMessage(token, clubId, text);
+      }
       setDraft("");
       await reload();
     } catch (err) {
@@ -166,10 +176,15 @@ function KjMessagesThread({ token, clubId }) {
             </ul>
           )}
           {sendError && <div className="banner banner--error">{sendError}</div>}
+          {sentInfo && <p className="kj-row__chat-sent">✅ {sentInfo}</p>}
+          <label className="kj-row__chat-all">
+            <input type="checkbox" checked={toAll} onChange={(e) => setToAll(e.target.checked)} />
+            Отправить всем KJ
+          </label>
           <div className="kj-row__chat-send">
             <input
               type="text"
-              placeholder="Сообщение диджею…"
+              placeholder={toAll ? "Сообщение всем KJ…" : "Сообщение диджею…"}
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
             />
@@ -178,6 +193,64 @@ function KjMessagesThread({ token, clubId }) {
             </button>
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+// ДОБАВЛЕНО (2026-10-09, запрос пользователя): предложения KJ по улучшению
+// приложения. Ответа нет — KJ сам получает автоответ "предложение принято".
+function SuggestionsPanel({ token }) {
+  const [items, setItems] = useState(null);
+  const [error, setError] = useState(null);
+
+  async function reload() {
+    try {
+      setItems(await api.listSuggestions(token));
+      setError(null);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : String(err));
+    }
+  }
+
+  useEffect(() => {
+    reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
+
+  async function handleDelete(id) {
+    try {
+      await api.deleteSuggestion(token, id);
+      setItems((prev) => (prev || []).filter((x) => x.id !== id));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : String(err));
+    }
+  }
+
+  return (
+    <div className="panel">
+      <h2>💡 Предложения от KJ</h2>
+      {error && <div className="banner banner--error">{error}</div>}
+      {!items ? (
+        <p className="empty-hint">Загрузка…</p>
+      ) : items.length === 0 ? (
+        <p className="empty-hint">Предложений пока нет.</p>
+      ) : (
+        <ul className="suggestion-list">
+          {items.map((x) => (
+            <li key={x.id} className="suggestion-row">
+              <div className="suggestion-row__meta">
+                {x.club_name || `Клуб #${x.club_id}`}
+                {x.kj_name ? ` · ${x.kj_name}` : ""}
+                {x.created_at ? ` · ${new Date(x.created_at).toLocaleString()}` : ""}
+              </div>
+              <div className="suggestion-row__text">{x.message_text}</div>
+              <button type="button" className="link-btn" title="Удалить" onClick={() => handleDelete(x.id)}>
+                ✕ Удалить
+              </button>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );
@@ -1038,6 +1111,7 @@ export default function App() {
   // 'clubs' | 'reports' | 'system' — переключение верхнеуровневых экранов
   // super_admin (обычный админ видит только 'clubs', см. рендер ниже).
   const [view, setView] = useState("clubs");
+  const [showSuggestions, setShowSuggestions] = useState(false);
 
   async function reloadClubs() {
     try {
@@ -1168,12 +1242,17 @@ export default function App() {
               )}
             </>
           )}
+          <button type="button" className="link-btn" onClick={() => setShowSuggestions((v) => !v)}>
+            {showSuggestions ? "← Назад" : "💡 Предложения KJ"}
+          </button>
           <button type="button" className="link-btn" onClick={handleLogout}>Выйти</button>
         </div>
       </header>
 
       <main>
-        {selectedClubId == null ? (
+        {showSuggestions ? (
+          <SuggestionsPanel token={token} />
+        ) : selectedClubId == null ? (
           view === "reports" ? (
             <div className="panel">
               <h2>Отчёты по всем клубам</h2>
