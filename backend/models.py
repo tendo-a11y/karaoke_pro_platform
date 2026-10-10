@@ -137,6 +137,14 @@ class Club(db.Model):
     # со всей выручки. Намеренно НЕ в to_dict() (его видят и гости/KJ).
     cashback_percent = db.Column(db.Numeric(5, 2), nullable=True)
     cashback_vip_only = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
+    # ДОБАВЛЕНО (2026-10-10, запрос пользователя): способ оплаты системы —
+    # "percent" (кешбек % с вечера) или "subscription" (абонплата в евро в
+    # месяц, сумму задаёт супер-админ). Выбирает KJ; выбор KJ действует со
+    # следующего месяца (payment_mode_next / payment_mode_next_from "ГГГГ-ММ").
+    payment_mode = db.Column(db.String(16), nullable=False, default="percent", server_default="percent")
+    payment_mode_next = db.Column(db.String(16), nullable=True)
+    payment_mode_next_from = db.Column(db.String(7), nullable=True)
+    subscription_eur = db.Column(db.Numeric(10, 2), nullable=True)
 
     kj_operators = db.relationship("KJOperator", back_populates="club")
     admin_users = db.relationship("AdminUser", back_populates="club")
@@ -1386,11 +1394,24 @@ class ClubCashback(db.Model):
     amount = db.Column(db.Numeric(10, 2), nullable=False, default=0)
     paid_at = db.Column(db.DateTime(timezone=True), nullable=True)
     created_at = db.Column(db.DateTime(timezone=True), default=utcnow, nullable=False)
+    # ДОБАВЛЕНО (2026-10-10): kind — "evening" (вечер) или "subscription"
+    # (абонплата за месяц period="ГГГГ-ММ", currency="EUR"); mode — способ
+    # оплаты клуба на момент записи.
+    kind = db.Column(db.String(16), nullable=False, default="evening", server_default="evening")
+    mode = db.Column(db.String(16), nullable=False, default="percent", server_default="percent")
+    currency = db.Column(db.String(3), nullable=False, default="MDL", server_default="MDL")
+    period = db.Column(db.String(7), nullable=True)
+
+    __table_args__ = (db.UniqueConstraint("club_id", "kind", "period", name="uq_club_cashbacks_period"),)
 
     def to_dict(self):
         return {
             "id": self.id,
             "club_id": self.club_id,
+            "kind": self.kind,
+            "mode": self.mode,
+            "currency": self.currency,
+            "period": self.period,
             "start_at": self.start_at.isoformat() if self.start_at else None,
             "end_at": self.end_at.isoformat() if self.end_at else None,
             "revenue_total": float(self.revenue_total or 0),
