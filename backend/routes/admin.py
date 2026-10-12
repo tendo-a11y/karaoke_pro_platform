@@ -297,6 +297,10 @@ def send_kj_message(club_id):
     message = AdminKjMessage(club_id=club_id, from_admin=True, message_text=message_text.strip())
     db.session.add(message)
     db.session.commit()
+    # 2026-10-13: сразу всплывает у KJ поверх экрана (раньше доходило только
+    # после обновления страницы KJ).
+    from sockets import emit_admin_message
+    emit_admin_message(message)
     return api_ok(message.to_dict(), status_code=201)
 
 
@@ -316,10 +320,58 @@ def broadcast_kj_message():
     else:
         club = db.session.get(Club, admin.club_id)
         clubs = [club] if club is not None else []
+    sent = []
     for club in clubs:
-        db.session.add(AdminKjMessage(club_id=club.club_id, from_admin=True, message_text=message_text.strip()))
+        message = AdminKjMessage(club_id=club.club_id, from_admin=True, message_text=message_text.strip())
+        db.session.add(message)
+        sent.append(message)
     db.session.commit()
+    # 2026-10-13: сразу всплывает у каждого KJ поверх экрана.
+    from sockets import emit_admin_message
+    for message in sent:
+        emit_admin_message(message)
     return api_ok({"sent_to_clubs": len(clubs)}, status_code=201)
+
+
+# ДОБАВЛЕНО (2026-10-13, запрос пользователя): уведомление поверх экрана в
+# админке — непрочитанные сообщения от KJ по видимым админу клубам.
+@bp.get("/kj-messages/unread")
+@require_admin
+def list_unread_kj_messages():
+    admin = g.admin
+    query = AdminKjMessage.query.filter_by(from_admin=False, is_read_by_admin=False)
+    if not admin.is_super_admin:
+        query = query.filter_by(club_id=admin.club_id)
+    items = query.order_by(AdminKjMessage.created_at.asc()).limit(50).all()
+    names = {c.club_id: c.name for c in Club.query.all()}
+    result = []
+    for item in items:
+        data = item.to_dict()
+        data["club_name"] = names.get(item.club_id)
+        result.append(data)
+    return api_ok(result)
+
+
+@bp.post("/kj-messages/read")
+@require_admin
+def mark_kj_messages_read():
+    """Отметить сообщения KJ прочитанными (закрыли уведомление или открыли переписку)."""
+    admin = g.admin
+    payload = request.get_json(silent=True) or {}
+    ids = [i for i in (payload.get("ids") or []) if isinstance(i, int) and not isinstance(i, bool)]
+    club_id = payload.get("club_id")
+    query = AdminKjMessage.query.filter_by(from_admin=False, is_read_by_admin=False)
+    if not admin.is_super_admin:
+        query = query.filter_by(club_id=admin.club_id)
+    if ids:
+        query = query.filter(AdminKjMessage.id.in_(ids))
+    elif isinstance(club_id, int) and not isinstance(club_id, bool):
+        query = query.filter_by(club_id=club_id)
+    else:
+        return api_error(400, "VALIDATION_ERROR", "Укажите ids или club_id")
+    count = query.update({"is_read_by_admin": True}, synchronize_session=False)
+    db.session.commit()
+    return api_ok({"marked_read": count})
 
 
 # ДОБАВЛЕНО (2026-10-09): предложения KJ по улучшению приложения.
