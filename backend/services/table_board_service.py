@@ -229,7 +229,7 @@ def _round_cursor(club: Club, capacity: int):
 
 def _round_robin_order(
     orders: list[Order], table_count: int, capacity: int, anchor_table: int = 1,
-    anchor_first_take: int | None = None,
+    anchor_first_take: int | None = None, sequence: list[int] | None = None,
 ) -> list[Order]:
     """Круговой обход столов, начиная с anchor_table и далее по кругу
     (anchor_table..table_count, затем 1..anchor_table-1) — см. докстринг
@@ -242,11 +242,18 @@ def _round_robin_order(
     for bucket in by_table.values():
         bucket.sort(key=lambda o: (o.created_at, o.id))
 
-    if table_count > 0:
-        anchor = ((anchor_table - 1) % table_count) + 1
+    if sequence:
+        # 2026-10-13: явный порядок столов с доп. столами (7, 7/1, 7/2, 8, ...)
+        # — см. extra_table_service.table_sequence.
+        anchor = anchor_table if anchor_table in sequence else sequence[0]
+        i = sequence.index(anchor)
+        table_sequence = sequence[i:] + sequence[:i]
     else:
-        anchor = 1
-    table_sequence = list(range(anchor, table_count + 1)) + list(range(1, anchor))
+        if table_count > 0:
+            anchor = ((anchor_table - 1) % table_count) + 1
+        else:
+            anchor = 1
+        table_sequence = list(range(anchor, table_count + 1)) + list(range(1, anchor))
 
     cursor = {table_no: 0 for table_no in by_table}
     sequence: list[Order] = []
@@ -329,12 +336,14 @@ def compute_queue_order(club_id: int) -> list[Order]:
             # Круг продолжается с того стола, который пел последним (см.
             # _round_cursor) — а не каждый раз заново с "Начала очереди".
             cursor_table, left = _round_cursor(club, capacity)
-            if cursor_table is not None and 1 <= cursor_table <= table_count:
+            from services import extra_table_service
+            sequence = extra_table_service.table_sequence(club, table_count)
+            if cursor_table is not None and cursor_table in sequence:
                 ordered_tabled = _round_robin_order(
-                    tabled, table_count, capacity, cursor_table, anchor_first_take=left,
+                    tabled, table_count, capacity, cursor_table, anchor_first_take=left, sequence=sequence,
                 )
             else:
-                ordered_tabled = _round_robin_order(tabled, table_count, capacity, anchor_table)
+                ordered_tabled = _round_robin_order(tabled, table_count, capacity, anchor_table, sequence=sequence)
         else:
             ordered_tabled = sorted(tabled, key=lambda o: (o.created_at, o.id))
         tableless_sorted = sorted(tableless, key=lambda o: (o.created_at, o.id))
@@ -436,14 +445,22 @@ def get_orders_board(club_id: int) -> list[dict]:
         row[0] for row in TableGroup.query.filter_by(club_id=club_id).with_entities(TableGroup.table_no).all()
     }
 
+    # 2026-10-13: доп. столы ("7/1 (Vip)") идут на доске сразу после своего стола.
+    from services import extra_table_service
+    extras = {e.table_no: e for e in extra_table_service.list_extra(club_id)}
+
     board = []
-    for table_no in range(1, club.table_count + 1):
+    for table_no in extra_table_service.table_sequence(club, club.table_count):
         active, _waiting = partition_table_orders(club_id, table_no, capacity)
         slots = [_slot_dict(order, queue_positions) for order in active]
         slots += [None] * (capacity - len(slots))
         occupied = table_no in group_table_nos or bool(active)
+        extra = extras.get(table_no)
         board.append({
             "table_no": table_no, "capacity": capacity, "queue_mode": mode, "slots": slots, "occupied": occupied,
+            "label": extra_table_service.label(table_no),
+            "name": extra.name if extra else None,
+            "is_extra": extra is not None,
         })
     return board
 
