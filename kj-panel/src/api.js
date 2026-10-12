@@ -321,6 +321,12 @@ export const api = {
   // kj.py::list_table_groups/get_table_group/close_table_group_route/
   // move_table_group_route).
   listTableGroups: (token, clubId) => request(`/api/kj/table-groups/${clubId}`, { token }),
+  // Доп. столы между обычными (2026-10-13).
+  listExtraTables: (token, clubId) => request(`/api/kj/extra-tables/${clubId}`, { token }),
+  createExtraTable: (token, clubId, afterTable, name) =>
+    request(`/api/kj/extra-tables/${clubId}`, { method: "POST", token, body: { after_table: afterTable, name } }),
+  deleteExtraTable: (token, clubId, tableNo) =>
+    request(`/api/kj/extra-tables/${clubId}/${tableNo}`, { method: "DELETE", token }),
   getTableGroup: (token, clubId, tableNo) =>
     request(`/api/kj/table-groups/${clubId}/${tableNo}`, { token }),
   closeTableGroup: (token, clubId, tableNo, hideReceipt) =>
