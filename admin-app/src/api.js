@@ -101,6 +101,9 @@ export const api = {
   // управления KJ... надо добавить возможность отправки сообщения KJ") —
   // переписка администрации с диджеем клуба.
   listKjMessages: (token, clubId) => request(`/api/admin/clubs/${clubId}/kj-messages`, { token }),
+  // Уведомления о новых сообщениях от KJ (2026-10-13).
+  listUnreadKjMessages: (token) => request("/api/admin/kj-messages/unread", { token }),
+  markKjMessagesRead: (token, body) => request("/api/admin/kj-messages/read", { method: "POST", token, body }),
   sendKjMessage: (token, clubId, messageText) =>
     request(`/api/admin/clubs/${clubId}/kj-messages`, { method: "POST", token, body: { message_text: messageText } }),
   // ДОБАВЛЕНО (2026-10-09): одно сообщение сразу всем KJ и предложения KJ по улучшению.
