@@ -998,3 +998,25 @@ img { max-width: 100%; }
 .extra-tables-list__row { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; }
 .extra-tables-block { margin-top: 18px; padding-top: 12px; border-top: 1px solid var(--border); }
 .extra-tables-block h3 { margin: 0 0 6px; }
+
+/* Уведомление о новом сообщении поверх всех экранов (2026-10-13) */
+.msg-popup-overlay {
+  position: fixed; inset: 0; z-index: 10000;
+  display: flex; align-items: flex-start; justify-content: center;
+  padding: 16px; background: rgba(0, 0, 0, 0.55);
+}
+.msg-popup {
+  width: 100%; max-width: 440px; margin-top: 8vh;
+  background: #1d1f27; color: #f3f3f3;
+  border: 2px solid rgba(255, 176, 32, 0.9); border-radius: 14px;
+  padding: 16px 18px; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+  animation: msg-popup-pulse 1.2s ease-in-out 3;
+}
+.msg-popup__title { font-weight: 700; margin-bottom: 8px; }
+.msg-popup__count { font-weight: 400; opacity: 0.7; }
+.msg-popup__text { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 40vh; overflow: auto; margin-bottom: 14px; }
+.msg-popup__actions { display: flex; flex-wrap: wrap; gap: 8px; }
+@keyframes msg-popup-pulse {
+  0%, 100% { box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6); }
+  50% { box-shadow: 0 0 0 6px rgba(255, 176, 32, 0.35), 0 12px 40px rgba(0, 0, 0, 0.6); }
+}
