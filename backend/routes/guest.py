@@ -589,11 +589,10 @@ def link_google():
         # -> "table_count_exceeded"). table_count=None означает "без
         # ограничения" (клуб ещё не настроил) — тогда пропускаем проверку.
         club = db.session.get(Club, g.club_id)
-        if club is not None and club.table_count is not None and table_no > club.table_count:
-            return api_error(
-                400, "TABLE_OUT_OF_RANGE",
-                f"В этом клубе {club.table_count} столов — выберите номер от 1 до {club.table_count}",
-            )
+        # 2026-10-13: доп. столы ("7/1 Vip") тоже допустимы — см. extra_table_service.
+        from services import extra_table_service
+        if club is not None and not extra_table_service.is_valid_table(club, table_no):
+            return api_error(400, "TABLE_OUT_OF_RANGE", extra_table_service.out_of_range_message(club))
         effective_table_no = table_no
 
     try:
@@ -1424,6 +1423,15 @@ def clear_own_chat():
     ChatMessage.query.filter_by(club_id=g.club_id, telegram_user_id=g.guest_id).delete()
     db.session.commit()
     return api_ok({"cleared": True})
+
+
+# ДОБАВЛЕНО (2026-10-13): доп. столы клуба ("7/1 (Vip)") — гость выбирает
+# их кнопкой на экране "Выберите стол".
+@bp.get("/extra-tables")
+@require_guest
+def list_extra_tables():
+    from services import extra_table_service
+    return api_ok([e.to_dict() for e in extra_table_service.list_extra(g.club_id)])
 
 
 @bp.get("/song-lists")
