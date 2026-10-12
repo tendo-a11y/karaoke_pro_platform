@@ -356,6 +356,8 @@ const D = {
   "Входим…": ["Ne conectăm…", "Signing in…", "Входимо…"],
 
   // --- Чек стола ---
+  "💬 Сообщение от ведущего": ["💬 Mesaj de la DJ", "💬 Message from the DJ", "💬 Повідомлення від ведучого"],
+  "Открыть сообщения": ["Deschide mesajele", "Open messages", "Відкрити повідомлення"],
   "Доп. столы:": ["Mese suplimentare:", "Extra tables:", "Додаткові столи:"],
   "🧾 Чек стола": ["🧾 Nota mesei", "🧾 Table bill", "🧾 Чек столу"],
   "шт. ·": ["buc. ·", "pcs ·", "шт. ·"],
