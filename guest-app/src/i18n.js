@@ -356,6 +356,7 @@ const D = {
   "Входим…": ["Ne conectăm…", "Signing in…", "Входимо…"],
 
   // --- Чек стола ---
+  "Доп. столы:": ["Mese suplimentare:", "Extra tables:", "Додаткові столи:"],
   "🧾 Чек стола": ["🧾 Nota mesei", "🧾 Table bill", "🧾 Чек столу"],
   "шт. ·": ["buc. ·", "pcs ·", "шт. ·"],
   "· оплачено с баланса": ["· plătit din sold", "· paid from balance", "· оплачено з балансу"],
@@ -532,6 +533,7 @@ const P = [
   ["$1 ушёл(а) — теперь вы админ стола.", ["$1 a plecat — acum sunteți admin masă.", "$1 left — you are now the table admin.", "$1 пішов(ла) — тепер ви адмін столу."]],
   ["Принимает на стол $1.", ["La masă primește: $1.", "Admitted by: $1.", "Приймає за стіл: $1."]],
   ["🙋 Присоединиться к столу", ["🙋 Alăturați-vă mesei", "🙋 Join the table", "🙋 Приєднатися до столу"]],
+  ["🙋 Присоединиться к столу %1/%2", ["🙋 Alăturați-vă mesei $1/$2", "🙋 Join table $1/$2", "🙋 Приєднатися до столу $1/$2"]],
   ["🙋 Присоединиться к столу %1", ["🙋 Alăturați-vă mesei $1", "🙋 Join table $1", "🙋 Приєднатися до столу $1"]],
   ["Вы «$1» — админ стола. Только вы разрешаете, кому сесть за стол. Чужие сесть не могут.", [
     "Dvs. „$1” sunteți admin masă. Doar dvs. permiteți cine se așază la masă. Străinii nu se pot așeza.",
@@ -551,6 +553,7 @@ const P = [
     "🎤 You're next! Your song “$1” is right after this one.",
     "🎤 Ви наступний! Ваша пісня «$1» — одразу після цієї.",
   ]],
+  ["Стол %1/%2", ["Masa $1/$2", "Table $1/$2", "Стіл $1/$2"]],
   ["Стол %1", ["Masa $1", "Table $1", "Стіл $1"]],
   ["Заказ отправлен! Ваш номер в очереди: $1.", [
     "Comanda a fost trimisă! Numărul dvs. la rând: $1.",
