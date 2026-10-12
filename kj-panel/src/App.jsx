@@ -3,6 +3,21 @@ import { GOOGLE_CLIENT_ID, api, ApiError, resolveToken, storeToken } from "./api
 import { connectSocket } from "./socket";
 import "./App.css";
 
+// ДОБАВЛЕНО (2026-10-13): доп. столы между обычными. Внутренний номер 7001
+// показывается как "7/1"; в полях номера стола можно вводить и "7/1".
+function tableLabel(n) {
+  if (n == null || n === "") return "—";
+  const v = Number(n);
+  return Number.isInteger(v) && v >= 1000 ? `${Math.floor(v / 1000)}/${v % 1000}` : String(n);
+}
+
+function parseTableInput(raw) {
+  const text = String(raw ?? "").trim();
+  const m = text.match(/^(\d+)\s*\/\s*(\d+)$/);
+  if (m) return Number(m[1]) * 1000 + Number(m[2]);
+  return Number(text);
+}
+
 // Фоновый опрос живой очереди VirtualDJ — та же идея, что и POLL_QUEUE_MS в
 // Guest App (guest-app/src/App.jsx): WebSocket ("queue_updated") ловит
 // изменения, сделанные ЧЕРЕЗ наш Backend (confirm_order), но ничего не знает
@@ -155,7 +170,7 @@ function QueueTable({ queue, token, clubId }) {
   }, [token, clubId]);
 
   function draftTableFor(item) {
-    return item.order_id in tableDrafts ? tableDrafts[item.order_id] : String(item.table_no ?? "");
+    return item.order_id in tableDrafts ? tableDrafts[item.order_id] : (item.table_no != null ? tableLabel(item.table_no) : "");
   }
 
   function setRowError(orderId, message) {
@@ -164,9 +179,9 @@ function QueueTable({ queue, token, clubId }) {
 
   async function handleSaveTable(item) {
     const raw = draftTableFor(item).trim();
-    const tableNo = raw === "" ? null : Number(raw);
+    const tableNo = raw === "" ? null : parseTableInput(raw);
     if (raw !== "" && (!Number.isInteger(tableNo) || tableNo <= 0)) {
-      setRowError(item.order_id, "Стол — положительное число или пусто");
+      setRowError(item.order_id, "Стол — номер (7 или 7/1) или пусто");
       return;
     }
     setBusyKey(`table-${item.order_id}`);
@@ -217,10 +232,10 @@ function QueueTable({ queue, token, clubId }) {
   async function handleClaim(item) {
     const draft = claimDraftFor(item);
     const rawTable = draft.table.trim();
-    const tableNo = rawTable === "" ? null : Number(rawTable);
+    const tableNo = rawTable === "" ? null : parseTableInput(rawTable);
     const errorKey = `claim-${item.vdj_item_id}`;
     if (rawTable !== "" && (!Number.isInteger(tableNo) || tableNo <= 0)) {
-      setRowError(errorKey, "Стол — положительное число или пусто");
+      setRowError(errorKey, "Стол — номер (7 или 7/1) или пусто");
       return;
     }
     const serviceId = draft.serviceId === "" ? null : Number(draft.serviceId);
@@ -453,8 +468,8 @@ function QueueTable({ queue, token, clubId }) {
                 <>
                   <span className="queue-row__edit">
                     <input
-                      type="number"
-                      min="1"
+                      type="text"
+                      inputMode="decimal"
                       className="queue-row__table-input"
                       placeholder="Стол"
                       value={draftTableFor(item)}
@@ -500,8 +515,8 @@ function QueueTable({ queue, token, clubId }) {
                 // возможным, см. claim_vdj_queue_item в vdj_service.py).
                 <span className="queue-row__edit">
                   <input
-                    type="number"
-                    min="1"
+                    type="text"
+                    inputMode="decimal"
                     className="queue-row__table-input"
                     placeholder="Стол"
                     value={claimDraftFor(item).table}
@@ -585,8 +600,8 @@ function AddManualSongForm({ onSubmit, busy, error }) {
 
   async function handleSubmit(event) {
     event.preventDefault();
-    const parsedTable = Number(tableNo);
-    if (!songTitle.trim() || !Number.isFinite(parsedTable) || parsedTable <= 0) return;
+    const parsedTable = parseTableInput(tableNo);
+    if (!songTitle.trim() || !Number.isInteger(parsedTable) || parsedTable <= 0) return;
 
     const ok = await onSubmit({ songTitle: songTitle.trim(), artist: artist.trim(), tableNo: parsedTable });
     if (ok) {
@@ -613,8 +628,8 @@ function AddManualSongForm({ onSubmit, busy, error }) {
         disabled={busy}
       />
       <input
-        type="number"
-        min="1"
+        type="text"
+        inputMode="decimal"
         placeholder="Стол"
         value={tableNo}
         onChange={(e) => setTableNo(e.target.value)}
@@ -743,7 +758,7 @@ function OrderChangeRequestsPanel({ token, clubId, socket }) {
         {pending.map((r) => (
           <li key={r.id} className="vip-row">
             <span>
-              {r.kind === "cancel" ? "❌ Отменить" : "🔁 Заменить"} — стол {r.table_no ?? "—"}:{" "}
+              {r.kind === "cancel" ? "❌ Отменить" : "🔁 Заменить"} — стол {tableLabel(r.table_no)}:{" "}
               {r.order_song_title}
               {r.order_artist ? ` (${r.order_artist})` : ""}
               {r.kind === "replace" && (
@@ -867,7 +882,7 @@ function TableCloseRequestsPanel({ token, clubId, socket }) {
       <ul className="vip-list">
         {pending.map((r) => (
           <li key={r.id} className="vip-row">
-            <span>Стол {r.table_no}</span>
+            <span>Стол {tableLabel(r.table_no)}</span>
             <span className="vip-row__actions">
               <label className="table-close-hide-receipt">
                 <input
@@ -1133,7 +1148,7 @@ function StatsPanel({ token, clubId }) {
             />
             {ev.top_table && (
               <p>
-                Самый поющий стол: <b>№{ev.top_table.table_no}</b> — {ev.top_table.songs} песен, {statsMoney(ev.top_table.sum)}
+                Самый поющий стол: <b>№{tableLabel(ev.top_table.table_no)}</b> — {ev.top_table.songs} песен, {statsMoney(ev.top_table.sum)}
               </p>
             )}
             {ev.top_guest && (
@@ -1737,7 +1752,7 @@ function KjChatPanel({ token, clubId, socket }) {
             <li key={t.guestId} className="vip-row">
               <span>
                 {t.lastMessage.from_guest ? "🆕 " : ""}
-                Стол {t.tableNo ?? "—"} · гость #{t.guestId}: {t.lastMessage.message_text || (t.lastMessage.image_data_url ? "📷 Скриншот" : "")}
+                Стол {tableLabel(t.tableNo)} · гость #{t.guestId}: {t.lastMessage.message_text || (t.lastMessage.image_data_url ? "📷 Скриншот" : "")}
                 {t.lastMessage.service_name ? ` (категория: ${t.lastMessage.service_name})` : ""}
               </span>
               <span className="vip-row__actions">
@@ -1884,7 +1899,7 @@ function VipRequestsPanel({ token, clubId, socket }) {
       <ul className="vip-list">
         {pending.map((r) => (
           <li key={r.id} className="vip-row">
-            <span>Стол {r.table_no ?? "—"} · гость #{r.telegram_user_id}</span>
+            <span>Стол {tableLabel(r.table_no)} · гость #{r.telegram_user_id}</span>
             <span className="vip-row__actions">
               <button
                 type="button" className="btn btn--accent" disabled={busyKey === r.id}
@@ -2626,6 +2641,106 @@ const QUEUE_MODE_OPTIONS = [
 
 // ДОБАВЛЕНО (2026-10, запрос пользователя): автозакрытие столов в заданное
 // время по часам этого компьютера.
+// ДОБАВЛЕНО (2026-10-13, запрос пользователя): доп. столы между обычными —
+// "полная посадка, вынесли 2 доп. стола, их надо вставить в очередь".
+// "После стола 7" + название (Vip) -> стол "7/1 (Vip)", следующий — "7/2".
+// В круге очереди идут сразу после своего стола. Постоянные, пока KJ не удалит.
+function ExtraTablesPanel({ token, clubId }) {
+  const [items, setItems] = useState([]);
+  const [afterTable, setAfterTable] = useState("");
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+
+  async function reload() {
+    try {
+      setItems(await api.listExtraTables(token, clubId));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : String(err));
+    }
+  }
+
+  useEffect(() => {
+    reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, clubId]);
+
+  async function handleAdd(event) {
+    event.preventDefault();
+    const n = Number(afterTable);
+    if (!Number.isInteger(n) || n < 1) {
+      setError("Укажите номер стола, после которого поставить доп. стол");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await api.createExtraTable(token, clubId, n, name.trim() || null);
+      setAfterTable("");
+      setName("");
+      await reload();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleDelete(item) {
+    if (!window.confirm(`Удалить доп. стол ${item.title}?`)) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.deleteExtraTable(token, clubId, item.table_no);
+      await reload();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="table-settings-panel">
+      <section>
+        <h2>Доп. столы</h2>
+        <p className="empty-hint">
+          Если вынесли дополнительный стол — добавьте его после нужного стола. Например, после 7 получится «7/1», в очереди
+          он идёт сразу после 7 и перед 8. Гости выбирают его кнопкой при входе.
+        </p>
+        {error && <div className="banner banner--error">{error}</div>}
+        <form className="table-settings-form" onSubmit={handleAdd}>
+          <label className="table-settings-field">
+            <span>После стола</span>
+            <input type="number" min="1" value={afterTable} disabled={busy} onChange={(e) => setAfterTable(e.target.value)} />
+          </label>
+          <label className="table-settings-field">
+            <span>Название (необязательно)</span>
+            <input type="text" maxLength={40} placeholder="Vip" value={name} disabled={busy} onChange={(e) => setName(e.target.value)} />
+          </label>
+          <div className="table-settings-actions">
+            <button type="submit" className="btn btn--accent" disabled={busy || !afterTable}>
+              ➕ Доп. стол
+            </button>
+          </div>
+        </form>
+        {items.length > 0 && (
+          <ul className="extra-tables-list">
+            {items.map((item) => (
+              <li key={item.table_no} className="extra-tables-list__row">
+                <span>Стол {item.title}</span>
+                <button type="button" className="btn-link" disabled={busy} onClick={() => handleDelete(item)}>
+                  🗑 Удалить
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </div>
+  );
+}
+
 function AutoClosePanel({ token }) {
   const [enabled, setEnabled] = useState(false);
   const [time, setTime] = useState("07:00");
@@ -3101,7 +3216,7 @@ function GuestCard({ token, clubId, guestId, onBack, onChanged }) {
           {guest.display_name && <p className="empty-hint">ID гостя: {guest.guest_id}</p>}
           {guest.email && <p className="empty-hint">Почта: {guest.email}</p>}
           <p className="empty-hint">
-            Стол: {guest.table_no ?? "—"}
+            Стол: {tableLabel(guest.table_no)}
             {guest.last_song_title && (
               <> · последняя песня: {guest.last_artist ? `${guest.last_artist} — ` : ""}{guest.last_song_title}</>
             )}
@@ -3281,7 +3396,7 @@ function GuestCard({ token, clubId, guestId, onBack, onChanged }) {
                         {day.songs.map((s) => (
                           <li key={s.order_id} style={{ padding: "6px 12px" }}>
                             {s.artist ? `${s.artist} — ${s.song_title}` : s.song_title}
-                            {s.category ? ` · ${s.category}` : ""} · стол {s.table_no ?? "—"}
+                            {s.category ? ` · ${s.category}` : ""} · стол {tableLabel(s.table_no)}
                           </li>
                         ))}
                       </ul>
@@ -3369,9 +3484,13 @@ function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged, auto
       const data = await api.listTableGroups(token, clubId);
       if (data.table_count) {
         const occupied = new Set(data.occupied_table_nos);
-        setFreeTables(
-          Array.from({ length: data.table_count }, (_, i) => i + 1).filter((n) => n !== tableNo && !occupied.has(n)),
-        );
+        // Доп. столы (2026-10-13) — сразу после своего стола.
+        const all = [];
+        for (let n = 1; n <= data.table_count; n += 1) {
+          all.push(n);
+          (data.extra_tables || []).filter((e) => e.after_table === n).forEach((e) => all.push(e.table_no));
+        }
+        setFreeTables(all.filter((n) => n !== tableNo && !occupied.has(n)));
       } else {
         setFreeTables(null);
       }
@@ -3420,7 +3539,7 @@ function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged, auto
 
   async function handleMove(event) {
     event.preventDefault();
-    const newTableNo = Number(moveTarget);
+    const newTableNo = parseTableInput(moveTarget);
     if (!Number.isInteger(newTableNo) || newTableNo < 1) {
       setActionError("Укажите корректный номер стола");
       return;
@@ -3458,7 +3577,7 @@ function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged, auto
       рядом с именем стола"): кнопка и форма переноса теперь сразу у
       заголовка карточки, а не внизу под списком компании. */}
       <h2 className="table-group-card__title">
-        Стол {tableNo}
+        Стол {tableLabel(tableNo)}
         {group && !moveOpen && (
           <button type="button" className="btn btn--accent" disabled={busy} onClick={handleOpenMove}>
             ⇄ Переместить стол
@@ -3473,13 +3592,13 @@ function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged, auto
                 <select value={moveTarget} onChange={(e) => setMoveTarget(e.target.value)} required>
                   <option value="" disabled>Новый номер стола…</option>
                   {freeTables.map((n) => (
-                    <option key={n} value={n}>{n}</option>
+                    <option key={n} value={n}>{tableLabel(n)}</option>
                   ))}
                 </select>
               ) : (
                 <input
-                  type="number"
-                  min="1"
+                  type="text"
+                  inputMode="decimal"
                   placeholder="Новый номер стола"
                   value={moveTarget}
                   onChange={(e) => setMoveTarget(e.target.value)}
@@ -3655,7 +3774,7 @@ function GuestsPanel({ token, clubId }) {
                   <br />
                   <span className="empty-hint">
                     {guest.display_name && <>ID {guest.guest_id} · </>}
-                    Стол: {guest.table_no ?? "—"} · за вечер {guest.orders_evening} · за неделю {guest.orders_week} · за месяц {guest.orders_month}
+                    Стол: {tableLabel(guest.table_no)} · за вечер {guest.orders_evening} · за неделю {guest.orders_week} · за месяц {guest.orders_month}
                     {guest.vip_balance != null && <> · баланс {guest.vip_balance} MDL</>}
                     {guest.app_open && <> · 📱 приложение открыто</>}
                   </span>
@@ -3684,7 +3803,7 @@ function GuestsPanel({ token, clubId }) {
                   <br />
                   <span className="empty-hint">
                     {guest.display_name && <>ID {guest.guest_id} · </>}
-                    Стол: {guest.table_no ?? "—"} · за вечер {guest.orders_evening} · за неделю {guest.orders_week} · за месяц {guest.orders_month}
+                    Стол: {tableLabel(guest.table_no)} · за вечер {guest.orders_evening} · за неделю {guest.orders_week} · за месяц {guest.orders_month}
                     {guest.vip_balance != null && <> · баланс {guest.vip_balance} MDL</>}
                     {guest.app_open && <> · 📱 приложение открыто</>}
                   </span>
@@ -4139,7 +4258,7 @@ function OrdersBoard({ token, clubId, socket, onOpenGuest, onOpenTable }) {
               }
               onClick={() => onOpenTable(table.table_no)}
             >
-              Стол {table.table_no}
+              Стол {table.label || table.table_no}{table.name ? ` (${table.name})` : ""}
             </button>
             {/* ДОБАВЛЕНО (2026-10, запрос пользователя: кнопка "Переместить стол"
             рядом с именем стола) — у занятого стола, прямо на доске. */}
@@ -4674,6 +4793,7 @@ export default function App() {
       ) : view === "tables" ? (
         <>
           <TableSettingsPanel token={token} clubId={me.club_id} />
+          <ExtraTablesPanel token={token} clubId={me.club_id} />
           <AutoClosePanel token={token} />
         </>
       ) : view === "guests" ? (
