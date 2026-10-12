@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
 
 from flask import Blueprint, current_app, g, jsonify, request
@@ -1257,6 +1257,10 @@ def update_table_settings(club_id):
             if effective_table_count is not None and value > effective_table_count:
                 return api_error(400, "VALIDATION_ERROR", _QUEUE_START_TABLE_ERROR)
         updates["queue_start_table"] = value
+        # 2026-10-13: KJ заново задал "Начало очереди" — круг начинается с
+        # этого стола, уже спетые песни на положение круга больше не влияют.
+        if value != club.queue_start_table:
+            updates["queue_round_since"] = datetime.now(timezone.utc)
 
     for field, value in updates.items():
         setattr(club, field, value)
