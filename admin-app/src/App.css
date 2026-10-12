@@ -357,3 +357,25 @@ img { max-width: 100%; height: auto; }
 .cashback-evening { border: 1px solid rgba(255, 176, 32, 0.3); border-radius: 8px; padding: 8px 10px; }
 .cashback-evening__head { display: flex; justify-content: space-between; gap: 8px; }
 .cashback-evening__stats { font-size: 13px; opacity: 0.8; margin: 4px 0; }
+
+/* Уведомление о новом сообщении поверх всех экранов (2026-10-13) */
+.msg-popup-overlay {
+  position: fixed; inset: 0; z-index: 10000;
+  display: flex; align-items: flex-start; justify-content: center;
+  padding: 16px; background: rgba(0, 0, 0, 0.55);
+}
+.msg-popup {
+  width: 100%; max-width: 440px; margin-top: 8vh;
+  background: #1d1f27; color: #f3f3f3;
+  border: 2px solid rgba(255, 176, 32, 0.9); border-radius: 14px;
+  padding: 16px 18px; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+  animation: msg-popup-pulse 1.2s ease-in-out 3;
+}
+.msg-popup__title { font-weight: 700; margin-bottom: 8px; }
+.msg-popup__count { font-weight: 400; opacity: 0.7; }
+.msg-popup__text { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 40vh; overflow: auto; margin-bottom: 14px; }
+.msg-popup__actions { display: flex; flex-wrap: wrap; gap: 8px; }
+@keyframes msg-popup-pulse {
+  0%, 100% { box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6); }
+  50% { box-shadow: 0 0 0 6px rgba(255, 176, 32, 0.35), 0 12px 40px rgba(0, 0, 0, 0.6); }
+}
