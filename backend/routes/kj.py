@@ -7,7 +7,7 @@ from auth import issue_kj_google_token, require_kj
 from errors import api_error, api_ok
 from extensions import db
 from models import AdminKjMessage, ChatMessage, Club, GuestAccount, KJOperator, KjSuggestion, Order, STATUS_PLAYING, TableGroupMember, VipClient, VipRequest
-from services import category_service, guest_account_service, guest_directory_service, guest_status_service, song_service, table_close_service, table_group_service, vip_service, vip_topup_request_service
+from services import category_service, extra_table_service, guest_account_service, guest_directory_service, guest_status_service, song_service, table_close_service, table_group_service, vip_service, vip_topup_request_service
 from services.guest_directory_service import GUEST_TYPES, GuestDirectoryError
 from services.category_service import CategoryServiceError
 from services.google_auth_service import GoogleAuthError, verify_google_credential
@@ -359,11 +359,8 @@ def update_order_table_route(order_id):
     # KJ-04: то же ограничение по количеству столов клуба, что и в
     # /order/manual и /table-settings выше.
     club = db.session.get(Club, g.club_id)
-    if table_no is not None and club is not None and club.table_count is not None and table_no > club.table_count:
-        return api_error(
-            400, "TABLE_OUT_OF_RANGE",
-            f"В этом клубе {club.table_count} столов — выберите номер от 1 до {club.table_count}",
-        )
+    if table_no is not None and club is not None and not extra_table_service.is_valid_table(club, table_no):
+        return api_error(400, "TABLE_OUT_OF_RANGE", extra_table_service.out_of_range_message(club))
 
     order, outcome = update_order_table(order_id, g.kj, table_no)
     if outcome == "updated":
@@ -1030,11 +1027,8 @@ def claim_queue_item():
     # KJ-04: то же ограничение по количеству столов клуба, что и у остальных
     # мест, где KJ сам вводит номер стола (см. /order/manual ниже).
     club = db.session.get(Club, g.club_id)
-    if table_no is not None and club is not None and club.table_count is not None and table_no > club.table_count:
-        return api_error(
-            400, "TABLE_OUT_OF_RANGE",
-            f"В этом клубе {club.table_count} столов — выберите номер от 1 до {club.table_count}",
-        )
+    if table_no is not None and club is not None and not extra_table_service.is_valid_table(club, table_no):
+        return api_error(400, "TABLE_OUT_OF_RANGE", extra_table_service.out_of_range_message(club))
 
     order, outcome = claim_vdj_queue_item(g.kj, vdj_item_id, song_title, artist, table_no, service_id)
     if outcome == "claimed":
@@ -1073,11 +1067,8 @@ def add_manual_order():
     # routes/guest.py::link_google — иначе KJ мог бы вручную создать заказ на
     # несуществующий стол, пока для гостя этот же номер уже недоступен.
     club = db.session.get(Club, g.club_id)
-    if club is not None and club.table_count is not None and table_no > club.table_count:
-        return api_error(
-            400, "TABLE_OUT_OF_RANGE",
-            f"В этом клубе {club.table_count} столов — выберите номер от 1 до {club.table_count}",
-        )
+    if club is not None and not extra_table_service.is_valid_table(club, table_no):
+        return api_error(400, "TABLE_OUT_OF_RANGE", extra_table_service.out_of_range_message(club))
 
     order, outcome = add_manual_song(g.kj, song_title, artist, table_no)
 
@@ -1193,6 +1184,46 @@ _QUEUE_START_TABLE_ERROR = (
     "queue_start_table должен быть положительным целым числом не больше "
     "table_count, либо null (не задано)"
 )
+
+
+# ДОБАВЛЕНО (2026-10-13, запрос пользователя): доп. столы между обычными
+# ("7/1 (Vip)" между 7 и 8) — см. services/extra_table_service.py.
+@bp.get("/extra-tables/<int:club_id>")
+@require_kj
+def list_extra_tables(club_id):
+    denied = _ensure_own_club(club_id)
+    if denied:
+        return denied
+    return api_ok([e.to_dict() for e in extra_table_service.list_extra(club_id)])
+
+
+@bp.post("/extra-tables/<int:club_id>")
+@require_kj
+def create_extra_table(club_id):
+    denied = _ensure_own_club(club_id)
+    if denied:
+        return denied
+    club = db.session.get(Club, club_id)
+    payload = request.get_json(silent=True) or {}
+    try:
+        extra = extra_table_service.create(club, payload.get("after_table"), payload.get("name"))
+    except extra_table_service.ExtraTableError as exc:
+        return api_error(exc.status, exc.code, exc.message)
+    return api_ok(extra.to_dict(), status_code=201)
+
+
+@bp.delete("/extra-tables/<int:club_id>/<int:table_no>")
+@require_kj
+def delete_extra_table(club_id, table_no):
+    denied = _ensure_own_club(club_id)
+    if denied:
+        return denied
+    club = db.session.get(Club, club_id)
+    try:
+        extra_table_service.delete(club, table_no)
+    except extra_table_service.ExtraTableError as exc:
+        return api_error(exc.status, exc.code, exc.message)
+    return api_ok({"deleted": True})
 
 
 @bp.get("/table-settings/<int:club_id>")
@@ -1783,6 +1814,8 @@ def list_table_groups(club_id):
     return api_ok({
         "table_count": club.table_count if club else None,
         "occupied_table_nos": sorted(table_group_service.list_occupied_table_nos(club_id)),
+        # Доп. столы (2026-10-13) — тоже можно выбрать для переноса.
+        "extra_tables": [e.to_dict() for e in extra_table_service.list_extra(club_id)],
     })
 
 
@@ -1917,8 +1950,8 @@ def move_table_group_route(club_id, table_no):
         return api_error(400, "VALIDATION_ERROR", "new_table_no должен быть положительным числом")
 
     club = db.session.get(Club, club_id)
-    if club and club.table_count and new_table_no > club.table_count:
-        return api_error(400, "VALIDATION_ERROR", f"В клубе только {club.table_count} столов")
+    if club and not extra_table_service.is_valid_table(club, new_table_no):
+        return api_error(400, "VALIDATION_ERROR", extra_table_service.out_of_range_message(club))
 
     result = table_group_service.move_table(club_id, table_no, new_table_no)
     if result.outcome == "not_found":
