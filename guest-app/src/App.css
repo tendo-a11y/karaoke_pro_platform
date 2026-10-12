@@ -1047,3 +1047,11 @@ button.step-blink-fill { animation: button-fill-blink 1s ease-in-out infinite; }
 .clear-stats {
   margin: 0.25rem 0 0.75rem;
 }
+
+/* Доп. столы (2026-10-13) */
+.extra-table-picker { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.extra-table-picker__btn {
+  padding: 6px 12px; border-radius: 999px; border: 1px solid rgba(255, 176, 32, 0.45);
+  background: rgba(255, 176, 32, 0.10); color: inherit; font: inherit; cursor: pointer;
+}
+.extra-table-picker__btn--active { background: rgba(255, 176, 32, 0.35); border-color: rgba(255, 176, 32, 0.9); font-weight: 600; }
