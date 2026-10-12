@@ -4471,6 +4471,33 @@ function ConnectionOverviewPanel({ connected, bridgeStatus }) {
   );
 }
 
+// ДОБАВЛЕНО (2026-10-13, запрос пользователя "сообщения легко пропустить"):
+// новое сообщение (от администрации или от гостя) всплывает окном поверх
+// любого экрана, пока KJ его не закроет или не откроет "Сообщения".
+function MessagePopups({ items, onOpen, onClose }) {
+  if (!items.length) return null;
+  const item = items[items.length - 1];
+  return (
+    <div className="msg-popup-overlay" role="alertdialog" aria-live="assertive">
+      <div className="msg-popup">
+        <div className="msg-popup__title">
+          {item.kind === "admin" ? "📢 Сообщение от администрации" : `💬 Гость${item.table ? `, стол ${tableLabel(item.table)}` : ""}`}
+          {items.length > 1 && <span className="msg-popup__count"> · ещё {items.length - 1}</span>}
+        </div>
+        <div className="msg-popup__text">{item.text || (item.hasImage ? "📷 Фото" : "")}</div>
+        <div className="msg-popup__actions">
+          <button type="button" className="btn btn--accent" onClick={onOpen}>
+            Открыть сообщения
+          </button>
+          <button type="button" className="btn" onClick={() => onClose(item)}>
+            Закрыть
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [token, setToken] = useState(() => resolveToken());
   const [me, setMe] = useState(null);
@@ -4489,6 +4516,11 @@ export default function App() {
   // собранных на экране "Сообщения"; сбрасывается в false, когда KJ
   // открывает этот экран (см. onClick кнопки ниже).
   const [hasNewMessages, setHasNewMessages] = useState(false);
+  // Всплывающие уведомления о новых сообщениях (2026-10-13).
+  const [popups, setPopups] = useState([]);
+  const pushPopup = useCallback((popup) => {
+    setPopups((prev) => (prev.some((p) => p.key === popup.key) ? prev : [...prev, popup]));
+  }, []);
   // Мигание заголовка вкладки браузера, если KJ сейчас не смотрит в панель
   // (другая вкладка браузера или свёрнуто — запрос пользователя 2026-10:
   // "можно чтоб новое сообщение или новый заказ моргали в браузере если
@@ -4580,6 +4612,12 @@ export default function App() {
         // ДОБАВЛЕНО (2026-10-03) — непрочитанное сообщение от администрации
         // тоже должно сразу зажигать мигающую кнопку "Сообщения".
         const hasUnreadAdminMessage = (adminMsgs || []).some((m) => m.from_admin && !m.is_read_by_kj);
+        // Непрочитанные сообщения администрации — сразу всплывают поверх экрана.
+        if (!cancelled) {
+          (adminMsgs || [])
+            .filter((m) => m.from_admin && !m.is_read_by_kj)
+            .forEach((m) => pushPopup({ key: `admin-${m.id}`, kind: "admin", text: m.message_text }));
+        }
         if (!cancelled) {
           setHasNewMessages(
             changeReqs.length > 0 || closeReqs.length > 0 || vipReqs.length > 0 || topupReqs.length > 0 || chatNeedsReply || hasUnreadAdminMessage,
@@ -4632,10 +4670,22 @@ export default function App() {
     socket.on("vip_request_created", () => setHasNewMessages(true));
     socket.on("vip_topup_request_created", () => setHasNewMessages(true));
     socket.on("chat_message", (message) => {
-      if (message.from_guest) setHasNewMessages(true);
+      if (message.from_guest) {
+        setHasNewMessages(true);
+        pushPopup({
+          key: `chat-${message.id}`,
+          kind: "chat",
+          text: message.message_text,
+          hasImage: Boolean(message.image_data_url),
+          table: message.table_no,
+        });
+      }
     });
     socket.on("admin_message", (message) => {
-      if (message.from_admin) setHasNewMessages(true);
+      if (message.from_admin) {
+        setHasNewMessages(true);
+        pushPopup({ key: `admin-${message.id}`, kind: "admin", text: message.message_text });
+      }
     });
 
     return () => {
@@ -4729,6 +4779,19 @@ export default function App() {
 
   return (
     <div className="app-shell">
+      <MessagePopups
+        items={popups}
+        onOpen={() => {
+          if (popups.some((p) => p.kind === "admin")) api.markAdminMessagesRead(token, me.club_id).catch(() => {});
+          setPopups([]);
+          setHasNewMessages(false);
+          setView("messages");
+        }}
+        onClose={(item) => {
+          if (item.kind === "admin") api.markAdminMessagesRead(token, me.club_id).catch(() => {});
+          setPopups((prev) => prev.filter((p) => p.key !== item.key && !(item.kind === "admin" && p.kind === "admin")));
+        }}
+      />
       <header className="app-header">
         <div>
           <h1>{me.club_name || `Клуб #${me.club_id}`}</h1>
