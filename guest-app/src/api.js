@@ -186,6 +186,8 @@ export const api = {
   // реальное закрытие стола происходит после подтверждения KJ в KJ Panel.
   requestTableClose: (token) => request("/api/guest/table-group/request-close", { method: "POST", token }),
   // ДОБАВЛЕНО (2026-10-09): гость очищает у себя "Историю" или "Финансы".
+  // Доп. столы клуба (2026-10-13).
+  listExtraTables: (token) => request("/api/guest/extra-tables", { token }),
   clearMyHistory: (token, kind, period) =>
     request("/api/guest/history/clear", { method: "POST", token, body: { kind, period } }),
   listVipTransactions: (token, days) =>
