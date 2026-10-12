@@ -1429,3 +1429,43 @@ class ClubCashback(db.Model):
             "amount": float(self.amount or 0),
             "paid_at": self.paid_at.isoformat() if self.paid_at else None,
         }
+
+
+class ExtraTable(db.Model):
+    """
+    ДОБАВЛЕНО (2026-10-13, запрос пользователя): дополнительный стол, который
+    вынесли в зал при полной посадке и вставили МЕЖДУ обычными столами —
+    например, "7/1 (Vip)" и "7/2 (Vip2)" между 7 и 8. Постоянный, пока KJ
+    его не удалит.
+
+    Внутренний номер стола (Order.table_no, TableGroup.table_no и т.д.) —
+    after_table * 1000 + sub_index (7/1 -> 7001), чтобы вся остальная
+    механика столов (заказы, групповой стол, чек, закрытие) работала с ним
+    как с обычным числом. На экране показывается "7/1" (+ название).
+    В круге очереди идёт сразу после стола after_table.
+    """
+    __tablename__ = "extra_tables"
+
+    id = db.Column(db.Integer, primary_key=True)
+    club_id = db.Column(db.Integer, db.ForeignKey("clubs.club_id"), nullable=False, index=True)
+    table_no = db.Column(db.Integer, nullable=False)
+    after_table = db.Column(db.Integer, nullable=False)
+    sub_index = db.Column(db.Integer, nullable=False)
+    name = db.Column(db.String(40), nullable=True)
+    created_at = db.Column(db.DateTime(timezone=True), default=utcnow, nullable=False)
+
+    __table_args__ = (db.UniqueConstraint("club_id", "table_no", name="uq_extra_tables_club_table"),)
+
+    @property
+    def label(self) -> str:
+        return f"{self.after_table}/{self.sub_index}"
+
+    def to_dict(self):
+        return {
+            "table_no": self.table_no,
+            "after_table": self.after_table,
+            "sub_index": self.sub_index,
+            "label": self.label,
+            "name": self.name,
+            "title": f"{self.label} ({self.name})" if self.name else self.label,
+        }
