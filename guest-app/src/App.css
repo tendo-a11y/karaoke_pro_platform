@@ -1055,3 +1055,25 @@ button.step-blink-fill { animation: button-fill-blink 1s ease-in-out infinite; }
   background: rgba(255, 176, 32, 0.10); color: inherit; font: inherit; cursor: pointer;
 }
 .extra-table-picker__btn--active { background: rgba(255, 176, 32, 0.35); border-color: rgba(255, 176, 32, 0.9); font-weight: 600; }
+
+/* Уведомление о новом сообщении поверх всех экранов (2026-10-13) */
+.msg-popup-overlay {
+  position: fixed; inset: 0; z-index: 10000;
+  display: flex; align-items: flex-start; justify-content: center;
+  padding: 16px; background: rgba(0, 0, 0, 0.55);
+}
+.msg-popup {
+  width: 100%; max-width: 440px; margin-top: 8vh;
+  background: #1d1f27; color: #f3f3f3;
+  border: 2px solid rgba(255, 176, 32, 0.9); border-radius: 14px;
+  padding: 16px 18px; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+  animation: msg-popup-pulse 1.2s ease-in-out 3;
+}
+.msg-popup__title { font-weight: 700; margin-bottom: 8px; }
+.msg-popup__count { font-weight: 400; opacity: 0.7; }
+.msg-popup__text { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 40vh; overflow: auto; margin-bottom: 14px; }
+.msg-popup__actions { display: flex; flex-wrap: wrap; gap: 8px; }
+@keyframes msg-popup-pulse {
+  0%, 100% { box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6); }
+  50% { box-shadow: 0 0 0 6px rgba(255, 176, 32, 0.35), 0 12px 40px rgba(0, 0, 0, 0.6); }
+}
