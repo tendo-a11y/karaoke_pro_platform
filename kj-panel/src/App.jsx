@@ -2643,9 +2643,10 @@ const QUEUE_MODE_OPTIONS = [
 // время по часам этого компьютера.
 // ДОБАВЛЕНО (2026-10-13, запрос пользователя): доп. столы между обычными —
 // "полная посадка, вынесли 2 доп. стола, их надо вставить в очередь".
-// "После стола 7" + название (Vip) -> стол "7/1 (Vip)", следующий — "7/2".
+// Блок "Дополнительные столы" внутри "Настроек столов": "Вставить между
+// столом 7 и 8" + название (Vip) -> стол "7/1 (Vip)", следующий — "7/2".
 // В круге очереди идут сразу после своего стола. Постоянные, пока KJ не удалит.
-function ExtraTablesPanel({ token, clubId }) {
+function ExtraTablesBlock({ token, clubId, tableCount }) {
   const [items, setItems] = useState([]);
   const [afterTable, setAfterTable] = useState("");
   const [name, setName] = useState("");
@@ -2665,17 +2666,21 @@ function ExtraTablesPanel({ token, clubId }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, clubId]);
 
-  async function handleAdd(event) {
-    event.preventDefault();
-    const n = Number(afterTable);
-    if (!Number.isInteger(n) || n < 1) {
-      setError("Укажите номер стола, после которого поставить доп. стол");
+  const after = Number(afterTable);
+  const afterValid = afterTable !== "" && Number.isInteger(after) && after >= 1 && (!tableCount || after <= tableCount);
+  const nextTable = afterValid ? (tableCount && after >= tableCount ? 1 : after + 1) : "";
+  const nextSub = afterValid ? items.filter((i) => i.after_table === after).length + 1 : null;
+  const preview = afterValid ? `${after}/${nextSub}${name.trim() ? ` (${name.trim()})` : ""}` : "";
+
+  async function handleAdd() {
+    if (!afterValid) {
+      setError(tableCount ? `Укажите стол от 1 до ${tableCount}` : "Укажите номер стола");
       return;
     }
     setBusy(true);
     setError(null);
     try {
-      await api.createExtraTable(token, clubId, n, name.trim() || null);
+      await api.createExtraTable(token, clubId, after, name.trim() || null);
       setAfterTable("");
       setName("");
       await reload();
@@ -2701,42 +2706,58 @@ function ExtraTablesPanel({ token, clubId }) {
   }
 
   return (
-    <div className="table-settings-panel">
-      <section>
-        <h2>Доп. столы</h2>
-        <p className="empty-hint">
-          Если вынесли дополнительный стол — добавьте его после нужного стола. Например, после 7 получится «7/1», в очереди
-          он идёт сразу после 7 и перед 8. Гости выбирают его кнопкой при входе.
-        </p>
-        {error && <div className="banner banner--error">{error}</div>}
-        <form className="table-settings-form" onSubmit={handleAdd}>
-          <label className="table-settings-field">
-            <span>После стола</span>
-            <input type="number" min="1" value={afterTable} disabled={busy} onChange={(e) => setAfterTable(e.target.value)} />
-          </label>
-          <label className="table-settings-field">
-            <span>Название (необязательно)</span>
-            <input type="text" maxLength={40} placeholder="Vip" value={name} disabled={busy} onChange={(e) => setName(e.target.value)} />
-          </label>
-          <div className="table-settings-actions">
-            <button type="submit" className="btn btn--accent" disabled={busy || !afterTable}>
-              ➕ Доп. стол
-            </button>
-          </div>
-        </form>
-        {items.length > 0 && (
-          <ul className="extra-tables-list">
-            {items.map((item) => (
-              <li key={item.table_no} className="extra-tables-list__row">
-                <span>Стол {item.title}</span>
-                <button type="button" className="btn-link" disabled={busy} onClick={() => handleDelete(item)}>
-                  🗑 Удалить
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+    <div className="extra-tables-block">
+      <h3>Дополнительные столы</h3>
+      <p className="empty-hint">
+        Вынесли ещё стол — вставьте его между двумя столами. В очереди он пойдёт ровно на этом месте, гости выбирают его
+        кнопкой при входе.
+      </p>
+      {error && <div className="banner banner--error">{error}</div>}
+      <div className="table-settings-form">
+        <label className="table-settings-field">
+          <span>Вставить между столом</span>
+          <input
+            type="number"
+            min="1"
+            placeholder="7"
+            value={afterTable}
+            disabled={busy}
+            onChange={(e) => setAfterTable(e.target.value)}
+          />
+        </label>
+        <label className="table-settings-field">
+          <span>и столом</span>
+          <input type="number" placeholder="8" value={nextTable} readOnly disabled />
+        </label>
+        <label className="table-settings-field">
+          <span>Название (необязательно)</span>
+          <input
+            type="text"
+            maxLength={40}
+            placeholder="Vip"
+            value={name}
+            disabled={busy}
+            onChange={(e) => setName(e.target.value)}
+          />
+        </label>
+        <div className="table-settings-actions">
+          <button type="button" className="btn btn--accent" disabled={busy || !afterValid} onClick={handleAdd}>
+            ➕ Вставить стол{preview ? ` ${preview}` : ""}
+          </button>
+        </div>
+      </div>
+      {items.length > 0 && (
+        <ul className="extra-tables-list">
+          {items.map((item) => (
+            <li key={item.table_no} className="extra-tables-list__row">
+              <span>Стол {item.title}</span>
+              <button type="button" className="btn-link" disabled={busy} onClick={() => handleDelete(item)}>
+                🗑 Удалить
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
@@ -2954,6 +2975,11 @@ function TableSettingsPanel({ token, clubId }) {
           </button>
         </form>
         {saved && <p className="empty-hint">Сохранено.</p>}
+        <ExtraTablesBlock
+          token={token}
+          clubId={clubId}
+          tableCount={Number(tableCountDraft) > 0 ? Number(tableCountDraft) : null}
+        />
       </section>
     </div>
   );
@@ -4793,7 +4819,6 @@ export default function App() {
       ) : view === "tables" ? (
         <>
           <TableSettingsPanel token={token} clubId={me.club_id} />
-          <ExtraTablesPanel token={token} clubId={me.club_id} />
           <AutoClosePanel token={token} />
         </>
       ) : view === "guests" ? (
