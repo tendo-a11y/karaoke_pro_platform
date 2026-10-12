@@ -4,6 +4,14 @@ import "./App.css";
 import { LANG, LANGS, setLang } from "./i18n.js";
 import { LEGAL_HTML } from "./i18n_legal.js";
 
+// ДОБАВЛЕНО (2026-10-13): доп. столы между обычными — внутренний номер 7001
+// показывается как "7/1".
+function tableLabel(n) {
+  if (n == null || n === "") return "—";
+  const v = Number(n);
+  return Number.isInteger(v) && v >= 1000 ? `${Math.floor(v / 1000)}/${v % 1000}` : String(n);
+}
+
 // Флажки под кнопками языков (рисунком, чтобы были видны на любом телефоне).
 const LANG_FLAGS = {
   ru: (
@@ -1825,7 +1833,7 @@ function TableGroupPanel({ token, guestId, hasTable, status, onGroupChanged, tab
           }
         }}
       >
-        👥 Групповой стол{tableNo != null ? ` · ${tableNo}` : ""}
+        👥 Групповой стол{tableNo != null ? ` · ${tableLabel(tableNo)}` : ""}
         <span className={`collapsible-caret${open ? " collapsible-caret--blink" : ""}`}>{open ? "▲" : "▼"}</span>
       </h2>
       {adminLine && <p className="table-admin-line">{adminLine}</p>}
@@ -1835,16 +1843,16 @@ function TableGroupPanel({ token, guestId, hasTable, status, onGroupChanged, tab
 
       {status === "pending" && (
         <p className="table-wait-notice">
-          ⏳ Заявка на стол{tableNo != null ? ` ${tableNo}` : ""} отправлена. Ждите. {acceptsText}
+          ⏳ Заявка на стол{tableNo != null ? ` ${tableLabel(tableNo)}` : ""} отправлена. Ждите. {acceptsText}
         </p>
       )}
       {status === "not_joined" && (
         <>
           <p className="empty-hint">
-            Вы присоединяетесь к столу{tableNo != null ? ` ${tableNo}` : ""}. {acceptsText}
+            Вы присоединяетесь к столу{tableNo != null ? ` ${tableLabel(tableNo)}` : ""}. {acceptsText}
           </p>
           <button type="button" onClick={handleRequestJoin} disabled={requestingJoin}>
-            {requestingJoin ? "Отправляем…" : `🙋 Присоединиться к столу${tableNo != null ? ` ${tableNo}` : ""}`}
+            {requestingJoin ? "Отправляем…" : `🙋 Присоединиться к столу${tableNo != null ? ` ${tableLabel(tableNo)}` : ""}`}
           </button>
         </>
       )}
@@ -2595,6 +2603,13 @@ function ProfileNamePanel({ token, meInfo, onNameChanged }) {
 // от момента регистрации колбэка (она происходит один раз при монтировании).
 function ActivationPanel({ token, onActivated, onCancel }) {
   const [tableNo, setTableNo] = useState("");
+  // Доп. столы клуба ("7/1 (Vip)", 2026-10-13) — гость выбирает их кнопкой.
+  const [extraTables, setExtraTables] = useState([]);
+  const [selectedExtra, setSelectedExtra] = useState(null);
+
+  useEffect(() => {
+    api.listExtraTables(token).then((items) => setExtraTables(items || [])).catch(() => setExtraTables([]));
+  }, [token]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const panelRef = useRef(null);
@@ -2610,8 +2625,9 @@ function ActivationPanel({ token, onActivated, onCancel }) {
     panelRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
   }, []);
 
-  const parsedTableNo = Number(tableNo);
-  const tableNoValid = tableNo.trim() !== "" && Number.isInteger(parsedTableNo) && parsedTableNo > 0;
+  const parsedTableNo = selectedExtra != null ? selectedExtra : Number(tableNo);
+  const tableNoValid =
+    selectedExtra != null || (tableNo.trim() !== "" && Number.isInteger(parsedTableNo) && parsedTableNo > 0);
 
   const stateRef = useRef({ tableNoValid, parsedTableNo, busy });
   useEffect(() => {
@@ -2697,10 +2713,31 @@ function ActivationPanel({ token, onActivated, onCancel }) {
           type="number"
           min="1"
           value={tableNo}
-          onChange={(e) => setTableNo(e.target.value)}
+          onChange={(e) => {
+            setTableNo(e.target.value);
+            setSelectedExtra(null);
+          }}
           placeholder="Номер стола"
-          required
+          required={selectedExtra == null}
         />
+        {extraTables.length > 0 && (
+          <div className="extra-table-picker">
+            <span className="empty-hint">Доп. столы:</span>
+            {extraTables.map((t) => (
+              <button
+                key={t.table_no}
+                type="button"
+                className={`extra-table-picker__btn${selectedExtra === t.table_no ? " extra-table-picker__btn--active" : ""}`}
+                onClick={() => {
+                  setSelectedExtra(t.table_no);
+                  setTableNo("");
+                }}
+              >
+                {t.title}
+              </button>
+            ))}
+          </div>
+        )}
         <div ref={googleButtonRef} />
         {busy && <p className="empty-hint">Входим…</p>}
         <button type="button" className="link-btn" onClick={onCancel} disabled={busy}>
@@ -2729,7 +2766,7 @@ function TableCloseReceiptBanner({ closeRequest, onDismiss }) {
 
   return (
     <section className="panel table-close-receipt">
-      <h2>🧾 Чек стола {receipt.table_no}</h2>
+      <h2>🧾 Чек стола {tableLabel(receipt.table_no)}</h2>
       {/* ДОБАВЛЕНО (запрос пользователя 2026-09-28, "VIP и обычный гость за
       одним столом"): разбивка по гостям вместо одной общей суммы — VIP уже
       списан с баланса за свои песни при каждом "Готово" (см. docstring
@@ -3401,7 +3438,7 @@ export default function App() {
       <header className="app-header">
         <h1>🎤 {meInfo.club_name || "Karaoke"}</h1>
         <span className="app-header__table">
-          {meInfo.table_no != null ? `Стол ${meInfo.table_no}` : "Без стола"}
+          {meInfo.table_no != null ? `Стол ${tableLabel(meInfo.table_no)}` : "Без стола"}
         </span>
         <button type="button" className="btn-link" onClick={() => setView("messages")}>
           ✉️ Сообщения
