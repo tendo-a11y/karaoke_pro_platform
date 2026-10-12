@@ -116,6 +116,8 @@ const POLL_ORDERS_MS = 4000;
 // пользователь заметит новую песню в очереди с задержкой максимум 10с.
 const POLL_QUEUE_MS = 10000;
 const POLL_CHAT_MS = 4000;
+// Опрос новых сообщений ведущего для всплывающего уведомления (2026-10-13).
+const POLL_CHAT_POPUP_MS = 8000;
 const POLL_ME_MS = 5000;
 const POLL_FAVORITES_MS = 5000;
 const POLL_TABLE_GROUP_MS = 5000;
@@ -2901,6 +2903,91 @@ export default function App() {
   // чат с ведущим и ещё две кнопки-заглушки под будущие функции, вместо
   // того чтобы всё это было разбросано по главному экрану.
   const [view, setView] = useState("home");
+  // ДОБАВЛЕНО (2026-10-13, запрос пользователя "сообщения легко пропустить"):
+  // новое сообщение от ведущего всплывает окном поверх любого экрана.
+  const [chatPopup, setChatPopup] = useState(null);
+  const chatSeenKey = session ? `kp_chat_seen_${session.club_id}_${session.guest_id}` : null;
+
+  function markChatSeen(id) {
+    if (!chatSeenKey || id == null) return;
+    try {
+      const prev = Number(window.localStorage.getItem(chatSeenKey) || 0);
+      if (id > prev) window.localStorage.setItem(chatSeenKey, String(id));
+    } catch {
+      // localStorage недоступен — просто не запоминаем
+    }
+  }
+
+  useEffect(() => {
+    if (!session?.token || !chatSeenKey) return undefined;
+    let cancelled = false;
+    async function check() {
+      try {
+        const list = await api.listChat(session.token);
+        if (cancelled) return;
+        const fromKj = (list || []).filter((m) => !m.from_guest);
+        if (!fromKj.length) return;
+        const latest = fromKj.reduce((a, b) => (b.id > a.id ? b : a));
+        let seen = null;
+        try {
+          seen = window.localStorage.getItem(chatSeenKey);
+        } catch {
+          seen = String(latest.id);
+        }
+        if (seen == null) {
+          // Первый запуск — старые сообщения не всплывают.
+          markChatSeen(latest.id);
+          return;
+        }
+        if (view === "messages") {
+          markChatSeen(latest.id);
+          setChatPopup(null);
+          return;
+        }
+        if (latest.id > Number(seen)) setChatPopup(latest);
+      } catch {
+        // молча — следующий опрос попробует снова
+      }
+    }
+    check();
+    const id = setInterval(check, POLL_CHAT_POPUP_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.token, chatSeenKey, view]);
+
+  const chatPopupEl = chatPopup ? (
+    <div className="msg-popup-overlay" role="alertdialog" aria-live="assertive">
+      <div className="msg-popup">
+        <div className="msg-popup__title">💬 Сообщение от ведущего</div>
+        <div className="msg-popup__text">{chatPopup.message_text || (chatPopup.image_data_url ? "📷 Фото" : "")}</div>
+        <div className="msg-popup__actions">
+          <button
+            type="button"
+            onClick={() => {
+              markChatSeen(chatPopup.id);
+              setChatPopup(null);
+              setView("messages");
+            }}
+          >
+            Открыть сообщения
+          </button>
+          <button
+            type="button"
+            className="link-btn"
+            onClick={() => {
+              markChatSeen(chatPopup.id);
+              setChatPopup(null);
+            }}
+          >
+            Закрыть
+          </button>
+        </div>
+      </div>
+    </div>
+  ) : null;
   // ДОБАВЛЕНО (2026-10-01, запрос пользователя "заказ через скриншот") —
   // при переходе из кнопки "Скриншот" в форме заказа сразу прокручиваем к
   // отдельному разделу для скриншота в Сообщениях, чтобы не искать его
@@ -3376,6 +3463,7 @@ export default function App() {
   if (view === "screenshot") {
     return (
       <div className="app-shell">
+        {chatPopupEl}
         <header className="app-header">
           <h1>📷 Заказ через скриншот</h1>
           <button type="button" className="btn-link" onClick={() => setView("home")}>
@@ -3390,6 +3478,7 @@ export default function App() {
   if (view === "messages") {
     return (
       <div className="app-shell">
+        {chatPopupEl}
         <header className="app-header">
           <h1>✉️ Сообщения</h1>
           <button type="button" className="btn-link" onClick={() => setView("home")}>
@@ -3434,6 +3523,7 @@ export default function App() {
 
   return (
     <div className="app-shell">
+      {chatPopupEl}
       <LangSwitcher />
       <header className="app-header">
         <h1>🎤 {meInfo.club_name || "Karaoke"}</h1>
