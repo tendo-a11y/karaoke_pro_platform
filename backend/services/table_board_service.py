@@ -36,8 +36,21 @@ STATUS_QUEUED теперь означает не "реально стоит в �
 не сверкой с живой очередью VirtualDJ (get_kj_queue_view() теперь
 сознательно игнорирует такие заказы — у них никогда не будет vdj_item_id).
 """
+from datetime import datetime, timedelta, timezone
+
 from extensions import db
-from models import STATUS_ERROR, STATUS_PENDING, STATUS_PROCESSING, STATUS_QUEUED, Club, Order, Service, TableGroup
+from models import (
+    STATUS_COMPLETED,
+    STATUS_ERROR,
+    STATUS_PENDING,
+    STATUS_PLAYING,
+    STATUS_PROCESSING,
+    STATUS_QUEUED,
+    Club,
+    Order,
+    Service,
+    TableGroup,
+)
 from services.vdj_service import get_kj_queue_view
 
 # Заказ занимает место на карточке, пока не отклонён и не ушёл из очереди —
@@ -155,8 +168,68 @@ def _split_crazy_orders(orders: list[Order]) -> tuple[list[Order], list[Order]]:
     return crazy, rest
 
 
+def _aware(dt):
+    if dt is None:
+        return None
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
+
+
+def _round_cursor(club: Club, capacity: int):
+    """
+    ДОБАВЛЕНО (2026-10-13, баг от пользователя: "стол спел 2 песни, и у стола
+    есть ещё заказы — они моментально встают в очередь, а должны встать после
+    завершения круга").
+
+    Раньше круг каждый раз начинался заново со стола "Начало очереди", а
+    спетые песни из расчёта просто выпадали — система "забывала", что стол
+    уже пел в этом круге, и его следующие заказы занимали его же место.
+
+    Теперь положение круга берётся из того, что реально спето в этот вечер
+    (песня ушла в STATUS_PLAYING — "Готово" или автоматически по истории
+    VirtualDJ): круг продолжается со стола, который пел последним. Если этот
+    стол уже допел свои capacity песен — в текущем проходе ему 0 мест, и его
+    следующие заказы уходят в конец круга, после остальных столов.
+
+    Возвращает (стол или None, сколько мест у этого стола осталось в текущем
+    проходе). None — в этот вечер (после закрытия вечера и после того, как KJ
+    задал "Начало очереди") ещё никто не пел: круг начинается с "Начала
+    очереди", как и раньше. Песни CRAZY ("вне очереди") и без стола на круг
+    не влияют.
+    """
+    now = datetime.now(timezone.utc)
+    bounds = [now - timedelta(hours=24), _aware(club.evening_closed_at), _aware(club.queue_round_since)]
+    since = max(b for b in bounds if b is not None)
+    played = (
+        Order.query
+        .filter(
+            Order.club_id == club.club_id,
+            Order.table_no.isnot(None),
+            Order.playing_at.isnot(None),
+            Order.playing_at >= since,
+            Order.status.in_((STATUS_PLAYING, STATUS_COMPLETED)),
+        )
+        .order_by(Order.playing_at.desc(), Order.id.desc())
+        .limit(100)
+        .all()
+    )
+    _crazy, played = _split_crazy_orders(played)
+    if not played:
+        return None, capacity
+    table_no = played[0].table_no
+    count = 0
+    for order in played:
+        if order.table_no != table_no:
+            break
+        count += 1
+    capacity = max(capacity, 1)
+    used = count % capacity
+    left = capacity - used if used else 0
+    return table_no, left
+
+
 def _round_robin_order(
     orders: list[Order], table_count: int, capacity: int, anchor_table: int = 1,
+    anchor_first_take: int | None = None,
 ) -> list[Order]:
     """Круговой обход столов, начиная с anchor_table и далее по кругу
     (anchor_table..table_count, затем 1..anchor_table-1) — см. докстринг
@@ -178,8 +251,10 @@ def _round_robin_order(
     cursor = {table_no: 0 for table_no in by_table}
     sequence: list[Order] = []
     remaining = len(orders)
+    first_pass = True
     while remaining > 0:
         progressed = False
+        skipped_anchor = False
         for table_no in table_sequence:
             bucket = by_table.get(table_no)
             if not bucket:
@@ -187,11 +262,22 @@ def _round_robin_order(
             start = cursor[table_no]
             if start >= len(bucket):
                 continue
-            take = bucket[start:start + capacity]
+            limit = capacity
+            # Стол, который сейчас поёт (см. _round_cursor): в текущем проходе
+            # ему остаётся только недопетое; допел — его заказы в следующий круг.
+            if first_pass and table_no == anchor and anchor_first_take is not None:
+                limit = anchor_first_take
+                if limit <= 0:
+                    skipped_anchor = True
+                    continue
+            take = bucket[start:start + limit]
             sequence.extend(take)
             cursor[table_no] = start + len(take)
             remaining -= len(take)
             progressed = True
+        first_pass = False
+        if not progressed and skipped_anchor:
+            continue
         if not progressed:
             # Остались заказы столов вне диапазона 1..table_count (номер
             # стола больше текущего table_count клуба, например, после
@@ -239,7 +325,16 @@ def compute_queue_order(club_id: int) -> list[Order]:
             # первым сделал заказ, может не совпадать со столом, откуда KJ
             # реально решил начать вечер.
             anchor_table = get_queue_start_table(club)
-            ordered_tabled = _round_robin_order(tabled, table_count, get_table_capacity(club), anchor_table)
+            capacity = get_table_capacity(club)
+            # Круг продолжается с того стола, который пел последним (см.
+            # _round_cursor) — а не каждый раз заново с "Начала очереди".
+            cursor_table, left = _round_cursor(club, capacity)
+            if cursor_table is not None and 1 <= cursor_table <= table_count:
+                ordered_tabled = _round_robin_order(
+                    tabled, table_count, capacity, cursor_table, anchor_first_take=left,
+                )
+            else:
+                ordered_tabled = _round_robin_order(tabled, table_count, capacity, anchor_table)
         else:
             ordered_tabled = sorted(tabled, key=lambda o: (o.created_at, o.id))
         tableless_sorted = sorted(tableless, key=lambda o: (o.created_at, o.id))
