@@ -1309,7 +1309,7 @@ function resizeImageToBase64(file) {
   });
 }
 
-function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSuggestOther }) {
+function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSuggestOther, onSearchStart, active = false }) {
   // "Не эта" под найденной песней: подсказываем другие способы — моргают "Ссылка" и "Скриншот".
   const [suggestOther, setSuggestOther] = useState(false);
   // Неудачный поиск — пусть ещё моргает поле "Название песни" (запрос пользователя 2026-10).
@@ -1336,6 +1336,7 @@ function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSu
   async function handleScreenshotChange(event) {
     const file = event.target.files && event.target.files[0];
     if (!file) return;
+    if (onSearchStart) onSearchStart();
     setSearching(true);
     setError(null);
     setSearched(false);
@@ -1366,6 +1367,7 @@ function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSu
       setSearched(false);
       return;
     }
+    if (onSearchStart) onSearchStart();
     setSearching(true);
     setError(null);
     setSearched(false);
@@ -1392,7 +1394,7 @@ function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSu
     : "Ничего не нашлось по описанию — попробуйте другой режим поиска.";
 
   return (
-    <div className={`ai-search${searching ? " is-searching" : ""}`}>
+    <div className={`ai-search${searching || active ? " is-searching" : ""}`}>
       <div className="finder-modes">
         <div className="finder-group">
         {/* Распознавание скриншота отключено (2026-10-09): кнопка "Скриншот"
@@ -2995,6 +2997,8 @@ export default function App() {
   const [focusScreenshotOrder, setFocusScreenshotOrder] = useState(false);
 
   const [songTitle, setSongTitle] = useState("");
+  // Поиск песни начат — панель "Заказать песню" перестаёт мигать до отправки заказа.
+  const [aiSearchStarted, setAiSearchStarted] = useState(false);
   const [artist, setArtist] = useState("");
   const [serviceId, setServiceId] = useState("");
   const [showCategoryInfo, setShowCategoryInfo] = useState(false);
@@ -3259,6 +3263,7 @@ export default function App() {
       setSongTitle("");
       setArtist("");
       setSongUrl(null);
+      setAiSearchStarted(false);
       setServiceId("");
       setToneOn(false);
       setTone(null);
@@ -3565,6 +3570,8 @@ export default function App() {
         "Заказать". */}
         <AiSearch
           token={session.token}
+          active={aiSearchStarted}
+          onSearchStart={() => setAiSearchStarted(true)}
           onScreenshotHelp={() => {
             setView("screenshot");
           }}
