@@ -735,6 +735,15 @@ select {
 /* Во время поиска панель не мигает: мигает только кнопка "Найти". */
 .order-form-panel .ai-search.is-searching { animation: none; border-color: var(--border); box-shadow: none; }
 
+/* Предупреждение о категории "Интернет" после заказа по ссылке. */
+.internet-hint {
+  margin: 0 0 12px; padding: 10px 12px; border-radius: 10px;
+  border: 1px solid var(--accent); background: rgba(255, 176, 32, 0.12);
+  color: var(--text); font-size: 14px; line-height: 1.4;
+}
+.internet-hint p { margin: 0 0 8px; }
+.internet-hint__never { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+
 /* ДОБАВЛЕНО (2026-10, запрос пользователя: кнопка "Закрыть стол" —
    красная, но не яркая). */
 .table-group-close button {
