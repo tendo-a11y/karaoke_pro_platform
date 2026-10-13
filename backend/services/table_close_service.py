@@ -301,6 +301,20 @@ def update_table_order_category(club_id: int, table_no: int, order_id: int, kj, 
     return order, "updated"
 
 
+def list_evening_receipts(club_id: int, since) -> list[TableCloseRequest]:
+    """ДОБАВЛЕНО (2026-10-13): все чеки клуба за вечер (с since), все столы."""
+    return (
+        TableCloseRequest.query
+        .filter(
+            TableCloseRequest.club_id == club_id,
+            TableCloseRequest.status == STATUS_TABLE_CLOSE_APPROVED,
+            TableCloseRequest.decided_at >= since,
+        )
+        .order_by(TableCloseRequest.decided_at.desc(), TableCloseRequest.id.desc())
+        .all()
+    )
+
+
 def preview_receipt(club_id: int, table_no: int) -> dict | None:
     """
     ДОБАВЛЕНО (2026-10-13, запрос пользователя "посмотреть пречек перед
