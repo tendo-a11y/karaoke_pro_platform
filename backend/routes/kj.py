@@ -1863,6 +1863,17 @@ def list_table_receipts(club_id, table_no):
     return api_ok([r.to_dict() for r in rows])
 
 
+def _evening_cashback(club, total, vip_total):
+    """ДОБАВЛЕНО (2026-10-13): кешбэк клуба супер-админу за текущий вечер —
+    тот же процент и та же база (только VIP или вся выручка), что и при
+    записи кешбэка в конце вечера (services/cashback_service.py)."""
+    percent = float(club.cashback_percent) if club.cashback_percent is not None else None
+    vip_only = bool(club.cashback_vip_only)
+    base = vip_total if vip_only else total
+    amount = round(base * percent / 100, 2) if percent is not None else None
+    return {"percent": percent, "vip_only": vip_only, "base": round(base, 2), "amount": amount}
+
+
 @bp.get("/evening-receipts/<int:club_id>")
 @require_kj
 def list_evening_receipts_route(club_id):
@@ -1879,11 +1890,15 @@ def list_evening_receipts_route(club_id):
     total = 0.0
     payable = 0.0
     songs = 0
+    vip_total = 0.0
     for r in rows:
         rc = r.receipt_json if isinstance(r.receipt_json, dict) else {}
         total += float(rc.get("total") or 0)
         payable += float(rc.get("payable_total") or 0)
         songs += int(rc.get("song_count") or 0)
+        for g in rc.get("guests") or []:
+            if g.get("guest_type") == "vip":
+                vip_total += float(g.get("sum") or 0)
         for c in rc.get("categories") or []:
             name = c.get("category") or "Без категории"
             bucket = by_cat.setdefault(name, {"category": name, "count": 0, "sum": 0.0})
@@ -1898,6 +1913,8 @@ def list_evening_receipts_route(club_id):
         "song_count": songs,
         "total": round(total, 2),
         "payable_total": round(payable, 2),
+        "vip_total": round(vip_total, 2),
+        "cashback": _evening_cashback(club, total, vip_total),
     })
 
 
