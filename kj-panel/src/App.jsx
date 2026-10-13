@@ -1238,27 +1238,8 @@ function StatsPanel({ token, clubId }) {
             />
             <h3>Топ исполнителей</h3>
             <StatsTable head={["Исполнитель", "Раз"]} rows={data.songs.top_artists.map((a) => [a.artist, a.count])} />
-            <StatsTiles
-              items={[
-                { label: "Заказов с тональностью", value: data.songs.tone_total },
-                { label: "Тон ниже", value: data.songs.tone_down },
-                { label: "Тон выше", value: data.songs.tone_up },
-                { label: "Название исправлял KJ", value: data.songs.renamed_by_kj },
-              ]}
-            />
-          </section>
-
-          <section>
-            <h2>Откуда заказы</h2>
-            <StatsTiles
-              items={[
-                { label: "Заказали гости", value: data.how.by_guests },
-                { label: "Добавил KJ вручную", value: data.how.by_kj },
-                { label: "Из VirtualDJ без заказа", value: data.how.from_virtualdj },
-                { label: "«Готово» автоматически", value: data.how.done_auto },
-                { label: "«Готово» вручную", value: data.how.done_manual },
-              ]}
-            />
+            {/* Убрано (2026-10-13, запрос пользователя "вся эта статистика вообще не нужна"):
+                тональность, "Название исправлял KJ" и блок "Откуда заказы". */}
           </section>
 
           <section>
