@@ -11,6 +11,15 @@ function tableLabel(n) {
   return Number.isInteger(v) && v >= 1000 ? `${Math.floor(v / 1000)}/${v % 1000}` : String(n);
 }
 
+// Пояснение к строке "К оплате" в чеке (2026-10-14): если к оплате 0 (или меньше
+// итога), значит часть или все песни уже списаны автоматически с VIP-счёта гостя.
+function payableNote(total, payable) {
+  if (!total || total <= 0 || payable == null) return "";
+  if (payable <= 0) return " (всё оплачено с VIP-счёта)";
+  if (payable < total) return " (часть оплачена с VIP-счёта)";
+  return "";
+}
+
 // Системное уведомление браузера о новом сообщении (2026-10-13). Показываем
 // только когда вкладка скрыта или окно панели не в фокусе: пока KJ смотрит в панель,
 // хватает всплывающей плашки внутри неё. Нужно разрешение KJ (кнопка в шапке).
@@ -1185,6 +1194,7 @@ function StatsPanel({ token, clubId }) {
                   {new Date(r.decided_at).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })} · песен:{" "}
                   {r.receipt?.song_count ?? 0} · итого: {statsMoney(r.receipt?.total ?? 0)} · к оплате:{" "}
                   {statsMoney(r.receipt?.payable_total ?? 0)}
+                  {payableNote(r.receipt?.total ?? 0, r.receipt?.payable_total ?? 0)}
                   {r.hide_receipt ? " · гостю не показан" : ""}
                 </summary>
                 {r.receipt?.items && r.receipt.items.length > 0 && (
@@ -3770,6 +3780,7 @@ function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged, auto
                   {" · "}песен: <b>{r.receipt?.song_count ?? 0}</b>
                   {" · "}итого: <b>{statsMoney(r.receipt?.total ?? 0)}</b>
                   {" · "}к оплате на месте: <b>{statsMoney(r.receipt?.payable_total ?? 0)}</b>
+                  {payableNote(r.receipt?.total ?? 0, r.receipt?.payable_total ?? 0)}
                   {r.hide_receipt ? " · гостю не показан" : ""}
                 </div>
                 {r.receipt?.items && r.receipt.items.length > 0 && (
@@ -3893,7 +3904,10 @@ function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged, auto
                   <div className="precheck__totals">
                     <div>Песен: <b>{precheck.song_count}</b></div>
                     <div>Итого: <b>{statsMoney(precheck.total)}</b></div>
-                    <div>К оплате на месте: <b>{statsMoney(precheck.payable_total)}</b></div>
+                    <div>
+                      К оплате на месте: <b>{statsMoney(precheck.payable_total)}</b>
+                      {payableNote(precheck.total, precheck.payable_total)}
+                    </div>
                   </div>
                   <p className="empty-hint">✅ — уже спета, ⏳ — ещё не спета (при закрытии стола тоже попадёт в чек).</p>
                 </>
