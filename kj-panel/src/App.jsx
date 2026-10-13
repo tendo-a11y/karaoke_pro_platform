@@ -11,6 +11,23 @@ function tableLabel(n) {
   return Number.isInteger(v) && v >= 1000 ? `${Math.floor(v / 1000)}/${v % 1000}` : String(n);
 }
 
+// Системное уведомление браузера о новом сообщении (2026-10-13). Показываем
+// только когда вкладка свёрнута или в фоне: пока KJ смотрит в панель, хватает
+// всплывающей плашки внутри неё. Нужно разрешение KJ (кнопка в шапке).
+function notifyBrowser(title, body, tag) {
+  try {
+    if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+    if (!document.hidden) return;
+    const n = new Notification(title, { body: body || "", tag });
+    n.onclick = () => {
+      window.focus();
+      n.close();
+    };
+  } catch (_) {
+    // Браузер может не поддерживать уведомления в этом режиме — панель работает и без них.
+  }
+}
+
 function parseTableInput(raw) {
   const text = String(raw ?? "").trim();
   const m = text.match(/^(\d+)\s*\/\s*(\d+)$/);
@@ -4706,6 +4723,11 @@ export default function App() {
   const pushPopup = useCallback((popup) => {
     setPopups((prev) => (prev.some((p) => p.key === popup.key) ? prev : [...prev, popup]));
   }, []);
+  // Разрешение на системные уведомления (2026-10-13): "default" — ещё не спрашивали,
+  // "granted" / "denied" — ответ браузера, "unsupported" — браузер не умеет.
+  const [notifPerm, setNotifPerm] = useState(() =>
+    typeof Notification === "undefined" ? "unsupported" : Notification.permission
+  );
   // Мигание заголовка вкладки браузера, если KJ сейчас не смотрит в панель
   // (другая вкладка браузера или свёрнуто — запрос пользователя 2026-10:
   // "можно чтоб новое сообщение или новый заказ моргали в браузере если
@@ -4864,12 +4886,18 @@ export default function App() {
           hasImage: Boolean(message.image_data_url),
           table: message.table_no,
         });
+        notifyBrowser(
+          message.table_no ? `Сообщение от гостя, стол ${tableLabel(message.table_no)}` : "Сообщение от гостя",
+          message.message_text || (message.image_data_url ? "Фото" : ""),
+          `chat-${message.id}`
+        );
       }
     });
     socket.on("admin_message", (message) => {
       if (message.from_admin) {
         setHasNewMessages(true);
         pushPopup({ key: `admin-${message.id}`, kind: "admin", text: message.message_text });
+        notifyBrowser("Сообщение от администрации", message.message_text || "", `admin-${message.id}`);
       }
     });
 
@@ -4985,6 +5013,19 @@ export default function App() {
         <span className={`conn-badge ${connected ? "conn-badge--ok" : "conn-badge--off"}`}>
           {connected ? "● online" : "○ переподключение…"}
         </span>
+        {notifPerm === "default" && (
+          <button
+            type="button"
+            className="btn-link"
+            onClick={() => {
+              Notification.requestPermission()
+                .then((perm) => setNotifPerm(perm))
+                .catch(() => setNotifPerm("denied"));
+            }}
+          >
+            🔔 Включить уведомления
+          </button>
+        )}
         <div className="app-header__nav">
           {view !== "orders" && (
             <button type="button" className="btn-link" onClick={() => setView("orders")}>
