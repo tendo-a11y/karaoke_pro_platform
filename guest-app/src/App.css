@@ -732,6 +732,8 @@ select {
 @media (prefers-reduced-motion: reduce) {
   .order-form-panel .ai-search { animation: none; border-color: var(--accent); }
 }
+/* Во время поиска панель не мигает: мигает только кнопка "Найти". */
+.order-form-panel .ai-search.is-searching { animation: none; border-color: var(--border); box-shadow: none; }
 
 /* ДОБАВЛЕНО (2026-10, запрос пользователя: кнопка "Закрыть стол" —
    красная, но не яркая). */
