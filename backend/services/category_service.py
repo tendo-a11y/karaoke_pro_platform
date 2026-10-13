@@ -139,6 +139,8 @@ def update_category(club_id: int, category_id: int, **fields) -> Service:
         category.price = _parse_price(fields["price"])
     if "is_free" in fields:
         category.is_free = bool(fields["is_free"])
+    if "temp_hidden" in fields:
+        category.temp_hidden = bool(fields["temp_hidden"])
     db.session.commit()
     return category
 
