@@ -191,6 +191,7 @@ def _build_receipt(club_id: int, table_no: int, since) -> dict:
 
     categories = {}
     guests = {}
+    items = []
     total = 0.0
     payable_total = 0.0
     for order in orders:
@@ -219,15 +220,44 @@ def _build_receipt(club_id: int, table_no: int, since) -> dict:
         guest_bucket["sum"] += price
         if not paid:
             guest_bucket["paid"] = False
+        items.append({
+            "song_title": order.song_title,
+            "artist": order.artist,
+            "category": name,
+            "price": price,
+            "guest_name": account.display_name if account else None,
+            "paid": paid,
+        })
 
     return {
         "table_no": table_no,
         "song_count": len(orders),
         "categories": list(categories.values()),
         "guests": list(guests.values()),
+        "items": items,
         "total": total,
         "payable_total": payable_total,
     }
+
+
+def list_table_receipts(club_id: int, table_no: int, since) -> list[TableCloseRequest]:
+    """
+    ДОБАВЛЕНО (запрос пользователя 2026-10-13): все чеки уже закрытых сессий
+    стола за вечер (с since) — от новых к старым. Только approved: это и есть
+    закрытия (через заявку гостя или напрямую KJ), у каждого уже сохранён
+    receipt_json, поэтому чек виден и после закрытия стола.
+    """
+    return (
+        TableCloseRequest.query
+        .filter(
+            TableCloseRequest.club_id == club_id,
+            TableCloseRequest.table_no == table_no,
+            TableCloseRequest.status == STATUS_TABLE_CLOSE_APPROVED,
+            TableCloseRequest.decided_at >= since,
+        )
+        .order_by(TableCloseRequest.decided_at.desc(), TableCloseRequest.id.desc())
+        .all()
+    )
 
 
 def preview_receipt(club_id: int, table_no: int) -> dict | None:
