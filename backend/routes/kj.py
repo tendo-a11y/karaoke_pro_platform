@@ -1821,6 +1821,32 @@ def list_table_groups(club_id):
 
 # ДОБАВЛЕНО (2026-10-13, запрос пользователя): пречек — каким будет чек
 # стола, если закрыть его прямо сейчас. Ничего не закрывает и не меняет.
+@bp.put("/table-groups/<int:club_id>/<int:table_no>/orders/<int:order_id>/category")
+@require_kj
+def update_table_order_category_route(club_id, table_no, order_id):
+    """ДОБАВЛЕНО (2026-10-13): смена категории песни из пречека стола."""
+    denied = _ensure_own_club(club_id)
+    if denied:
+        return denied
+    payload = request.get_json(silent=True) or {}
+    service_id = payload.get("service_id")
+    if service_id is not None and (isinstance(service_id, bool) or not isinstance(service_id, int)):
+        return api_error(400, "VALIDATION_ERROR", "service_id должен быть числом, либо null (без категории)")
+    order, outcome = table_close_service.update_table_order_category(club_id, table_no, order_id, g.kj, service_id)
+    if outcome == "updated":
+        return api_ok(order.to_dict())
+    messages = {
+        "not_found": (404, "ORDER_NOT_FOUND", "Песня не найдена"),
+        "forbidden": (403, "FORBIDDEN", "Нет доступа к этой песне"),
+        "wrong_table": (400, "WRONG_TABLE", "Песня не за этим столом"),
+        "bad_status": (409, "BAD_STATUS", "Песню с таким статусом уже нельзя переназначить"),
+        "already_paid": (409, "ALREADY_PAID", "Песня уже оплачена с VIP-счёта — категорию поменять нельзя"),
+        "service_not_found": (404, "SERVICE_NOT_FOUND", "Категория не найдена"),
+    }
+    status_code, error_code, message = messages.get(outcome, (500, "INTERNAL_ERROR", "Неизвестный результат"))
+    return api_error(status_code, error_code, message)
+
+
 @bp.get("/table-receipts/<int:club_id>/<int:table_no>")
 @require_kj
 def list_table_receipts(club_id, table_no):
