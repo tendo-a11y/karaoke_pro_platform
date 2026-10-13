@@ -12,12 +12,12 @@ function tableLabel(n) {
 }
 
 // Системное уведомление браузера о новом сообщении (2026-10-13). Показываем
-// только когда вкладка свёрнута или в фоне: пока KJ смотрит в панель, хватает
-// всплывающей плашки внутри неё. Нужно разрешение KJ (кнопка в шапке).
+// только когда вкладка скрыта или окно панели не в фокусе: пока KJ смотрит в панель,
+// хватает всплывающей плашки внутри неё. Нужно разрешение KJ (кнопка в шапке).
 function notifyBrowser(title, body, tag) {
   try {
     if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
-    if (!document.hidden) return;
+    if (!document.hidden && document.hasFocus()) return;
     const n = new Notification(title, { body: body || "", tag });
     n.onclick = () => {
       window.focus();
