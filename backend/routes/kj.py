@@ -1821,6 +1821,22 @@ def list_table_groups(club_id):
 
 # ДОБАВЛЕНО (2026-10-13, запрос пользователя): пречек — каким будет чек
 # стола, если закрыть его прямо сейчас. Ничего не закрывает и не меняет.
+@bp.get("/table-receipts/<int:club_id>/<int:table_no>")
+@require_kj
+def list_table_receipts(club_id, table_no):
+    """ДОБАВЛЕНО (2026-10-13): чеки стола за текущий вечер (от последнего
+    "Закрыть все столы" или за последние сутки) — видны даже если стол уже
+    свободен."""
+    denied = _ensure_own_club(club_id)
+    if denied:
+        return denied
+    from services import cashback_service
+    club = db.session.get(Club, club_id)
+    since = cashback_service.evening_start(club, datetime.now(timezone.utc))
+    rows = table_close_service.list_table_receipts(club_id, table_no, since)
+    return api_ok([r.to_dict() for r in rows])
+
+
 @bp.get("/table-groups/<int:club_id>/<int:table_no>/precheck")
 @require_kj
 def table_precheck(club_id, table_no):
