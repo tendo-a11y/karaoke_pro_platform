@@ -334,7 +334,7 @@ export const api = {
     }),
   // Все чеки клуба за вечер + итоги по категориям (2026-10-13).
   getEveningReceipts: (token, clubId) =>
-    request(`/api/kj/evening-receipts/${clubId}`, { token }),
+    request(`/api/kj/evening-receipts/${clubId}?tz=${-new Date().getTimezoneOffset()}`, { token }),
   // Чеки стола за вечер (2026-10-13), видны и после закрытия.
   getTableReceipts: (token, clubId, tableNo) =>
     request(`/api/kj/table-receipts/${clubId}/${tableNo}`, { token }),
