@@ -44,6 +44,7 @@ from models import (
     Service,
     STATUS_COMPLETED,
     STATUS_PLAYING,
+    STATUS_QUEUED,
     STATUS_REJECTED,
     STATUS_TABLE_CLOSE_APPROVED,
     STATUS_TABLE_CLOSE_PENDING,
@@ -58,7 +59,7 @@ from models import (
 from services import billing_service, guest_status_service, table_group_service
 from services.category_service import not_bonus_filter
 from services.table_board_service import ACTIVE_TABLE_STATUSES, get_table_capacity, partition_table_orders
-from sockets import emit_table_close_request_created, emit_table_close_request_decided
+from sockets import emit_order_updated, emit_table_close_request_created, emit_table_close_request_decided
 
 
 def _utcnow():
@@ -260,6 +261,46 @@ def list_table_receipts(club_id: int, table_no: int, since) -> list[TableCloseRe
     )
 
 
+def update_table_order_category(club_id: int, table_no: int, order_id: int, kj, service_id):
+    """
+    ДОБАВЛЕНО (запрос пользователя 2026-10-13): смена категории песни прямо в
+    пречеке стола, в том числе у уже сыгранной песни (до закрытия стола).
+    Новая категория сохраняется у самой песни, поэтому меняются и цена в
+    чеке, и статистика.
+
+    Песню, за которую уже списали деньги с VIP-счёта (есть Transaction
+    TX_TYPE_ORDER_PAYMENT), менять нельзя — иначе списание и чек разойдутся.
+    Возвращает (order, outcome): updated, not_found, forbidden, wrong_table,
+    bad_status, already_paid, service_not_found.
+    """
+    order = db.session.get(Order, order_id)
+    if order is None:
+        return None, "not_found"
+    if order.club_id != club_id or order.club_id != kj.club_id:
+        return None, "forbidden"
+    if order.table_no != table_no:
+        return order, "wrong_table"
+    if order.status not in (STATUS_QUEUED, STATUS_PLAYING, STATUS_COMPLETED):
+        return order, "bad_status"
+
+    paid = db.session.query(Transaction.id).filter(
+        Transaction.order_id == order.id,
+        Transaction.type == TX_TYPE_ORDER_PAYMENT,
+    ).first()
+    if paid is not None:
+        return order, "already_paid"
+
+    if service_id is not None:
+        service = db.session.get(Service, service_id)
+        if service is None or service.club_id != club_id:
+            return order, "service_not_found"
+
+    order.service_id = service_id
+    db.session.commit()
+    emit_order_updated(order)
+    return order, "updated"
+
+
 def preview_receipt(club_id: int, table_no: int) -> dict | None:
     """
     ДОБАВЛЕНО (2026-10-13, запрос пользователя "посмотреть пречек перед
@@ -351,6 +392,7 @@ def preview_receipt(club_id: int, table_no: int) -> dict | None:
             guest_bucket["paid"] = False
         items.append({
             "order_id": order.id,
+            "service_id": order.service_id,
             "song_title": order.song_title,
             "artist": order.artist,
             "category": name,
