@@ -327,6 +327,9 @@ export const api = {
     request(`/api/kj/extra-tables/${clubId}`, { method: "POST", token, body: { after_table: afterTable, name } }),
   deleteExtraTable: (token, clubId, tableNo) =>
     request(`/api/kj/extra-tables/${clubId}/${tableNo}`, { method: "DELETE", token }),
+  // Чеки стола за вечер (2026-10-13), видны и после закрытия.
+  getTableReceipts: (token, clubId, tableNo) =>
+    request(`/api/kj/table-receipts/${clubId}/${tableNo}`, { token }),
   // Пречек стола — чек без закрытия (2026-10-13).
   getTablePrecheck: (token, clubId, tableNo) =>
     request(`/api/kj/table-groups/${clubId}/${tableNo}/precheck`, { token }),
