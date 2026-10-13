@@ -154,6 +154,8 @@ function KjMessagesThread({ token, clubId }) {
       const data = await api.listKjMessages(token, clubId);
       setMessages(data);
       setLoadError(null);
+      // Открыли переписку — сообщения KJ прочитаны (уведомление больше не всплывёт).
+      api.markKjMessagesRead(token, { club_id: clubId }).catch(() => {});
     } catch (err) {
       setLoadError(err instanceof ApiError ? err.message : String(err));
     }
@@ -1320,6 +1322,28 @@ export default function App() {
   // super_admin (обычный админ видит только 'clubs', см. рендер ниже).
   const [view, setView] = useState("clubs");
   const [showSuggestions, setShowSuggestions] = useState(false);
+  // ДОБАВЛЕНО (2026-10-13, запрос пользователя "сообщения легко пропустить"):
+  // новое сообщение от KJ всплывает окном поверх любого экрана админки.
+  const [kjUnread, setKjUnread] = useState([]);
+
+  useEffect(() => {
+    if (!token || !me) return undefined;
+    let cancelled = false;
+    async function check() {
+      try {
+        const list = await api.listUnreadKjMessages(token);
+        if (!cancelled) setKjUnread(list || []);
+      } catch {
+        // молча — следующий опрос попробует снова
+      }
+    }
+    check();
+    const id = setInterval(check, 15000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [token, me]);
 
   async function reloadClubs() {
     try {
@@ -1424,8 +1448,45 @@ export default function App() {
     );
   }
 
+  const kjPopup = kjUnread.length ? kjUnread[kjUnread.length - 1] : null;
+
   return (
     <div className="app-shell">
+      {kjPopup && (
+        <div className="msg-popup-overlay" role="alertdialog" aria-live="assertive">
+          <div className="msg-popup">
+            <div className="msg-popup__title">
+              💬 Сообщение от KJ{kjPopup.club_name ? ` · ${kjPopup.club_name}` : ""}
+              {kjUnread.length > 1 && <span className="msg-popup__count"> · ещё {kjUnread.length - 1}</span>}
+            </div>
+            <div className="msg-popup__text">{kjPopup.message_text}</div>
+            <div className="msg-popup__actions">
+              <button
+                type="button"
+                onClick={() => {
+                  api.markKjMessagesRead(token, { club_id: kjPopup.club_id }).catch(() => {});
+                  setKjUnread((prev) => prev.filter((m) => m.club_id !== kjPopup.club_id));
+                  setShowSuggestions(false);
+                  setView("clubs");
+                  setSelectedClubId(kjPopup.club_id);
+                }}
+              >
+                Открыть клуб
+              </button>
+              <button
+                type="button"
+                className="link-btn"
+                onClick={() => {
+                  api.markKjMessagesRead(token, { ids: [kjPopup.id] }).catch(() => {});
+                  setKjUnread((prev) => prev.filter((m) => m.id !== kjPopup.id));
+                }}
+              >
+                Закрыть
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <header className="app-header">
         <div>
           <h1>Karaoke Admin</h1>
