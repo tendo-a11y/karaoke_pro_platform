@@ -86,6 +86,7 @@ Apple Music/iTunes сюда сознательно не входят по той
 backend синхронные, как и остальные внешние вызовы (services/notify.py,
 vdj/http_client.py).
 """
+import html
 import json
 import logging
 import re
@@ -484,6 +485,38 @@ def _looks_like_link(text: str) -> bool:
     return any(domain in host for domain in LINK_DOMAINS)
 
 
+def _youtube_title_from_page(url: str) -> list[dict]:
+    """
+    Запасной путь, если oEmbed YouTube не отвечает (с 13.10.2026 он отдаёт 401
+    на запросы с нашего сервера): читаем название и канал прямо со страницы
+    видео, обычным запросом, без ключей.
+    """
+    match = re.search(r"(?:v=|youtu\.be/)([A-Za-z0-9_-]{6,})", url)
+    if not match:
+        return []
+    video_id = match.group(1)
+    resp = requests.get(
+        "https://www.youtube.com/watch",
+        params={"v": video_id},
+        headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
+                 "Accept-Language": "ru,en;q=0.8"},
+        timeout=8,
+    )
+    if resp.status_code != 200:
+        logger.error("YouTube страница вернула %s для %s", resp.status_code, url)
+        return []
+    page = resp.text
+    title_match = re.search(r'<meta property="og:title" content="([^"]+)"', page)
+    if not title_match:
+        return []
+    title = html.unescape(title_match.group(1)).strip()
+    author_match = re.search(r'"ownerChannelName":"([^"]+)"', page)
+    author = html.unescape(author_match.group(1)).strip() if author_match else None
+    if not title:
+        return []
+    return [{"title": title, "artist": author, "source_url": url}]
+
+
 def _resolve_link(url: str) -> list[dict]:
     """
     Гость прислал прямую ссылку — значит, он уже точно знает песню, гадать
@@ -503,12 +536,12 @@ def _resolve_link(url: str) -> list[dict]:
                 timeout=8,
             )
             if resp.status_code != 200:
-                logger.error("YouTube oEmbed вернул %s для %s", resp.status_code, url)
-                return []
+                logger.error("YouTube oEmbed вернул %s для %s, пробуем страницу видео", resp.status_code, url)
+                return _youtube_title_from_page(url)
             data = resp.json()
             title = data.get("title")
             if not title:
-                return []
+                return _youtube_title_from_page(url)
             # author_name — это канал на Ютубе, не всегда точно исполнитель
             # песни, но для официальных каналов артистов обычно совпадает.
             return [{"title": title, "artist": data.get("author_name"), "source_url": url}]
