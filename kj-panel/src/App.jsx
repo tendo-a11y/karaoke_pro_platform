@@ -3454,6 +3454,10 @@ function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged, auto
   const [actionError, setActionError] = useState(null);
   // По умолчанию чек гостю НЕ показываем; показываем только при галочке «Показать чек».
   const [showReceipt, setShowReceipt] = useState(false);
+  // Чеки стола за вечер (2026-10-13) — видны даже если стол уже свободен.
+  const [receiptsOpen, setReceiptsOpen] = useState(false);
+  const [receipts, setReceipts] = useState(null);
+  const [receiptsError, setReceiptsError] = useState(null);
   // Пречек (2026-10-13): каким будет чек, если закрыть стол сейчас.
   const [precheck, setPrecheck] = useState(null);
   const [precheckOpen, setPrecheckOpen] = useState(false);
@@ -3471,6 +3475,20 @@ function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged, auto
       setPrecheck(await api.getTablePrecheck(token, clubId, tableNo));
     } catch (err) {
       setPrecheckError(err instanceof ApiError ? err.message : String(err));
+    }
+  }
+  async function handleToggleReceipts() {
+    if (receiptsOpen) {
+      setReceiptsOpen(false);
+      return;
+    }
+    setReceiptsOpen(true);
+    setReceipts(null);
+    setReceiptsError(null);
+    try {
+      setReceipts(await api.getTableReceipts(token, clubId, tableNo));
+    } catch (err) {
+      setReceiptsError(err instanceof ApiError ? err.message : String(err));
     }
   }
   const [moveOpen, setMoveOpen] = useState(false);
@@ -3704,6 +3722,44 @@ function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged, auto
 
           {actionError && <div className="banner banner--error">{actionError}</div>}
 
+          {receiptsOpen && (
+            <div className="precheck">
+              <h3>🧾 Чеки стола {tableLabel(tableNo)} за вечер</h3>
+              {receiptsError && <div className="banner banner--error">{receiptsError}</div>}
+              {!receipts && !receiptsError && <p className="empty-hint">Загрузка…</p>}
+              {receipts && receipts.length === 0 && (
+                <p className="empty-hint">За этот вечер чеков по столу нет.</p>
+              )}
+              {receipts &&
+                receipts.map((r) => (
+                  <div key={r.id} className="receipt-item">
+                    <div>
+                      <b>{new Date(r.decided_at).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}</b>
+                      {" · "}песен: <b>{r.receipt?.song_count ?? 0}</b>
+                      {" · "}итого: <b>{statsMoney(r.receipt?.total ?? 0)}</b>
+                      {" · "}к оплате на месте: <b>{statsMoney(r.receipt?.payable_total ?? 0)}</b>
+                      {r.hide_receipt ? " · гостю не показан" : ""}
+                    </div>
+                    {r.receipt?.items && r.receipt.items.length > 0 && (
+                      <ul className="precheck__items">
+                        {r.receipt.items.map((it, idx) => (
+                          <li key={idx} className="precheck__item">
+                            <span>
+                              {it.artist ? `${it.artist} — ` : ""}{it.song_title}
+                              <span className="empty-hint">
+                                {" "}· {it.category}{it.guest_name ? ` · ${it.guest_name}` : ""}
+                                {it.paid ? " · оплачено с VIP" : ""}
+                              </span>
+                            </span>
+                            <b>{statsMoney(it.price)}</b>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                ))}
+            </div>
+          )}
           {precheckOpen && (
             <div className="precheck">
               <h3>🧾 Пречек стола {tableLabel(tableNo)}</h3>
@@ -3744,6 +3800,9 @@ function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged, auto
           <div className="table-group-card__actions">
             <button type="button" className="btn" disabled={busy} onClick={handleTogglePrecheck}>
               {precheckOpen ? "Скрыть пречек" : "🧾 Пречек"}
+            </button>
+            <button type="button" className="btn" onClick={handleToggleReceipts}>
+              {receiptsOpen ? "Скрыть чеки" : "🧾 Чеки за вечер"}
             </button>
             <label className="table-close-hide-receipt">
               <input type="checkbox" checked={showReceipt} onChange={(e) => setShowReceipt(e.target.checked)} />
