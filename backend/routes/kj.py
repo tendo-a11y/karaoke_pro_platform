@@ -1863,34 +1863,31 @@ def list_table_receipts(club_id, table_no):
     return api_ok([r.to_dict() for r in rows])
 
 
-def _evening_cashback(club, total, vip_total):
-    """ДОБАВЛЕНО (2026-10-13): кешбэк клуба супер-админу за текущий вечер —
-    тот же процент и та же база (только VIP или вся выручка), что и при
-    записи кешбэка в конце вечера (services/cashback_service.py)."""
-    percent = float(club.cashback_percent) if club.cashback_percent is not None else None
-    vip_only = bool(club.cashback_vip_only)
-    base = vip_total if vip_only else total
-    amount = round(base * percent / 100, 2) if percent is not None else None
-    return {"percent": percent, "vip_only": vip_only, "base": round(base, 2), "amount": amount}
-
-
 @bp.get("/evening-receipts/<int:club_id>")
 @require_kj
 def list_evening_receipts_route(club_id):
-    """ДОБАВЛЕНО (2026-10-13): все чеки клуба за текущий вечер + итоги по
-    категориям (суммы по всем столам и всем чекам)."""
+    """ДОБАВЛЕНО (2026-10-13): все чеки клуба за текущие сутки клуба
+    (с 08:00 до 08:00 местного времени, как в статистике) + итоги по
+    категориям. Кешбэк сюда не отдаём: он считается и виден только в
+    админке (см. services/cashback_service.py)."""
     denied = _ensure_own_club(club_id)
     if denied:
         return denied
-    from services import cashback_service
-    club = db.session.get(Club, club_id)
-    since = cashback_service.evening_start(club, datetime.now(timezone.utc))
+    from services import club_stats_service
+    try:
+        tz_offset = int(request.args.get("tz", "0"))
+    except ValueError:
+        return api_error(400, "VALIDATION_ERROR", "tz должен быть числом")
+    if not -840 <= tz_offset <= 840:
+        return api_error(400, "VALIDATION_ERROR", "tz вне допустимого диапазона")
+    today = club_stats_service.today_club_day(tz_offset)
+    since, _end = club_stats_service._window(today, today, tz_offset)
     rows = table_close_service.list_evening_receipts(club_id, since)
     by_cat = {}
     total = 0.0
     payable = 0.0
-    songs = 0
     vip_total = 0.0
+    songs = 0
     for r in rows:
         rc = r.receipt_json if isinstance(r.receipt_json, dict) else {}
         total += float(rc.get("total") or 0)
@@ -1908,13 +1905,13 @@ def list_evening_receipts_route(club_id):
     for c in categories:
         c["sum"] = round(c["sum"], 2)
     return api_ok({
+        "day": today.isoformat(),
         "receipts": [r.to_dict() for r in rows],
         "categories": categories,
         "song_count": songs,
         "total": round(total, 2),
         "payable_total": round(payable, 2),
         "vip_total": round(vip_total, 2),
-        "cashback": _evening_cashback(club, total, vip_total),
     })
 
 
