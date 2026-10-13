@@ -1392,7 +1392,7 @@ function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSu
     : "Ничего не нашлось по описанию — попробуйте другой режим поиска.";
 
   return (
-    <div className="ai-search">
+    <div className={`ai-search${searching ? " is-searching" : ""}`}>
       <div className="finder-modes">
         <div className="finder-group">
         {/* Распознавание скриншота отключено (2026-10-09): кнопка "Скриншот"
