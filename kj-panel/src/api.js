@@ -332,6 +332,9 @@ export const api = {
     request(`/api/kj/table-groups/${clubId}/${tableNo}/orders/${orderId}/category`, {
       method: "PUT", token, body: { service_id: serviceId },
     }),
+  // Все чеки клуба за вечер + итоги по категориям (2026-10-13).
+  getEveningReceipts: (token, clubId) =>
+    request(`/api/kj/evening-receipts/${clubId}`, { token }),
   // Чеки стола за вечер (2026-10-13), видны и после закрытия.
   getTableReceipts: (token, clubId, tableNo) =>
     request(`/api/kj/table-receipts/${clubId}/${tableNo}`, { token }),
