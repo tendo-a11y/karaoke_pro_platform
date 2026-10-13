@@ -1863,6 +1863,44 @@ def list_table_receipts(club_id, table_no):
     return api_ok([r.to_dict() for r in rows])
 
 
+@bp.get("/evening-receipts/<int:club_id>")
+@require_kj
+def list_evening_receipts_route(club_id):
+    """ДОБАВЛЕНО (2026-10-13): все чеки клуба за текущий вечер + итоги по
+    категориям (суммы по всем столам и всем чекам)."""
+    denied = _ensure_own_club(club_id)
+    if denied:
+        return denied
+    from services import cashback_service
+    club = db.session.get(Club, club_id)
+    since = cashback_service.evening_start(club, datetime.now(timezone.utc))
+    rows = table_close_service.list_evening_receipts(club_id, since)
+    by_cat = {}
+    total = 0.0
+    payable = 0.0
+    songs = 0
+    for r in rows:
+        rc = r.receipt_json if isinstance(r.receipt_json, dict) else {}
+        total += float(rc.get("total") or 0)
+        payable += float(rc.get("payable_total") or 0)
+        songs += int(rc.get("song_count") or 0)
+        for c in rc.get("categories") or []:
+            name = c.get("category") or "Без категории"
+            bucket = by_cat.setdefault(name, {"category": name, "count": 0, "sum": 0.0})
+            bucket["count"] += int(c.get("count") or 0)
+            bucket["sum"] += float(c.get("sum") or 0)
+    categories = sorted(by_cat.values(), key=lambda x: -x["sum"])
+    for c in categories:
+        c["sum"] = round(c["sum"], 2)
+    return api_ok({
+        "receipts": [r.to_dict() for r in rows],
+        "categories": categories,
+        "song_count": songs,
+        "total": round(total, 2),
+        "payable_total": round(payable, 2),
+    })
+
+
 @bp.get("/table-groups/<int:club_id>/<int:table_no>/precheck")
 @require_kj
 def table_precheck(club_id, table_no):
