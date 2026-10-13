@@ -327,6 +327,11 @@ export const api = {
     request(`/api/kj/extra-tables/${clubId}`, { method: "POST", token, body: { after_table: afterTable, name } }),
   deleteExtraTable: (token, clubId, tableNo) =>
     request(`/api/kj/extra-tables/${clubId}/${tableNo}`, { method: "DELETE", token }),
+  // Смена категории песни из пречека (2026-10-13).
+  updateTableOrderCategory: (token, clubId, tableNo, orderId, serviceId) =>
+    request(`/api/kj/table-groups/${clubId}/${tableNo}/orders/${orderId}/category`, {
+      method: "PUT", token, body: { service_id: serviceId },
+    }),
   // Чеки стола за вечер (2026-10-13), видны и после закрытия.
   getTableReceipts: (token, clubId, tableNo) =>
     request(`/api/kj/table-receipts/${clubId}/${tableNo}`, { token }),
