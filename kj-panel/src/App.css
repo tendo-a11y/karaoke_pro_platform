@@ -1027,3 +1027,4 @@ img { max-width: 100%; }
 .precheck__items { list-style: none; padding: 0; margin: 8px 0; display: flex; flex-direction: column; gap: 6px; }
 .precheck__item { display: flex; justify-content: space-between; gap: 10px; }
 .precheck__totals { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 8px; }
+.receipt-item { margin-top: 10px; }
