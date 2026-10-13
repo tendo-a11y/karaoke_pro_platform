@@ -802,7 +802,8 @@ function TableCloseRequestsPanel({ token, clubId, socket }) {
   const [pending, setPending] = useState(null);
   const [actionError, setActionError] = useState(null);
   const [busyKey, setBusyKey] = useState(null);
-  const [hideReceiptByRequest, setHideReceiptByRequest] = useState({});
+  // По умолчанию чек гостю НЕ показываем; показываем только при галочке «Показать чек».
+  const [showReceiptByRequest, setShowReceiptByRequest] = useState({});
 
   async function reload() {
     try {
@@ -843,7 +844,7 @@ function TableCloseRequestsPanel({ token, clubId, socket }) {
     setBusyKey(requestId);
     setActionError(null);
     try {
-      await api.approveTableCloseRequest(token, requestId, !!hideReceiptByRequest[requestId]);
+      await api.approveTableCloseRequest(token, requestId, !showReceiptByRequest[requestId]);
       await reload();
     } catch (err) {
       setActionError(err instanceof ApiError ? err.message : String(err));
@@ -887,12 +888,12 @@ function TableCloseRequestsPanel({ token, clubId, socket }) {
               <label className="table-close-hide-receipt">
                 <input
                   type="checkbox"
-                  checked={!!hideReceiptByRequest[r.id]}
+                  checked={!!showReceiptByRequest[r.id]}
                   onChange={(e) =>
-                    setHideReceiptByRequest((prev) => ({ ...prev, [r.id]: e.target.checked }))
+                    setShowReceiptByRequest((prev) => ({ ...prev, [r.id]: e.target.checked }))
                   }
                 />
-                Не показывать чек
+                Показать чек
               </label>
               <button
                 type="button" className="btn btn--accent" disabled={busyKey === r.id}
@@ -3451,7 +3452,8 @@ function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged, auto
   const [selectedGuestId, setSelectedGuestId] = useState(null);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState(null);
-  const [hideReceipt, setHideReceipt] = useState(false);
+  // По умолчанию чек гостю НЕ показываем; показываем только при галочке «Показать чек».
+  const [showReceipt, setShowReceipt] = useState(false);
   // Пречек (2026-10-13): каким будет чек, если закрыть стол сейчас.
   const [precheck, setPrecheck] = useState(null);
   const [precheckOpen, setPrecheckOpen] = useState(false);
@@ -3531,7 +3533,7 @@ function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged, auto
     setBusy(true);
     setActionError(null);
     try {
-      await api.closeTableGroup(token, clubId, tableNo, hideReceipt);
+      await api.closeTableGroup(token, clubId, tableNo, !showReceipt);
       onBack();
     } catch (err) {
       setActionError(err instanceof ApiError ? err.message : String(err));
@@ -3744,8 +3746,8 @@ function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged, auto
               {precheckOpen ? "Скрыть пречек" : "🧾 Пречек"}
             </button>
             <label className="table-close-hide-receipt">
-              <input type="checkbox" checked={hideReceipt} onChange={(e) => setHideReceipt(e.target.checked)} />
-              Не показывать чек
+              <input type="checkbox" checked={showReceipt} onChange={(e) => setShowReceipt(e.target.checked)} />
+              Показать чек
             </label>
             <button type="button" className="btn btn--reject" disabled={busy} onClick={handleClose}>
               🔒 Закрыть стол
