@@ -1063,7 +1063,7 @@ function StatsPanel({ token, clubId }) {
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
-  // Все чеки клуба за текущий вечер + кешбэк супер-админу (2026-10-13).
+  // Все чеки клуба за текущие сутки клуба (2026-10-13).
   const [evening, setEvening] = useState(null);
   useEffect(() => {
     api.getEveningReceipts(token, clubId).then(setEvening).catch(() => setEvening(null));
@@ -1152,15 +1152,9 @@ function StatsPanel({ token, clubId }) {
                 { label: "От VIP", value: statsMoney(evening.vip_total) },
               ]}
             />
-            {evening.cashback && evening.cashback.percent != null && (
-              <p>
-                Кешбэк супер-админу за вечер: <b>{statsMoney(evening.cashback.amount)}</b> — {evening.cashback.percent}% от{" "}
-                {evening.cashback.vip_only ? "выручки VIP" : "всей выручки"} ({statsMoney(evening.cashback.base)})
-              </p>
-            )}
           </>
         )}
-        <p className="empty-hint">Вечер — с последнего «Закрыть все столы» (или за последние сутки).</p>
+        <p className="empty-hint">Сутки клуба — с 08:00 до 08:00, как в «Сегодня» выше.</p>
       </section>
 
       {data && (
