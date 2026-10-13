@@ -3452,6 +3452,25 @@ function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged, auto
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState(null);
   const [hideReceipt, setHideReceipt] = useState(false);
+  // Пречек (2026-10-13): каким будет чек, если закрыть стол сейчас.
+  const [precheck, setPrecheck] = useState(null);
+  const [precheckOpen, setPrecheckOpen] = useState(false);
+  const [precheckError, setPrecheckError] = useState(null);
+
+  async function handleTogglePrecheck() {
+    if (precheckOpen) {
+      setPrecheckOpen(false);
+      return;
+    }
+    setPrecheckOpen(true);
+    setPrecheck(null);
+    setPrecheckError(null);
+    try {
+      setPrecheck(await api.getTablePrecheck(token, clubId, tableNo));
+    } catch (err) {
+      setPrecheckError(err instanceof ApiError ? err.message : String(err));
+    }
+  }
   const [moveOpen, setMoveOpen] = useState(false);
   const [moveTarget, setMoveTarget] = useState("");
   const [freeTables, setFreeTables] = useState(null);
@@ -3683,7 +3702,47 @@ function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged, auto
 
           {actionError && <div className="banner banner--error">{actionError}</div>}
 
+          {precheckOpen && (
+            <div className="precheck">
+              <h3>🧾 Пречек стола {tableLabel(tableNo)}</h3>
+              <p className="empty-hint">Так будет выглядеть чек, если закрыть стол сейчас. Стол не закрывается.</p>
+              {precheckError && <div className="banner banner--error">{precheckError}</div>}
+              {!precheck && !precheckError && <p className="empty-hint">Загрузка…</p>}
+              {precheck && (
+                <>
+                  {precheck.items.length === 0 ? (
+                    <p className="empty-hint">Песен пока нет.</p>
+                  ) : (
+                    <ul className="precheck__items">
+                      {precheck.items.map((it) => (
+                        <li key={it.order_id} className="precheck__item">
+                          <span>
+                            {it.sung ? "✅" : "⏳"} {it.artist ? `${it.artist} — ` : ""}{it.song_title}
+                            <span className="empty-hint">
+                              {" "}· {it.category}{it.guest_name ? ` · ${it.guest_name}` : ""}
+                              {it.paid ? " · оплачено с VIP" : ""}
+                            </span>
+                          </span>
+                          <b>{statsMoney(it.price)}</b>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <div className="precheck__totals">
+                    <div>Песен: <b>{precheck.song_count}</b></div>
+                    <div>Итого: <b>{statsMoney(precheck.total)}</b></div>
+                    <div>К оплате на месте: <b>{statsMoney(precheck.payable_total)}</b></div>
+                  </div>
+                  <p className="empty-hint">✅ — уже спета, ⏳ — ещё не спета (при закрытии стола тоже попадёт в чек).</p>
+                </>
+              )}
+            </div>
+          )}
+
           <div className="table-group-card__actions">
+            <button type="button" className="btn" disabled={busy} onClick={handleTogglePrecheck}>
+              {precheckOpen ? "Скрыть пречек" : "🧾 Пречек"}
+            </button>
             <label className="table-close-hide-receipt">
               <input type="checkbox" checked={hideReceipt} onChange={(e) => setHideReceipt(e.target.checked)} />
               Не показывать чек
