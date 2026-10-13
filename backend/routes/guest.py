@@ -358,7 +358,10 @@ def list_services():
     не попадает вообще — такую категорию гость не должен ни видеть в форме
     заказа, ни выбрать. Ставить её можно только самому KJ, отдельно на уже
     принятом заказе (см. routes/kj.py::update_order_category_route)."""
-    services = Service.query.filter_by(club_id=g.club_id, kj_only=False).order_by(Service.id.asc()).all()
+    services = (
+        Service.query.filter_by(club_id=g.club_id, kj_only=False, temp_hidden=False)
+        .order_by(Service.id.asc()).all()
+    )
     return api_ok([s.to_dict() for s in services])
 
 
