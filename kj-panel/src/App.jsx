@@ -3455,9 +3455,8 @@ function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged, auto
   // По умолчанию чек гостю НЕ показываем; показываем только при галочке «Показать чек».
   const [showReceipt, setShowReceipt] = useState(false);
   // Чеки стола за вечер (2026-10-13) — видны даже если стол уже свободен.
-  const [receiptsOpen, setReceiptsOpen] = useState(false);
-  const [receipts, setReceipts] = useState(null);
-  const [receiptsError, setReceiptsError] = useState(null);
+  const [evening, setEvening] = useState(null);
+  const [eveningError, setEveningError] = useState(null);
   // Пречек (2026-10-13): каким будет чек, если закрыть стол сейчас.
   const [precheck, setPrecheck] = useState(null);
   const [precheckOpen, setPrecheckOpen] = useState(false);
@@ -3483,20 +3482,18 @@ function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged, auto
       setPrecheckError(err instanceof ApiError ? err.message : String(err));
     }
   }
-  async function handleToggleReceipts() {
-    if (receiptsOpen) {
-      setReceiptsOpen(false);
-      return;
-    }
-    setReceiptsOpen(true);
-    setReceipts(null);
-    setReceiptsError(null);
+  async function loadEvening() {
     try {
-      setReceipts(await api.getTableReceipts(token, clubId, tableNo));
+      setEvening(await api.getEveningReceipts(token, clubId));
+      setEveningError(null);
     } catch (err) {
-      setReceiptsError(err instanceof ApiError ? err.message : String(err));
+      setEveningError(err instanceof ApiError ? err.message : String(err));
     }
   }
+  useEffect(() => {
+    loadEvening();
+  }, [tableNo]);
+  const tableReceipts = (evening?.receipts || []).filter((r) => r.table_no === tableNo);
   async function handleChangePrecheckCategory(orderId, value) {
     setPrecheckBusy(true);
     setPrecheckError(null);
@@ -3679,52 +3676,65 @@ function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged, auto
         </>
       )}
 
-      {loadError === "empty" && <p className="empty-hint">За этим столом сейчас никого нет.</p>}
       {loadError && loadError !== "empty" && <div className="banner banner--error">{loadError}</div>}
       {!group && !loadError && <p className="empty-hint">Загрузка…</p>}
-      <div className="table-group-card__actions">
-        <button type="button" className="btn" onClick={handleToggleReceipts}>
-          {receiptsOpen ? "Скрыть чеки" : "🧾 Чеки за вечер"}
-        </button>
-      </div>
-          {receiptsOpen && (
-            <div className="precheck">
-              <h3>🧾 Чеки стола {tableLabel(tableNo)} за вечер</h3>
-              {receiptsError && <div className="banner banner--error">{receiptsError}</div>}
-              {!receipts && !receiptsError && <p className="empty-hint">Загрузка…</p>}
-              {receipts && receipts.length === 0 && (
-                <p className="empty-hint">За этот вечер чеков по столу нет.</p>
-              )}
-              {receipts &&
-                receipts.map((r) => (
-                  <div key={r.id} className="receipt-item">
-                    <div>
-                      <b>{new Date(r.decided_at).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}</b>
-                      {" · "}песен: <b>{r.receipt?.song_count ?? 0}</b>
-                      {" · "}итого: <b>{statsMoney(r.receipt?.total ?? 0)}</b>
-                      {" · "}к оплате на месте: <b>{statsMoney(r.receipt?.payable_total ?? 0)}</b>
-                      {r.hide_receipt ? " · гостю не показан" : ""}
-                    </div>
-                    {r.receipt?.items && r.receipt.items.length > 0 && (
-                      <ul className="precheck__items">
-                        {r.receipt.items.map((it, idx) => (
-                          <li key={idx} className="precheck__item">
-                            <span>
-                              {it.artist ? `${it.artist} — ` : ""}{it.song_title}
-                              <span className="empty-hint">
-                                {" "}· {it.category}{it.guest_name ? ` · ${it.guest_name}` : ""}
-                                {it.paid ? " · оплачено с VIP" : ""}
-                              </span>
-                            </span>
-                            <b>{statsMoney(it.price)}</b>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
+      <div className="precheck">
+        <h3>🧾 Все чеки за вечер</h3>
+        {eveningError && <div className="banner banner--error">{eveningError}</div>}
+        {!evening && !eveningError && <p className="empty-hint">Загрузка…</p>}
+        {evening && (
+          <>
+            {evening.categories.length === 0 ? (
+              <p className="empty-hint">За этот вечер чеков нет.</p>
+            ) : (
+              <ul className="precheck__items">
+                {evening.categories.map((c) => (
+                  <li key={c.category} className="precheck__item">
+                    <span>
+                      {c.category} <span className="empty-hint">· песен: {c.count}</span>
+                    </span>
+                    <b>{statsMoney(c.sum)}</b>
+                  </li>
                 ))}
+              </ul>
+            )}
+            <div className="precheck__totals">
+              <div>Песен: <b>{evening.song_count}</b></div>
+              <div>Итого: <b>{statsMoney(evening.total)}</b></div>
+              <div>К оплате на месте: <b>{statsMoney(evening.payable_total)}</b></div>
             </div>
-          )}
+            <h4>Чеки стола {tableLabel(tableNo)}</h4>
+            {tableReceipts.length === 0 && <p className="empty-hint">По этому столу за вечер чеков нет.</p>}
+            {tableReceipts.map((r) => (
+              <div key={r.id} className="receipt-item">
+                <div>
+                  <b>{new Date(r.decided_at).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}</b>
+                  {" · "}песен: <b>{r.receipt?.song_count ?? 0}</b>
+                  {" · "}итого: <b>{statsMoney(r.receipt?.total ?? 0)}</b>
+                  {" · "}к оплате на месте: <b>{statsMoney(r.receipt?.payable_total ?? 0)}</b>
+                  {r.hide_receipt ? " · гостю не показан" : ""}
+                </div>
+                {r.receipt?.items && r.receipt.items.length > 0 && (
+                  <ul className="precheck__items">
+                    {r.receipt.items.map((it, idx) => (
+                      <li key={idx} className="precheck__item">
+                        <span>
+                          {it.artist ? `${it.artist} — ` : ""}{it.song_title}
+                          <span className="empty-hint">
+                            {" "}· {it.category}{it.guest_name ? ` · ${it.guest_name}` : ""}
+                            {it.paid ? " · оплачено с VIP" : ""}
+                          </span>
+                        </span>
+                        <b>{statsMoney(it.price)}</b>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ))}
+          </>
+        )}
+      </div>
 
       {group && (
         <>
