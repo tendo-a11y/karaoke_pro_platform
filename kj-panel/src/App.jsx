@@ -1142,16 +1142,52 @@ function StatsPanel({ token, clubId }) {
           <>
             <StatsTable
               head={["Категория", "Песен", "Сумма"]}
-              rows={evening.categories.map((c) => [c.category, c.count, statsMoney(c.sum)])}
+              rows={[
+                ...evening.categories.map((c) => [c.category, c.count, statsMoney(c.sum)]),
+                [
+                  <b>Итого</b>,
+                  <b>{evening.song_count}</b>,
+                  <b>{statsMoney(evening.total)}</b>,
+                ],
+              ]}
             />
             <StatsTiles
               items={[
                 { label: "Песен", value: evening.song_count },
                 { label: "Итого", value: statsMoney(evening.total) },
                 { label: "К оплате на месте", value: statsMoney(evening.payable_total) },
+                { label: "Чеков", value: evening.receipts.length },
                 { label: "От VIP", value: statsMoney(evening.vip_total) },
               ]}
             />
+            <h3>Все чеки за вечер ({evening.receipts.length})</h3>
+            {evening.receipts.map((r) => (
+              <details key={r.id} className="receipt-item">
+                <summary>
+                  Стол {tableLabel(r.table_no)} ·{" "}
+                  {new Date(r.decided_at).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })} · песен:{" "}
+                  {r.receipt?.song_count ?? 0} · итого: {statsMoney(r.receipt?.total ?? 0)} · к оплате:{" "}
+                  {statsMoney(r.receipt?.payable_total ?? 0)}
+                  {r.hide_receipt ? " · гостю не показан" : ""}
+                </summary>
+                {r.receipt?.items && r.receipt.items.length > 0 && (
+                  <ul className="precheck__items">
+                    {r.receipt.items.map((it, idx) => (
+                      <li key={idx} className="precheck__item">
+                        <span>
+                          {it.artist ? `${it.artist} — ` : ""}{it.song_title}
+                          <span className="empty-hint">
+                            {" "}· {it.category}{it.guest_name ? ` · ${it.guest_name}` : ""}
+                            {it.paid ? " · оплачено с VIP" : ""}
+                          </span>
+                        </span>
+                        <b>{statsMoney(it.price)}</b>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </details>
+            ))}
           </>
         )}
         <p className="empty-hint">Сутки клуба — с 08:00 до 08:00, как в «Сегодня» выше.</p>
