@@ -1160,34 +1160,6 @@ function StatsPanel({ token, clubId }) {
       {data && (
         <>
           <section>
-            <h2>Итоги периода</h2>
-            <StatsTiles
-              items={[
-                { label: "Спето песен", value: ev.sung },
-                { label: "Заказано", value: ev.ordered },
-                { label: "Отклонено", value: ev.rejected },
-                { label: "Ждут очереди", value: ev.waiting },
-                { label: "Столов пело", value: ev.tables },
-                { label: "Гостей пело", value: ev.singers },
-                { label: "Сумма", value: statsMoney(ev.revenue) },
-                { label: "от VIP", value: statsMoney(ev.revenue_vip) },
-                { label: "от обычных", value: statsMoney(ev.revenue_regular) },
-                { label: "В среднем на стол", value: statsMoney(ev.avg_table) },
-              ]}
-            />
-            {ev.top_table && (
-              <p>
-                Самый поющий стол: <b>№{tableLabel(ev.top_table.table_no)}</b> — {ev.top_table.songs} песен, {statsMoney(ev.top_table.sum)}
-              </p>
-            )}
-            {ev.top_guest && (
-              <p>
-                Самый активный гость: <b>{ev.top_guest.name}</b> — {ev.top_guest.songs} песен, {statsMoney(ev.top_guest.sum)}
-              </p>
-            )}
-          </section>
-
-          <section>
             <h2>Сравнение с прошлым периодом</h2>
             <p className="empty-hint">Прошлый период: {cmp.previous_from} — {cmp.previous_to}</p>
             <StatsTable
