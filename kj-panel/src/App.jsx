@@ -3462,6 +3462,9 @@ function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged, auto
   const [precheck, setPrecheck] = useState(null);
   const [precheckOpen, setPrecheckOpen] = useState(false);
   const [precheckError, setPrecheckError] = useState(null);
+  // Категории для выбора в пречеке и блокировка на время сохранения.
+  const [precheckCategories, setPrecheckCategories] = useState(null);
+  const [precheckBusy, setPrecheckBusy] = useState(false);
 
   async function handleTogglePrecheck() {
     if (precheckOpen) {
@@ -3471,6 +3474,9 @@ function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged, auto
     setPrecheckOpen(true);
     setPrecheck(null);
     setPrecheckError(null);
+    if (!precheckCategories) {
+      api.listCategories(token, clubId).then(setPrecheckCategories).catch(() => {});
+    }
     try {
       setPrecheck(await api.getTablePrecheck(token, clubId, tableNo));
     } catch (err) {
@@ -3489,6 +3495,18 @@ function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged, auto
       setReceipts(await api.getTableReceipts(token, clubId, tableNo));
     } catch (err) {
       setReceiptsError(err instanceof ApiError ? err.message : String(err));
+    }
+  }
+  async function handleChangePrecheckCategory(orderId, value) {
+    setPrecheckBusy(true);
+    setPrecheckError(null);
+    try {
+      await api.updateTableOrderCategory(token, clubId, tableNo, orderId, value === "" ? null : Number(value));
+      setPrecheck(await api.getTablePrecheck(token, clubId, tableNo));
+    } catch (err) {
+      setPrecheckError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setPrecheckBusy(false);
     }
   }
   const [moveOpen, setMoveOpen] = useState(false);
@@ -3781,6 +3799,19 @@ function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged, auto
                               {it.paid ? " · оплачено с VIP" : ""}
                             </span>
                           </span>
+                          {!it.paid && precheckCategories && (
+                            <select
+                              className="queue-row__category-select"
+                              value={it.service_id ?? ""}
+                              disabled={precheckBusy}
+                              onChange={(e) => handleChangePrecheckCategory(it.order_id, e.target.value)}
+                            >
+                              <option value="">Без категории</option>
+                              {precheckCategories.map((c) => (
+                                <option key={c.id} value={c.id}>{c.name}</option>
+                              ))}
+                            </select>
+                          )}
                           <b>{statsMoney(it.price)}</b>
                         </li>
                       ))}
