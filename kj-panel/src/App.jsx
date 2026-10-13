@@ -11,6 +11,13 @@ function tableLabel(n) {
   return Number.isInteger(v) && v >= 1000 ? `${Math.floor(v / 1000)}/${v % 1000}` : String(n);
 }
 
+// Цвет времени в чеках (2026-10-14): у каждого чека свой цвет, стабильный
+// (по id чека), чтобы соседние по времени чеки не сливались.
+const RECEIPT_TIME_COLORS = ["#f97316", "#22c55e", "#38bdf8", "#e879f9", "#facc15", "#2dd4bf", "#fb7185", "#a3e635"];
+function receiptTimeColor(id) {
+  return RECEIPT_TIME_COLORS[Math.abs(Number(id) || 0) % RECEIPT_TIME_COLORS.length];
+}
+
 // Пояснение к строке "К оплате" в чеке (2026-10-14): если к оплате 0 (или меньше
 // итога), значит часть или все песни уже списаны автоматически с VIP-счёта гостя.
 function payableNote(total, payable) {
@@ -1191,7 +1198,10 @@ function StatsPanel({ token, clubId }) {
               <details key={r.id} className="receipt-item">
                 <summary>
                   Стол {tableLabel(r.table_no)} ·{" "}
-                  {new Date(r.decided_at).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })} · песен:{" "}
+                  <b style={{ color: receiptTimeColor(r.id) }}>
+                    {new Date(r.decided_at).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}
+                  </b>{" "}
+                  · песен:{" "}
                   {r.receipt?.song_count ?? 0} · итого: {statsMoney(r.receipt?.total ?? 0)} · к оплате:{" "}
                   {statsMoney(r.receipt?.payable_total ?? 0)}
                   {payableNote(r.receipt?.total ?? 0, r.receipt?.payable_total ?? 0)}
@@ -3776,7 +3786,9 @@ function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged, auto
             {tableReceipts.map((r) => (
               <div key={r.id} className="receipt-item">
                 <div>
-                  <b>{new Date(r.decided_at).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}</b>
+                  <b style={{ color: receiptTimeColor(r.id) }}>
+                    {new Date(r.decided_at).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}
+                  </b>
                   {" · "}песен: <b>{r.receipt?.song_count ?? 0}</b>
                   {" · "}итого: <b>{statsMoney(r.receipt?.total ?? 0)}</b>
                   {" · "}к оплате на месте: <b>{statsMoney(r.receipt?.payable_total ?? 0)}</b>
