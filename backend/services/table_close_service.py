@@ -43,6 +43,7 @@ from models import (
     Order,
     Service,
     STATUS_COMPLETED,
+    STATUS_PLAYING,
     STATUS_REJECTED,
     STATUS_TABLE_CLOSE_APPROVED,
     STATUS_TABLE_CLOSE_PENDING,
@@ -224,6 +225,118 @@ def _build_receipt(club_id: int, table_no: int, since) -> dict:
         "song_count": len(orders),
         "categories": list(categories.values()),
         "guests": list(guests.values()),
+        "total": total,
+        "payable_total": payable_total,
+    }
+
+
+def preview_receipt(club_id: int, table_no: int) -> dict | None:
+    """
+    ДОБАВЛЕНО (2026-10-13, запрос пользователя "посмотреть пречек перед
+    выпиской / закрытием стола"): тот же чек, что получится при закрытии
+    стола прямо сейчас, но БЕЗ закрытия — ничего в базе не меняется.
+
+    Правило то же, что в complete_table_orders: в чек идут все не удалённые
+    песни этой сессии стола (и уже спетые, и ещё не спетые), кроме тех, что
+    ждут места сверх вместимости стола. Дополнительно — подробный список
+    песен ("items"): название, гость, категория, цена, спета ли уже.
+    None — за столом никого нет и активных песен нет.
+    """
+    group = table_group_service.get_group(club_id, table_no)
+    since = _session_since(club_id, table_no, group.created_at if group is not None else None)
+    if since is None:
+        return None
+
+    waiting_ids = set()
+    club = db.session.get(Club, club_id)
+    if club is not None:
+        _visible, waiting = partition_table_orders(club_id, table_no, get_table_capacity(club))
+        waiting_ids = {o.id for o in waiting}
+
+    orders = (
+        Order.query
+        .filter(
+            Order.club_id == club_id,
+            Order.table_no == table_no,
+            Order.status != STATUS_REJECTED,
+            Order.created_at >= since,
+            not_bonus_filter(),
+        )
+        .order_by(Order.created_at.asc(), Order.id.asc())
+        .all()
+    )
+    orders = [o for o in orders if o.id not in waiting_ids]
+
+    service_ids = {o.service_id for o in orders if o.service_id is not None}
+    services_by_id = {}
+    if service_ids:
+        services_by_id = {sv.id: sv for sv in Service.query.filter(Service.id.in_(service_ids)).all()}
+    order_ids = [o.id for o in orders]
+    paid_order_ids = set()
+    if order_ids:
+        paid_order_ids = {
+            row[0] for row in
+            db.session.query(Transaction.order_id)
+            .filter(Transaction.order_id.in_(order_ids), Transaction.type == TX_TYPE_ORDER_PAYMENT)
+            .all()
+        }
+    guest_ids = {o.telegram_user_id for o in orders}
+    accounts = {}
+    if guest_ids:
+        accounts = {
+            a.telegram_user_id: a
+            for a in GuestAccount.query.filter(
+                GuestAccount.club_id == club_id, GuestAccount.telegram_user_id.in_(guest_ids),
+            ).all()
+        }
+
+    categories = {}
+    guests = {}
+    items = []
+    total = 0.0
+    payable_total = 0.0
+    for order in orders:
+        service = services_by_id.get(order.service_id) if order.service_id else None
+        name = service.name if service is not None else "Без категории"
+        price = float(service.price) if service is not None and service.price is not None else 0.0
+        bucket = categories.setdefault(name, {"category": name, "count": 0, "price": price, "sum": 0.0})
+        bucket["count"] += 1
+        bucket["sum"] += price
+        total += price
+        paid = order.id in paid_order_ids
+        if not paid:
+            payable_total += price
+        account = accounts.get(order.telegram_user_id)
+        guest_bucket = guests.setdefault(order.telegram_user_id, {
+            "guest_id": str(order.telegram_user_id),
+            "display_name": account.display_name if account else None,
+            "guest_type": order.guest_type,
+            "count": 0,
+            "sum": 0.0,
+            "paid": True,
+        })
+        guest_bucket["count"] += 1
+        guest_bucket["sum"] += price
+        if not paid:
+            guest_bucket["paid"] = False
+        items.append({
+            "order_id": order.id,
+            "song_title": order.song_title,
+            "artist": order.artist,
+            "category": name,
+            "price": price,
+            "guest_name": account.display_name if account else None,
+            "guest_type": order.guest_type,
+            "sung": order.status in (STATUS_PLAYING, STATUS_COMPLETED),
+            "paid": paid,
+        })
+
+    return {
+        "table_no": table_no,
+        "song_count": len(orders),
+        "categories": list(categories.values()),
+        "guests": list(guests.values()),
+        "items": items,
         "total": total,
         "payable_total": payable_total,
     }
