@@ -2458,6 +2458,19 @@ function CategoriesPanel({ token, clubId }) {
     }
   }
 
+  async function handleToggleTempHidden(category, checked) {
+    setBusyKey(`hide-${category.id}`);
+    setActionError(null);
+    try {
+      await api.updateCategory(token, clubId, category.id, { temp_hidden: checked });
+      await reload();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
   async function handleCreate(event) {
     event.preventDefault();
     if (!newDraft.name.trim() || newDraft.price === "") return;
@@ -2564,6 +2577,18 @@ function CategoriesPanel({ token, clubId }) {
                     disabled={saving || deleting}
                   />
                   Бесплатно
+                </label>
+                <label
+                  className="category-row__free"
+                  title="Пока галочка стоит, гости не видят эту категорию. Сбрасывается при закрытии вечера."
+                >
+                  <input
+                    type="checkbox"
+                    checked={!!category.temp_hidden}
+                    onChange={(e) => handleToggleTempHidden(category, e.target.checked)}
+                    disabled={saving || deleting || busyKey === `hide-${category.id}`}
+                  />
+                  Временно убрать
                 </label>
                 <div className="category-row__actions">
                   <button
