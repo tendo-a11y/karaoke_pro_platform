@@ -482,27 +482,19 @@ function QueueTable({ queue, token, clubId }) {
                 </span>
               )}
               {item.order_id != null ? (
-                <>
-                  <span className="queue-row__edit">
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      className="queue-row__table-input"
-                      placeholder="Стол"
-                      value={draftTableFor(item)}
-                      onChange={(event) =>
-                        setTableDrafts((prev) => ({ ...prev, [item.order_id]: event.target.value }))
-                      }
-                    />
-                    <button
-                      type="button"
-                      className="btn-link"
-                      disabled={busyKey === `table-${item.order_id}`}
-                      onClick={() => handleSaveTable(item)}
-                    >
-                      ✓
-                    </button>
-                  </span>
+                // Та же раскладка, что у строки из VirtualDJ без заказа ниже:
+                // стол → категория → кнопка действия (2026-10-13).
+                <span className="queue-row__edit">
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    className="queue-row__table-input"
+                    placeholder="Стол"
+                    value={draftTableFor(item)}
+                    onChange={(event) =>
+                      setTableDrafts((prev) => ({ ...prev, [item.order_id]: event.target.value }))
+                    }
+                  />
                   {categories.length > 0 && (
                     // "Без категории" убран из списка (запрос пользователя
                     // 2026-09-14 — категория есть всегда). Если у заказа
@@ -523,7 +515,15 @@ function QueueTable({ queue, token, clubId }) {
                       ))}
                     </select>
                   )}
-                </>
+                  <button
+                    type="button"
+                    className="btn-link"
+                    disabled={busyKey === `table-${item.order_id}`}
+                    onClick={() => handleSaveTable(item)}
+                  >
+                    ✓
+                  </button>
+                </span>
               ) : (
                 // Позиция реально есть в живой очереди VirtualDJ, но заказа
                 // на неё нет (KJ добавил песню прямо в VirtualDJ) — раньше
