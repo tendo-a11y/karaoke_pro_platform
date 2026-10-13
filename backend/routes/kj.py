@@ -1819,6 +1819,20 @@ def list_table_groups(club_id):
     })
 
 
+# ДОБАВЛЕНО (2026-10-13, запрос пользователя): пречек — каким будет чек
+# стола, если закрыть его прямо сейчас. Ничего не закрывает и не меняет.
+@bp.get("/table-groups/<int:club_id>/<int:table_no>/precheck")
+@require_kj
+def table_precheck(club_id, table_no):
+    denied = _ensure_own_club(club_id)
+    if denied:
+        return denied
+    receipt = table_close_service.preview_receipt(club_id, table_no)
+    if receipt is None:
+        return api_error(404, "TABLE_EMPTY", "За этим столом сейчас никого нет и песен нет")
+    return api_ok(receipt)
+
+
 @bp.get("/table-groups/<int:club_id>/<int:table_no>")
 @require_kj
 def get_table_group(club_id, table_no):
