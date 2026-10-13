@@ -1063,6 +1063,11 @@ function StatsPanel({ token, clubId }) {
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
+  // Все чеки клуба за текущий вечер + кешбэк супер-админу (2026-10-13).
+  const [evening, setEvening] = useState(null);
+  useEffect(() => {
+    api.getEveningReceipts(token, clubId).then(setEvening).catch(() => setEvening(null));
+  }, [token, clubId, reloadKey]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1127,6 +1132,35 @@ function StatsPanel({ token, clubId }) {
         </p>
         {error && <div className="banner banner--error">{error}</div>}
         {loading && !data && <p className="empty-hint">Загрузка…</p>}
+      </section>
+
+      <section>
+        <h2>Все чеки за вечер</h2>
+        {!evening && <p className="empty-hint">Загрузка…</p>}
+        {evening && evening.categories.length === 0 && <p className="empty-hint">За этот вечер чеков нет.</p>}
+        {evening && evening.categories.length > 0 && (
+          <>
+            <StatsTable
+              head={["Категория", "Песен", "Сумма"]}
+              rows={evening.categories.map((c) => [c.category, c.count, statsMoney(c.sum)])}
+            />
+            <StatsTiles
+              items={[
+                { label: "Песен", value: evening.song_count },
+                { label: "Итого", value: statsMoney(evening.total) },
+                { label: "К оплате на месте", value: statsMoney(evening.payable_total) },
+                { label: "От VIP", value: statsMoney(evening.vip_total) },
+              ]}
+            />
+            {evening.cashback && evening.cashback.percent != null && (
+              <p>
+                Кешбэк супер-админу за вечер: <b>{statsMoney(evening.cashback.amount)}</b> — {evening.cashback.percent}% от{" "}
+                {evening.cashback.vip_only ? "выручки VIP" : "всей выручки"} ({statsMoney(evening.cashback.base)})
+              </p>
+            )}
+          </>
+        )}
+        <p className="empty-hint">Вечер — с последнего «Закрыть все столы» (или за последние сутки).</p>
       </section>
 
       {data && (
@@ -3679,31 +3713,11 @@ function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged, auto
       {loadError && loadError !== "empty" && <div className="banner banner--error">{loadError}</div>}
       {!group && !loadError && <p className="empty-hint">Загрузка…</p>}
       <div className="precheck">
-        <h3>🧾 Все чеки за вечер</h3>
+        <h3>🧾 Чеки стола {tableLabel(tableNo)} за вечер</h3>
         {eveningError && <div className="banner banner--error">{eveningError}</div>}
         {!evening && !eveningError && <p className="empty-hint">Загрузка…</p>}
         {evening && (
           <>
-            {evening.categories.length === 0 ? (
-              <p className="empty-hint">За этот вечер чеков нет.</p>
-            ) : (
-              <ul className="precheck__items">
-                {evening.categories.map((c) => (
-                  <li key={c.category} className="precheck__item">
-                    <span>
-                      {c.category} <span className="empty-hint">· песен: {c.count}</span>
-                    </span>
-                    <b>{statsMoney(c.sum)}</b>
-                  </li>
-                ))}
-              </ul>
-            )}
-            <div className="precheck__totals">
-              <div>Песен: <b>{evening.song_count}</b></div>
-              <div>Итого: <b>{statsMoney(evening.total)}</b></div>
-              <div>К оплате на месте: <b>{statsMoney(evening.payable_total)}</b></div>
-            </div>
-            <h4>Чеки стола {tableLabel(tableNo)}</h4>
             {tableReceipts.length === 0 && <p className="empty-hint">По этому столу за вечер чеков нет.</p>}
             {tableReceipts.map((r) => (
               <div key={r.id} className="receipt-item">
