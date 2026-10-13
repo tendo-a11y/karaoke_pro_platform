@@ -89,6 +89,7 @@ vdj/http_client.py).
 import html
 import json
 import logging
+import os
 import re
 from urllib.parse import urlparse
 
@@ -517,6 +518,39 @@ def _youtube_title_from_page(url: str) -> list[dict]:
     return [{"title": title, "artist": author, "source_url": url}]
 
 
+def _youtube_title_from_api(url: str) -> list[dict]:
+    """
+    Официальный YouTube Data API v3. Нужен ключ YOUTUBE_API_KEY в окружении
+    сервера (ограниченный ключ, только YouTube Data API v3). Ключ передаётся
+    в заголовке, а не в ссылке, чтобы он не попадал в логи. Без ключа или при
+    ошибке возвращает [], и дальше работают запасные способы.
+    """
+    api_key = os.environ.get("YOUTUBE_API_KEY", "").strip()
+    if not api_key:
+        return []
+    match = re.search(r"(?:v=|youtu\.be/)([A-Za-z0-9_-]{6,})", url)
+    if not match:
+        return []
+    resp = requests.get(
+        "https://www.googleapis.com/youtube/v3/videos",
+        params={"part": "snippet", "id": match.group(1)},
+        headers={"X-goog-api-key": api_key},
+        timeout=8,
+    )
+    if resp.status_code != 200:
+        logger.error("YouTube Data API вернул %s для %s", resp.status_code, url)
+        return []
+    items = resp.json().get("items") or []
+    if not items:
+        return []
+    snippet = items[0].get("snippet") or {}
+    title = (snippet.get("title") or "").strip()
+    if not title:
+        return []
+    author = (snippet.get("channelTitle") or "").strip() or None
+    return [{"title": title, "artist": author, "source_url": url}]
+
+
 def _resolve_link(url: str) -> list[dict]:
     """
     Гость прислал прямую ссылку — значит, он уже точно знает песню, гадать
@@ -530,6 +564,9 @@ def _resolve_link(url: str) -> list[dict]:
 
     try:
         if "youtube.com" in host or "youtu.be" in host:
+            api_result = _youtube_title_from_api(url)
+            if api_result:
+                return api_result
             resp = requests.get(
                 "https://www.youtube.com/oembed",
                 params={"url": url, "format": "json"},
