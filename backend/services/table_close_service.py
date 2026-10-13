@@ -59,7 +59,12 @@ from models import (
 from services import billing_service, guest_status_service, table_group_service
 from services.category_service import not_bonus_filter
 from services.table_board_service import ACTIVE_TABLE_STATUSES, get_table_capacity, partition_table_orders
-from sockets import emit_order_updated, emit_table_close_request_created, emit_table_close_request_decided
+from sockets import (
+    emit_order_updated,
+    emit_queue_updated,
+    emit_table_close_request_created,
+    emit_table_close_request_decided,
+)
 
 
 def _utcnow():
@@ -484,6 +489,7 @@ def complete_table_orders(club_id: int, table_no: int, since) -> list[Order]:
     # попадают — они отклоняются, а не засчитываются сыгранными. Иначе
     # гость заплатил бы за песни, до которых очередь так и не дошла.
     waiting_ids = set()
+    waiting = []
     club = db.session.get(Club, club_id)
     if club is not None:
         _visible, waiting = partition_table_orders(club_id, table_no, get_table_capacity(club))
@@ -513,6 +519,17 @@ def complete_table_orders(club_id: int, table_no: int, since) -> list[Order]:
         if order.vdj_item_id and not order.vdj_item_id.startswith("closed:"):
             order.vdj_item_id = f"closed:{closed_ts}:{order.vdj_item_id}"[:255]
     db.session.commit()
+
+    # 2026-10-14: после закрытия стола KJ Panel не узнавала об этом — доска
+    # "Заказы по столам" и живая очередь перезапрашиваются только по событиям
+    # order_*/queue_updated, а здесь статусы менялись без них. Поэтому
+    # закрытый стол висел с заказами и "следующая песня" до ручного обновления.
+    changed_orders = list(waiting) + list(orders)
+    for changed in changed_orders:
+        emit_order_updated(changed)
+    if changed_orders:
+        from services.vdj_service import get_kj_queue_view
+        emit_queue_updated(club_id, get_kj_queue_view(club_id))
 
     for order in orders:
         billing_service.charge_at_completion(order)
