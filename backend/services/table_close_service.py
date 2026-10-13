@@ -791,6 +791,11 @@ def close_all_tables(club_id: int, kj) -> CloseAllResult:
             logging.getLogger(__name__).exception("cashback accrual failed for club %s", club_id)
             club = db.session.get(Club, club_id)
         club.queue_start_table = None
+        # ДОБАВЛЕНО (2026-10-13, запрос пользователя): конец вечера возвращает
+        # все категории гостям — снимаем "Временно убрать" у категорий клуба.
+        Service.query.filter_by(club_id=club_id, temp_hidden=True).update(
+            {"temp_hidden": False}, synchronize_session=False
+        )
         # ДОБАВЛЕНО (2026-10, запрос пользователя): "Закрыть все столы"
         # полностью завершает вечер — следующий вечер начинается с чистого
         # листа (например, пометки "уже заказана сегодня").
