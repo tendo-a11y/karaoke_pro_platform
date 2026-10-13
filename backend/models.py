@@ -436,6 +436,9 @@ class Service(db.Model):
     # ограничений нет и не было) — под запрет попадает только выбор категории
     # самим гостем.
     kj_only = db.Column(db.Boolean, nullable=False, default=False)
+    # KJ: "Временно убрать" — категория не показывается гостям (GET /api/guest/services),
+    # пока галочка стоит. Сбрасывается сама при закрытии вечера (см. table_close_service.close_all_tables).
+    temp_hidden = db.Column(db.Boolean, nullable=False, default=False)
 
     club = db.relationship("Club")
 
@@ -448,6 +451,7 @@ class Service(db.Model):
             "price": float(self.price) if self.price is not None else None,
             "is_free": self.is_free,
             "kj_only": self.kj_only,
+            "temp_hidden": self.temp_hidden,
         }
 
 
