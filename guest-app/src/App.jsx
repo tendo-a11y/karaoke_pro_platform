@@ -436,7 +436,7 @@ function LegalPageScreen({ page }) {
 // категории) и подтверждением цены для Crazy — то же, что уже есть в
 // главной форме заказа, теперь и в "Заказать снова", "Заменить песню" и
 // "Заказ через скриншот", чтобы предупреждение о цене нельзя было обойти.
-function ServiceSelect({ services, value, onChange, disabled, highlight = false }) {
+function ServiceSelect({ services, value, onChange, disabled, highlight = false, onOpen }) {
   // Свой список выбора категории вместо системного (запрос пользователя
   // 2026-10): в раскрытом списке у каждой категории кнопка "❓", которая
   // открывает карточку категории поверх экрана (название, цена, описание,
@@ -482,7 +482,10 @@ function ServiceSelect({ services, value, onChange, disabled, highlight = false 
         className={`service-picker__toggle${highlight && !value && !open ? " step-blink" : ""}`}
         disabled={disabled}
         aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => {
+          if (!open) onOpen?.();
+          setOpen(!open);
+        }}
       >
         <span>{selected ? labelOf(selected) : "Выберите категорию…"}</span>
         <span>{open ? "▲" : "▼"}</span>
@@ -663,6 +666,7 @@ function OrderRow({
   token, services, isReplacing, onToggleReplace, onReplace, replaceBusy,
   onCancel, cancelBusy,
   reorder = false, onReordered,
+  reorderPickedId = null, onReorderPick,
 }) {
   // ДОБАВЛЕНО (2026-10, запрос пользователя): заказ песни прямо из истории —
   // выбор категории и "Заказать снова", с теми же подсказками-морганиями.
@@ -756,9 +760,12 @@ function OrderRow({
             onChange={(v) => {
               setReorderServiceId(v);
               setReorderDone(false);
+              // Выбрали песню — остальные строки перестают моргать (2026-10-14).
+              onReorderPick?.(order.id);
             }}
             disabled={reorderBusy}
-            highlight
+            highlight={!reorderPickedId || reorderPickedId === order.id}
+            onOpen={() => onReorderPick?.(order.id)}
           />
           <div className="favorite-actions">
             <button
@@ -1028,6 +1035,8 @@ function FavoritesPanel({ token, services, onOrdered, orderingDisabled, embedded
   const [error, setError] = useState(null);
   const [busyId, setBusyId] = useState(null);
   const [serviceSelections, setServiceSelections] = useState({});
+  // Избранное, где уже начали выбирать категорию — у остальных строк подсказка-мигание гаснет (2026-10-14).
+  const [pickedFavoriteId, setPickedFavoriteId] = useState(null);
   // ДОБАВЛЕНО (2026-10, запрос пользователя "раздел избранное должен
   // открываться, там может быть много песен") — раздел свёрнут по
   // умолчанию и раскрывается по нажатию на заголовок (тот же приём, что и
@@ -1124,7 +1133,8 @@ function FavoritesPanel({ token, services, onOrdered, orderingDisabled, embedded
                   value={serviceSelections[f.id] || ""}
                   onChange={(v) => setServiceSelections((prev) => ({ ...prev, [f.id]: v }))}
                   disabled={busyId === f.id || orderingDisabled}
-                  highlight={!orderingDisabled}
+                  highlight={!orderingDisabled && (!pickedFavoriteId || pickedFavoriteId === f.id)}
+                  onOpen={() => setPickedFavoriteId(f.id)}
                 />
               )}
               <div className="favorite-actions">
@@ -3085,6 +3095,9 @@ export default function App() {
   const [favoriteBusyOrderId, setFavoriteBusyOrderId] = useState(null);
   const [favoriteMessage, setFavoriteMessage] = useState(null);
   const [replacingOrderId, setReplacingOrderId] = useState(null);
+  // Строка в "Мои заказы", где уже выбрали песню (категорию) для повторного заказа —
+  // у остальных строк подсказка-мигание гаснет (2026-10-14).
+  const [reorderPickedId, setReorderPickedId] = useState(null);
   const [replaceBusyOrderId, setReplaceBusyOrderId] = useState(null);
   // ДОБАВЛЕНО (2026-09-20, жалоба "нет возможности удалить" в "Мои заказы").
   const [cancelBusyOrderId, setCancelBusyOrderId] = useState(null);
@@ -3703,6 +3716,8 @@ export default function App() {
                 favoriteBusy={favoriteBusyOrderId === o.id}
                 reorder={ordersTab === "history" && canOrder}
                 onReordered={refreshOrders}
+                reorderPickedId={reorderPickedId}
+                onReorderPick={setReorderPickedId}
               />
             ))}
           </ul>
