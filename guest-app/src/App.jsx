@@ -674,13 +674,15 @@ function OrderRow({
   const [reorderBusy, setReorderBusy] = useState(false);
   const [reorderError, setReorderError] = useState(null);
   const [reorderDone, setReorderDone] = useState(false);
+  const [reorderQueuePos, setReorderQueuePos] = useState(0);
   async function handleReorderFromHistory() {
     setReorderBusy(true);
     setReorderError(null);
     setReorderDone(false);
     try {
-      await api.createOrder(token, order.song_title, order.artist || null, Number(reorderServiceId));
+      const created = await api.createOrder(token, order.song_title, order.artist || null, Number(reorderServiceId));
       setReorderServiceId("");
+      setReorderQueuePos(created?.queue_position ?? 0);
       setReorderDone(true);
       if (onReordered) await onReordered();
     } catch (err) {
@@ -778,7 +780,13 @@ function OrderRow({
             </button>
           </div>
           {reorderError && <div className="banner banner--error">{reorderError}</div>}
-          {reorderDone && <div className="banner banner--ok">Заказ отправлен ✅</div>}
+          {reorderDone && (
+            <div className="banner banner--ok">
+              {reorderQueuePos > 0
+                ? `«${order.song_title}» — ваш номер в очереди: ${reorderQueuePos}.`
+                : `«${order.song_title}» — заказ отправлен ✅`}
+            </div>
+          )}
         </>
       )}
       {pendingRequest && (
@@ -1033,6 +1041,7 @@ function VipHistoryPanel({ token, embedded = false }) {
 function FavoritesPanel({ token, services, onOrdered, orderingDisabled, embedded = false }) {
   const [favorites, setFavorites] = useState([]);
   const [error, setError] = useState(null);
+  const [orderMessage, setOrderMessage] = useState(null);
   const [busyId, setBusyId] = useState(null);
   const [serviceSelections, setServiceSelections] = useState({});
   // Избранное, где уже начали выбирать категорию — у остальных строк подсказка-мигание гаснет (2026-10-14).
@@ -1069,8 +1078,12 @@ function FavoritesPanel({ token, services, onOrdered, orderingDisabled, embedded
     if (!serviceId) return;
     setBusyId(favoriteId);
     setError(null);
+    setOrderMessage(null);
     try {
-      await api.reorderFavorite(token, favoriteId, Number(serviceId));
+      const created = await api.reorderFavorite(token, favoriteId, Number(serviceId));
+      const pos = created?.queue_position ?? 0;
+      const title = favorites.find((x) => x.id === favoriteId)?.song_title || "Песня";
+      setOrderMessage(pos > 0 ? `«${title}» — ваш номер в очереди: ${pos}.` : `«${title}» — заказ отправлен ✅`);
       setServiceSelections((prev) => {
         const next = { ...prev };
         delete next[favoriteId];
@@ -1119,6 +1132,7 @@ function FavoritesPanel({ token, services, onOrdered, orderingDisabled, embedded
       </h2>
       )}
       {error && <div className="banner banner--error">{error}</div>}
+      {orderMessage && <div className="banner banner--ok">{orderMessage}</div>}
       {!open && !embedded ? null : favorites.length === 0 ? (
         <p className="empty-hint">Пока пусто — добавляйте песни из "Моих заказов".</p>
       ) : (
