@@ -896,7 +896,11 @@ def reorder_favorite(favorite_id):
         )
 
     emit_order_created(result.order)
-    return api_ok(result.order.to_dict(), status_code=201)
+    # 2026-10-14: как и в create_order — номер места в очереди в ответе, чтобы гость
+    # видел "Ваш номер в очереди: N" и при заказе из избранного.
+    data = result.order.to_dict()
+    data["queue_position"] = table_board_service.get_club_queue_positions(g.club_id).get(result.order.id)
+    return api_ok(data, status_code=201)
 
 
 @bp.post("/order/<int:order_id>/replace")
