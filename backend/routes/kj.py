@@ -1240,6 +1240,7 @@ def get_table_settings(club_id):
         "songs_per_table": club.songs_per_table,
         "queue_mode": get_queue_mode(club),
         "queue_start_table": get_queue_start_table(club),
+        "guest_queue_visible": bool(club.guest_queue_visible),
     })
 
 
@@ -1279,6 +1280,12 @@ def update_table_settings(club_id):
             return api_error(400, "VALIDATION_ERROR", _QUEUE_MODE_ERROR)
         updates["queue_mode"] = value
 
+    if "guest_queue_visible" in payload:
+        value = payload.get("guest_queue_visible")
+        if not isinstance(value, bool):
+            return api_error(400, "VALIDATION_ERROR", "guest_queue_visible должен быть true или false")
+        updates["guest_queue_visible"] = value
+
     if "queue_start_table" in payload:
         value = payload.get("queue_start_table")
         if value is not None:
@@ -1301,6 +1308,7 @@ def update_table_settings(club_id):
         "songs_per_table": club.songs_per_table,
         "queue_mode": get_queue_mode(club),
         "queue_start_table": get_queue_start_table(club),
+        "guest_queue_visible": bool(club.guest_queue_visible),
     })
 
 
