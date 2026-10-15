@@ -1514,6 +1514,43 @@ function SongListsAdminPanel({ token }) {
 
 // ДОБАВЛЕНО (2026-10): переключатель "Общий чат" (ссылка на группу в
 // Telegram у гостя) — Вкл/Откл.
+// ДОБАВЛЕНО (2026-10-15, запрос пользователя): справа от "Активная очередь
+// VirtualDJ" — показывать ли живую очередь гостям. Меняет только
+// guest_queue_visible (патч-семантика бэкенда, см. api.updateTableSettings).
+function GuestQueueToggle({ token, clubId }) {
+  const [visible, setVisible] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    api.getTableSettings(token, clubId)
+      .then((data) => setVisible(data.guest_queue_visible !== false))
+      .catch((err) => setError(err instanceof ApiError ? err.message : String(err)));
+  }, [token, clubId]);
+
+  async function toggle() {
+    setBusy(true);
+    setError(null);
+    try {
+      const data = await api.updateTableSettings(token, clubId, { guest_queue_visible: !visible });
+      setVisible(data.guest_queue_visible !== false);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+      <button type="button" className="btn-link" disabled={busy || visible == null} onClick={toggle}>
+        Показывать очередь гостям: {visible == null ? "…" : visible ? "Вкл" : "Выкл"}
+      </button>
+      {error && <span className="banner banner--error">{error}</span>}
+    </span>
+  );
+}
+
 function GeneralChatToggle({ token }) {
   const [enabled, setEnabled] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -5235,7 +5272,10 @@ export default function App() {
           </section>
 
           <section>
-            <h2>Активная очередь VirtualDJ</h2>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+              <h2 style={{ margin: 0 }}>Активная очередь VirtualDJ</h2>
+              <GuestQueueToggle token={token} clubId={me.club_id} />
+            </div>
             <QueueTable queue={queue} token={token} clubId={me.club_id} />
           </section>
         </main>
