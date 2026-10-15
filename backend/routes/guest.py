@@ -1466,4 +1466,9 @@ def queue():
     пользователя, 2026-10) — см. services/vdj_service.py::
     get_guest_queue_view().
     """
+    # KJ выключил показ очереди гостям (кнопка "Показывать очередь гостям" в
+    # панели KJ) — отдаём пустой список, гость видит "Очередь пока пуста".
+    club = db.session.get(Club, g.club_id)
+    if club is not None and not club.guest_queue_visible:
+        return api_ok([])
     return api_ok(vdj_service.get_guest_queue_view(g.club_id, g.guest_id))
