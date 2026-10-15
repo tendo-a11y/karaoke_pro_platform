@@ -3072,6 +3072,9 @@ export default function App() {
   const [toneOn, setToneOn] = useState(false);
   const [tone, setTone] = useState(null);
   const [queue, setQueue] = useState([]);
+  // KJ может скрыть живую очередь от гостей (кнопка "Показывать очередь гостям") —
+  // тогда блок остаётся, но вместо списка пишем "Очередь не отображается".
+  const [queueVisible, setQueueVisible] = useState(true);
   // ДОБАВЛЕНО (2026-10): всплывающее сообщение "скоро ваша очередь" — за
   // две песни и за одну песню до выхода гостя, один раз на песню.
   const [turnToast, setTurnToast] = useState(null);
@@ -3217,7 +3220,10 @@ export default function App() {
     if (!session) return;
     try {
       const data = await api.getQueue(session.token);
-      setQueue(data);
+      // Скрыто KJ: сервер отдаёт {visible: false}; иначе — обычный список.
+      const hidden = !Array.isArray(data) && data?.visible === false;
+      setQueueVisible(!hidden);
+      setQueue(Array.isArray(data) ? data : []);
     } catch {
       // Живая очередь — не критично, если один опрос не удался.
     }
@@ -3909,7 +3915,9 @@ export default function App() {
         ) : (
           <h2 className="active-queue-title">Активная очередь</h2>
         )}
-        {songListsOpen ? null : queue.length === 0 ? (
+        {songListsOpen ? null : !queueVisible ? (
+          <p className="empty-hint">Очередь не отображается.</p>
+        ) : queue.length === 0 ? (
           <p className="empty-hint">Очередь пуста.</p>
         ) : (
           <>
