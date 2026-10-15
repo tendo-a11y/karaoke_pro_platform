@@ -3828,7 +3828,9 @@ export default function App() {
                 type="submit"
                 disabled={submitting || !songTitle.trim() || !artist.trim()}
                 className={
-                  !submitting && songTitle.trim() && artist.trim() && (serviceId || services.length === 0)
+                  // Пока гость выбирает стол и входит через Google (showActivation),
+                  // моргает только этот шаг, а не кнопка "Заказать".
+                  !submitting && !showActivation && songTitle.trim() && artist.trim() && (serviceId || services.length === 0)
                     ? "step-blink"
                     : undefined
                 }
