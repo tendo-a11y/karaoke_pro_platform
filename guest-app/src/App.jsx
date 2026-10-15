@@ -2740,6 +2740,7 @@ function ActivationPanel({ token, onActivated, onCancel }) {
         <input
           type="number"
           min="1"
+          className={!tableNoValid ? "step-blink" : undefined}
           value={tableNo}
           onChange={(e) => {
             setTableNo(e.target.value);
@@ -2766,7 +2767,8 @@ function ActivationPanel({ token, onActivated, onCancel }) {
             ))}
           </div>
         )}
-        <div ref={googleButtonRef} />
+        {/* Шаг 2: моргает, когда стол уже выбран (первый шаг — номер стола). */}
+        <div ref={googleButtonRef} className={tableNoValid && !busy ? "step-blink" : undefined} />
         {busy && <p className="empty-hint">Входим…</p>}
         <button type="button" className="link-btn" onClick={onCancel} disabled={busy}>
           Отмена
