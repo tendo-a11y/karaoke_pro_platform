@@ -115,6 +115,10 @@ class Club(db.Model):
     # задал "Начало очереди". Спетые до этого момента песни на положение
     # круга не влияют (см. table_board_service._round_cursor).
     queue_round_since = db.Column(db.DateTime(timezone=True), nullable=True)
+    # ДОБАВЛЕНО (2026-10-15, запрос пользователя "Показывать очередь гостям",
+    # Вкл/Выкл): False — гости не видят живую очередь клуба (отдаётся пустой
+    # список). Переключается KJ справа от "Активная очередь VirtualDJ".
+    guest_queue_visible = db.Column(db.Boolean, nullable=False, default=True, server_default=db.true())
 
     # ДОБАВЛЕНО (2026-10-04, запрос пользователя "бот и приложение — два
     # отдельных инструмента, что в боте то и в приложении"): перенос
