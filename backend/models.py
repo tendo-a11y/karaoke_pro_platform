@@ -343,6 +343,11 @@ class Order(db.Model):
     # исправил название на точное из VirtualDJ (см. vdj_service.rename_order /
     # link_order_to_vdj_item). NULL — название не менялось.
     guest_song_text = db.Column(db.String(1000), nullable=True)
+    # ДОБАВЛЕНО (2026-10, приоритет песни за столом): 1 или 2 — занятое место
+    # приоритета (песня встаёт первой или второй в очереди стола); NULL — нет.
+    priority_slot = db.Column(db.SmallInteger, nullable=True)
+    # Гость попросил приоритет и ждёт подтверждения KJ.
+    priority_requested = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
     # ДОБАВЛЕНО (2026-10, запрос пользователя): тональность, которую гость
     # выбрал при заказе (от -6 до +6, без нуля). NULL — тон не выбран.
     tone = db.Column(db.Integer, nullable=True)
@@ -388,6 +393,8 @@ class Order(db.Model):
             "vdj_filepath": self.vdj_filepath,
             "error_message": self.error_message,
             "guest_song_text": self.guest_song_text,
+            "priority_slot": self.priority_slot,
+            "priority_requested": bool(self.priority_requested),
             "tone": self.tone,
             "song_url": self.song_url,
             "completion_source": self.completion_source,
