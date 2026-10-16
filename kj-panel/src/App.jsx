@@ -3901,6 +3901,8 @@ function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged, auto
                 <div>
                   {member.display_name || `Гость #${member.guest_id}`}{" "}
                   {member.is_admin && <span className="guest-type-badge">админ стола</span>}
+                  {/* Вход без Google (2026-10): гость без постоянного профиля. */}
+                  {member.no_login && <span className="guest-type-badge">без входа</span>}
                   {member.is_blocked && <span className="guest-type-badge guest-type-badge--blocked">🚫 Заблокирован</span>}
                   <br />
                   <span className="empty-hint">
