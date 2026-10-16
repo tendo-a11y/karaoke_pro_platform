@@ -3680,6 +3680,16 @@ function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged, auto
       setPrecheckBusy(false);
     }
   }
+  const [priorityError, setPriorityError] = useState(null);
+  async function togglePriority(order, flag) {
+    setPriorityError(null);
+    try {
+      await api.setOrderPriority(token, order.id, flag);
+      await reload();
+    } catch (err) {
+      setPriorityError(err instanceof ApiError ? err.message : String(err));
+    }
+  }
   const [moveOpen, setMoveOpen] = useState(false);
   const [moveTarget, setMoveTarget] = useState("");
   const [freeTables, setFreeTables] = useState(null);
@@ -3895,6 +3905,38 @@ function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged, auto
 
       {group && (
         <>
+          {/* Приоритет песни за столом (2026-10): вся очередь стола по порядку. */}
+          <div className="table-queue">
+            <h4>Очередь стола</h4>
+            {priorityError && <div className="banner banner--error">{priorityError}</div>}
+            {(group.table_orders || []).length === 0 ? (
+              <p className="empty-hint">За этим столом пока нет песен в очереди.</p>
+            ) : (
+              <ol>
+                {group.table_orders.map((o, index) => (
+                  <li key={o.id}>
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={o.priority_slot != null}
+                        onChange={(e) => togglePriority(o, e.target.checked)}
+                      />{" "}
+                      Приоритет
+                    </label>{" "}
+                    {o.song_title}{o.artist ? ` — ${o.artist}` : ""}{" "}
+                    <span className="empty-hint">#{index + 1}</span>
+                    {o.priority_requested && (
+                      <>
+                        {" "}<span className="guest-type-badge">гость просит приоритет</span>{" "}
+                        <button type="button" className="link-btn" onClick={() => togglePriority(o, true)}>Подтвердить</button>{" "}
+                        <button type="button" className="link-btn" onClick={() => togglePriority(o, false)}>Отклонить</button>
+                      </>
+                    )}
+                  </li>
+                ))}
+              </ol>
+            )}
+          </div>
           <ul className="vip-list">
             {group.members.map((member) => (
               <li key={member.guest_id} className="vip-row vip-row--client">
