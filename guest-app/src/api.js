@@ -129,6 +129,9 @@ export const api = {
   // ДОБАВЛЕНО (2026-09-20, жалоба пользователя "нет возможности удалить" в
   // "Мои заказы") — гость сам отменяет ещё не сыгранный заказ, см.
   // backend/services/vdj_service.py::cancel_order_by_guest.
+  // Приоритет песни за столом (2026-10): заявка уходит KJ на подтверждение.
+  requestOrderPriority: (token, orderId) =>
+    request(`/api/guest/order/${orderId}/priority-request`, { method: "POST", token }),
   cancelOrder: (token, orderId) =>
     request(`/api/guest/order/${orderId}/cancel`, { method: "POST", token }),
   getQueue: (token) => request("/api/guest/queue", { token }),
