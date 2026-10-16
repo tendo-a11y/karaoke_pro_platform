@@ -635,6 +635,38 @@ def link_google():
     })
 
 
+@bp.post("/order/<int:order_id>/priority-request")
+@require_guest
+def request_order_priority(order_id):
+    """
+    Гость просит приоритет для своей песни за столом (2026-10). Заявка уходит
+    KJ, песня поднимется только после его подтверждения. Нельзя, если песня
+    уже с приоритетом, уже ждёт решения, или уже первая/вторая в очереди.
+    """
+    from services.table_board_service import ACTIVE_TABLE_STATUSES, table_queue_orders
+
+    order = db.session.get(Order, order_id)
+    if order is None or order.club_id != g.club_id or order.telegram_user_id != g.guest_id:
+        return api_error(404, "ORDER_NOT_FOUND", "Заказ не найден")
+    if g.table_no is None or order.table_no != g.table_no:
+        return api_error(403, "TABLE_ACCESS_REQUIRED", "Приоритет можно попросить только за своим столом")
+    if order.status not in ACTIVE_TABLE_STATUSES:
+        return api_error(409, "ORDER_NOT_ACTIVE", "Приоритет можно попросить только для активной песни")
+    if order.priority_slot is not None:
+        return api_error(409, "ALREADY_PRIORITY", "Эта песня уже с приоритетом")
+    if order.priority_requested:
+        return api_error(409, "REQUEST_ALREADY_PENDING", "Запрос уже отправлен — дождитесь решения KJ")
+
+    queue = table_queue_orders(g.club_id, order.table_no)
+    index = next((i for i, o in enumerate(queue) if o.id == order.id), None)
+    if index is not None and index < 2:
+        return api_error(409, "PRIORITY_NOT_NEEDED", "Песня уже первая или вторая в очереди стола")
+
+    order.priority_requested = True
+    db.session.commit()
+    return api_ok(order.to_dict())
+
+
 @bp.post("/profile/table-no-login")
 @require_guest
 def choose_table_without_login():
