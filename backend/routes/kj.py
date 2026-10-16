@@ -7,7 +7,7 @@ from auth import issue_kj_google_token, require_kj
 from errors import api_error, api_ok
 from extensions import db
 from models import AdminKjMessage, ChatMessage, Club, GuestAccount, KJOperator, KjSuggestion, Order, STATUS_PLAYING, TableGroupMember, VipClient, VipRequest
-from services import category_service, extra_table_service, guest_account_service, guest_directory_service, guest_status_service, song_service, table_close_service, table_group_service, vip_service, vip_topup_request_service
+from services import category_service, extra_table_service, guest_account_service, guest_directory_service, guest_status_service, song_service, table_board_service, table_close_service, table_group_service, vip_service, vip_topup_request_service
 from services.guest_directory_service import GUEST_TYPES, GuestDirectoryError
 from services.category_service import CategoryServiceError
 from services.google_auth_service import GoogleAuthError, verify_google_credential
@@ -199,6 +199,58 @@ def confirm(order_id):
         return response
 
     return api_error(500, "INTERNAL_ERROR", "Неизвестный результат обработки заказа")
+
+
+@bp.put("/order/<int:order_id>/priority")
+@require_kj
+def set_order_priority(order_id):
+    """
+    Приоритет песни за столом (2026-10): KJ ставит галочку — песня встаёт
+    на место 1, если оно свободно, иначе на место 2; снятие галочки
+    освобождает место и отклоняет запрос гостя. Заказ гостя просит
+    приоритет через POST /api/guest/order/<id>/priority-request, и песня
+    поднимается только после этого подтверждения.
+    """
+    from services.table_board_service import ACTIVE_TABLE_STATUSES
+
+    payload = request.get_json(silent=True) or {}
+    flag = payload.get("priority")
+    if not isinstance(flag, bool):
+        return api_error(400, "VALIDATION_ERROR", "priority обязателен и должен быть true или false")
+
+    order = db.session.get(Order, order_id)
+    if order is None or order.club_id != g.kj.club_id:
+        return api_error(404, "ORDER_NOT_FOUND", "Заказ не найден")
+    if order.table_no is None:
+        return api_error(400, "NO_TABLE", "Приоритет доступен только для заказов за столом")
+    if order.status not in ACTIVE_TABLE_STATUSES:
+        return api_error(409, "ORDER_NOT_ACTIVE", "Приоритет можно поставить только активной песне")
+
+    if flag:
+        if order.priority_slot is None:
+            taken = {
+                row[0] for row in (
+                    db.session.query(Order.priority_slot)
+                    .filter(
+                        Order.club_id == order.club_id,
+                        Order.table_no == order.table_no,
+                        Order.status.in_(ACTIVE_TABLE_STATUSES),
+                        Order.priority_slot.isnot(None),
+                    )
+                    .all()
+                )
+            }
+            free = [slot for slot in (1, 2) if slot not in taken]
+            if not free:
+                return api_error(409, "PRIORITY_SLOTS_FULL", "На этом столе уже заняты два приоритета")
+            order.priority_slot = free[0]
+        order.priority_requested = False
+    else:
+        order.priority_slot = None
+        order.priority_requested = False
+
+    db.session.commit()
+    return api_ok(order.to_dict())
 
 
 @bp.put("/order/<int:order_id>/reject")
@@ -2011,6 +2063,9 @@ def get_table_group(club_id, table_no):
         "admin_guest_id": str(group.admin_guest_id),
         "admin_no_login": table_group_service.is_no_login(club_id, group.admin_guest_id),
         "members": roster,
+        # Вся очередь стола по порядку (с приоритетами), не только та часть,
+        # которую видно на доске — KJ видит все песни стола.
+        "table_orders": [o.to_dict() for o in table_board_service.table_queue_orders(club_id, table_no)],
         "played_orders": [o.to_dict() for o in played_orders],
     })
 
