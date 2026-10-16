@@ -2828,12 +2828,12 @@ function ActivationPanel({ token, onActivated, onCancel }) {
             ))}
           </div>
         )}
+        <button type="button" className="activation-nologin" onClick={handleNoLogin} disabled={busy || !tableNoValid}>
+          Заказать без входа
+        </button>
         {/* Шаг 2: моргает, когда стол уже выбран (первый шаг — номер стола). */}
         <div ref={googleButtonRef} className={tableNoValid && !busy ? "step-blink" : undefined} />
         {busy && <p className="empty-hint">Входим…</p>}
-        <button type="button" onClick={handleNoLogin} disabled={busy || !tableNoValid}>
-          Заказать без входа
-        </button>
         <button type="button" className="link-btn" onClick={onCancel} disabled={busy}>
           Отмена
         </button>
