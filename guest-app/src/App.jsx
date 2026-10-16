@@ -684,7 +684,7 @@ function PriorityRequestButton({ token, orderId }) {
     <>
       {error && <span className="banner banner--error">{error}</span>}
       <button type="button" className="link-btn" disabled={busy} onClick={handleRequest}>
-        {busy ? "Отправляем…" : "⭐ Попросить приоритет"}
+        {busy ? "Отправляем…" : "⭐ Поставить первой"}
       </button>
     </>
   );
