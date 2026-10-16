@@ -1978,6 +1978,12 @@ def get_table_group(club_id, table_no):
             }
         detail.pop("favorites", None)
         detail["is_admin"] = member.guest_id == group.admin_guest_id
+        # Вход без Google (2026-10): отметка "без входа" в карточке стола и
+        # подпись "Гость стол N" вместо пустого имени.
+        no_login = table_group_service.is_no_login(club_id, member.guest_id)
+        detail["no_login"] = no_login
+        if no_login and not detail.get("display_name"):
+            detail["display_name"] = f"Гость стол {table_no}"
         roster.append(detail)
 
     # ДОБАВЛЕНО (запрос пользователя 2026-09-30, кнопка "Вернуть" на
@@ -2003,6 +2009,7 @@ def get_table_group(club_id, table_no):
         "table_no": table_no,
         "created_at": group.created_at.isoformat() if group.created_at else None,
         "admin_guest_id": str(group.admin_guest_id),
+        "admin_no_login": table_group_service.is_no_login(club_id, group.admin_guest_id),
         "members": roster,
         "played_orders": [o.to_dict() for o in played_orders],
     })
