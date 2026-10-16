@@ -1063,6 +1063,8 @@ button.step-blink-fill { animation: button-fill-blink 1s ease-in-out infinite; }
 .extra-table-picker { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 /* Подпись "Доп. столы:" — мельче, бледнее, отдельной строкой над кнопками, выровнена по левому краю */
 .extra-table-picker > .empty-hint:first-child { flex-basis: 100%; font-size: 12px; opacity: 0.7; margin: 0 0 2px 0; text-align: left; }
+/* Кнопка "Заказать без входа" — той же ширины и по левому краю, что и кнопка Google (280px) */
+.activation-nologin { width: 280px; max-width: 100%; align-self: flex-start; box-sizing: border-box; }
 .extra-table-picker__btn {
   padding: 6px 12px; border-radius: 999px; border: 1px solid rgba(255, 176, 32, 0.45);
   background: rgba(255, 176, 32, 0.10); color: inherit; font: inherit; cursor: pointer;
