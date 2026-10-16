@@ -100,6 +100,9 @@ export const api = {
     request("/api/guest/profile/link-google", {
       method: "POST", token, body: { table_no: tableNo, google_credential: googleCredential },
     }),
+  // Вход без Google (2026-10): гость выбирает только стол, без постоянного профиля.
+  chooseTableNoLogin: (token, tableNo) =>
+    request("/api/guest/profile/table-no-login", { method: "POST", token, body: { table_no: tableNo } }),
   createOrder: (token, songTitle, artist, serviceId, tone = null, songUrl = null) =>
     request("/api/guest/order", {
       method: "POST", token, body: { song_title: songTitle, artist, service_id: serviceId, tone, song_url: songUrl },
