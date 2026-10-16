@@ -352,11 +352,10 @@ def compute_queue_order(club_id: int) -> list[Order]:
     return crazy + rest
 
 
-def partition_table_orders(club_id: int, table_no: int, capacity: int):
+def table_queue_orders(club_id: int, table_no: int) -> list:
     """
-    (активные, ожидающие) заказы одного стола, отсортированные по времени
-    создания — первые capacity штук активны (их видит KJ), остальные ждут
-    невидимо (см. докстринг файла).
+    Все активные заказы одного стола в порядке очереди: сначала песни с
+    приоритетом (место 1, потом 2), затем остальные — по времени создания.
     """
     orders = (
         Order.query
@@ -364,6 +363,17 @@ def partition_table_orders(club_id: int, table_no: int, capacity: int):
         .order_by(Order.created_at.asc())
         .all()
     )
+    # sorted() стабильна: внутри каждой группы сохраняется порядок создания.
+    return sorted(orders, key=lambda o: (0, o.priority_slot) if o.priority_slot else (1, 0))
+
+
+def partition_table_orders(club_id: int, table_no: int, capacity: int):
+    """
+    (активные, ожидающие) заказы одного стола в порядке очереди (с учётом
+    приоритетов, см. table_queue_orders) — первые capacity штук активны
+    (их видит KJ), остальные ждут невидимо (см. докстринг файла).
+    """
+    orders = table_queue_orders(club_id, table_no)
     return orders[:capacity], orders[capacity:]
 
 
