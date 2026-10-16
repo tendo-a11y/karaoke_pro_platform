@@ -1333,7 +1333,7 @@ function resizeImageToBase64(file) {
   });
 }
 
-function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSuggestOther, onSearchStart, active = false }) {
+function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSuggestOther, onSearchStart, active = false, showProfileTabs = true }) {
   // "Не эта" под найденной песней: подсказываем другие способы — моргают "Ссылка" и "Скриншот".
   const [suggestOther, setSuggestOther] = useState(false);
   // Неудачный поиск — пусть ещё моргает поле "Название песни" (запрос пользователя 2026-10).
@@ -1445,7 +1445,7 @@ function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSu
               { key: "orders", label: "Мои заказы" },
               { key: "fav", label: "Избранное" },
               { key: "history", label: "История" },
-            ].map((b) => (
+            ].filter((b) => showProfileTabs || (b.key !== "fav" && b.key !== "history")).map((b) => (
               <button
                 key={b.key}
                 type="button"
@@ -2681,6 +2681,25 @@ function ActivationPanel({ token, onActivated, onCancel }) {
     }
   }
 
+  // Вход без Google (2026-10): только стол, без постоянного профиля.
+  async function handleNoLogin() {
+    if (busy) return;
+    if (!tableNoValid) {
+      setError("Сначала укажите номер своего стола");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await api.chooseTableNoLogin(token, parsedTableNo);
+      await onActivated(result);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   // ИСПРАВЛЕНО (жалоба пользователя 2026-09-28 "нету у меня входа"): скрипт
   // https://accounts.google.com/gsi/client подключён в index.html как
   // async defer — он грузится параллельно с самим React-приложением, и
@@ -2735,6 +2754,9 @@ function ActivationPanel({ token, onActivated, onCancel }) {
         Укажите номер своего стола и войдите через Google одним действием — это нужно один раз,
         дальше ваш стол, история заказов и избранное сохранятся.
       </p>
+      <p className="empty-hint">
+        Или нажмите «Заказать без входа» — тогда доступны только заказы песен, без избранного, кэшбэка и VIP.
+      </p>
       {error && <div className="banner banner--error">{error}</div>}
       <div className="order-form">
         <input
@@ -2770,6 +2792,9 @@ function ActivationPanel({ token, onActivated, onCancel }) {
         {/* Шаг 2: моргает, когда стол уже выбран (первый шаг — номер стола). */}
         <div ref={googleButtonRef} className={tableNoValid && !busy ? "step-blink" : undefined} />
         {busy && <p className="empty-hint">Входим…</p>}
+        <button type="button" onClick={handleNoLogin} disabled={busy || !tableNoValid}>
+          Заказать без входа
+        </button>
         <button type="button" className="link-btn" onClick={onCancel} disabled={busy}>
           Отмена
         </button>
@@ -3492,7 +3517,9 @@ export default function App() {
   // истины — те же две проверки, что и на бэкенде в create_order
   // (TABLE_REQUIRED, затем GOOGLE_LINK_REQUIRED); это чисто UI-отражение,
   // а не отдельное правило.
-  const activated = meInfo.table_no != null && meInfo.has_permanent_profile;
+  // Вход без Google (2026-10): стол выбран — заказ открыт (решает сервер,
+  // см. create_order); постоянный профиль нужен только для избранного и VIP.
+  const activated = meInfo.table_no != null;
 
   // Групповой стол (утверждённая спецификация, вариант А — полноценный
   // шлюз): без стола эта механика не действует вообще; со столом —
@@ -3633,6 +3660,7 @@ export default function App() {
             }
           }}
           extra={orderExtra}
+          showProfileTabs={!!meInfo.has_permanent_profile}
           onExtra={(key) => {
             if (key === "orders") setOrdersTab("current");
             if (key === "history") setOrdersTab("history");
