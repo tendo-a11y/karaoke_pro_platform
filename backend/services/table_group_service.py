@@ -30,6 +30,7 @@ from sqlalchemy.exc import IntegrityError
 
 from extensions import db
 from models import (
+    GuestAccount,
     Order,
     STATUS_TABLE_JOIN_APPROVED,
     STATUS_TABLE_JOIN_PENDING,
@@ -70,6 +71,39 @@ def is_member(club_id: int, table_no: int, guest_id: int) -> bool:
     без переиздания токена (см. docstring модуля).
     """
     return get_membership(club_id, table_no, guest_id) is not None
+
+
+# Сообщение для гостей, которые пытаются занять стол, за которым уже сидит
+# гость без входа и есть заказы песен (запрос пользователя 2026-10).
+TABLE_LOCKED_BY_ORDERS_MESSAGE = "За вашим столом уже есть заказы песен"
+
+
+def is_no_login(club_id: int, guest_id: int) -> bool:
+    """Гость без входа в Google = у его сессии нет постоянного профиля."""
+    return GuestAccount.query.filter_by(club_id=club_id, telegram_user_id=guest_id).first() is None
+
+
+def has_active_table_orders(club_id: int, table_no: int) -> bool:
+    return (
+        Order.query
+        .filter(Order.club_id == club_id, Order.table_no == table_no, Order.status.in_(ACTIVE_TABLE_STATUSES))
+        .first()
+        is not None
+    )
+
+
+def no_login_admin_locked(club_id: int, table_no: int, guest_id: int) -> bool:
+    """
+    True, если стол занят гостем без входа и за столом есть активные заказы
+    песен — тогда остальным (и с Google, и без) занять стол нельзя. Пока
+    заказов нет, стол ведёт себя как обычно (через заявку админу стола).
+    """
+    group = get_group(club_id, table_no)
+    if group is None or group.admin_guest_id == guest_id:
+        return False
+    if not is_no_login(club_id, group.admin_guest_id):
+        return False
+    return has_active_table_orders(club_id, table_no)
 
 
 class SessionGroupState:
