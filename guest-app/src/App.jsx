@@ -661,6 +661,35 @@ function SongListsPanel({ token, onPick, tab, onTab }) {
   );
 }
 
+// Приоритет песни за столом (2026-10): гость просит поднять свою песню.
+// Заявка уходит KJ; песня встаёт первой или второй только после его подтверждения.
+function PriorityRequestButton({ token, orderId }) {
+  const [busy, setBusy] = useState(false);
+  const [sent, setSent] = useState(false);
+  const [error, setError] = useState(null);
+  async function handleRequest() {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.requestOrderPriority(token, orderId);
+      setSent(true);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+  if (sent) return <span className="empty-hint"> · Запрос приоритета отправлен KJ</span>;
+  return (
+    <>
+      {error && <span className="banner banner--error">{error}</span>}
+      <button type="button" className="link-btn" disabled={busy} onClick={handleRequest}>
+        {busy ? "Отправляем…" : "⭐ Попросить приоритет"}
+      </button>
+    </>
+  );
+}
+
 function OrderRow({
   order, onFavorite, favoriteBusy,
   token, services, isReplacing, onToggleReplace, onReplace, replaceBusy,
@@ -743,6 +772,16 @@ function OrderRow({
         матрица, что и у can_replace_order) — заводить отдельный флаг
         can_cancel было бы дублированием одной и той же проверки на
         бэкенде. */}
+        {order.priority_slot != null && (
+          <span className="empty-hint"> · ⭐ приоритет, место {order.priority_slot}</span>
+        )}
+        {order.priority_requested && order.priority_slot == null && (
+          <span className="empty-hint"> · ⭐ запрос приоритета ждёт KJ</span>
+        )}
+        {!pendingRequest && order.table_no != null && order.priority_slot == null && !order.priority_requested
+          && ["pending", "processing", "queued", "error"].includes(order.status) && (
+          <PriorityRequestButton token={token} orderId={order.id} />
+        )}
         {!pendingRequest && order.can_replace && onCancel && (
           <button
             type="button"
