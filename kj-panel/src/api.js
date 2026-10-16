@@ -341,6 +341,9 @@ export const api = {
   // Пречек стола — чек без закрытия (2026-10-13).
   getTablePrecheck: (token, clubId, tableNo) =>
     request(`/api/kj/table-groups/${clubId}/${tableNo}/precheck`, { token }),
+  // Приоритет песни за столом (2026-10): priority true — поставить, false — снять/отклонить.
+  setOrderPriority: (token, orderId, priority) =>
+    request(`/api/kj/order/${orderId}/priority`, { method: "PUT", token, body: { priority } }),
   getTableGroup: (token, clubId, tableNo) =>
     request(`/api/kj/table-groups/${clubId}/${tableNo}`, { token }),
   closeTableGroup: (token, clubId, tableNo, hideReceipt) =>
