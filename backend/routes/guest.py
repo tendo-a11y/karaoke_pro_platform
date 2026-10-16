@@ -246,12 +246,8 @@ def create_order():
             "Чтобы заказать песню, сначала выберите стол",
         )
 
-    if guest_account_service.get_by_guest_id(g.club_id, g.guest_id) is None:
-        return api_error(
-            409, "GOOGLE_LINK_REQUIRED",
-            "Чтобы заказать песню, сначала войдите через Google",
-        )
-
+    # Заказ не требует постоянного профиля (вход без Google): допуск решает
+    # членство за столом ниже.
     if not table_group_service.is_member(g.club_id, g.table_no, g.guest_id):
         return api_error(
             403, "TABLE_ACCESS_REQUIRED",
@@ -605,6 +601,9 @@ def link_google():
     except GoogleAuthError as exc:
         return api_error(401, "GOOGLE_AUTH_FAILED", exc.message)
 
+    if table_group_service.no_login_admin_locked(g.club_id, effective_table_no, g.guest_id):
+        return api_error(409, "TABLE_LOCKED_BY_ORDERS", table_group_service.TABLE_LOCKED_BY_ORDERS_MESSAGE)
+
     result = guest_account_service.link_google(g.club_id, g.guest_id, identity["sub"], identity.get("email"))
     new_guest_id = result.account.telegram_user_id
 
@@ -633,6 +632,46 @@ def link_google():
         "guest_id": str(new_guest_id), "club_id": g.club_id, "table_no": effective_table_no,
         "token": token, "table_group_status": table_group_state.status,
         "account": result.account.to_dict(),
+    })
+
+
+@bp.post("/profile/table-no-login")
+@require_guest
+def choose_table_without_login():
+    """
+    Вход без Google (запрос пользователя 2026-10): гость просто выбирает
+    номер стола. Имя не спрашивается — в панели KJ он виден как "Гость
+    стол N". Постоянного профиля нет, поэтому избранного, VIP и кэшбэка
+    у него не будет; заказывать за столом он может, пока он сам — главный
+    за этим столом (см. table_group_service.no_login_admin_locked).
+    """
+    from services import extra_table_service
+
+    payload = request.get_json(silent=True) or {}
+    table_no = payload.get("table_no")
+
+    if g.table_no is not None:
+        return api_error(409, "TABLE_ALREADY_SET", "Стол уже выбран")
+    if not isinstance(table_no, int) or isinstance(table_no, bool) or table_no <= 0:
+        return api_error(400, "VALIDATION_ERROR", "table_no обязателен и должен быть положительным числом")
+
+    club = db.session.get(Club, g.club_id)
+    if club is not None and not extra_table_service.is_valid_table(club, table_no):
+        return api_error(400, "TABLE_OUT_OF_RANGE", extra_table_service.out_of_range_message(club))
+
+    if table_group_service.no_login_admin_locked(g.club_id, table_no, g.guest_id):
+        return api_error(409, "TABLE_LOCKED_BY_ORDERS", table_group_service.TABLE_LOCKED_BY_ORDERS_MESSAGE)
+
+    table_group_state = table_group_service.ensure_session_group_state(g.club_id, table_no, g.guest_id)
+    guest_status_service.set_table(g.club_id, g.guest_id, table_no)
+
+    token = issue_guest_token(
+        g.guest_id, g.club_id, table_no,
+        current_app.config["GUEST_JWT_SECRET"], current_app.config["GUEST_JWT_TTL_SECONDS"],
+    )
+    return api_ok({
+        "guest_id": str(g.guest_id), "club_id": g.club_id, "table_no": table_no,
+        "token": token, "table_group_status": table_group_state.status, "account": None,
     })
 
 
@@ -787,6 +826,11 @@ def add_favorite():
     song_title = payload.get("song_title")
     artist = payload.get("artist")
     service_id = payload.get("service_id")
+
+    # Вход без Google (2026-10): у гостя за столом без постоянного профиля
+    # избранного нет — только заказ песни.
+    if g.table_no is not None and guest_account_service.get_by_guest_id(g.club_id, g.guest_id) is None:
+        return api_error(409, "GOOGLE_LINK_REQUIRED", "Избранное доступно после входа через Google")
 
     if not song_title or not isinstance(song_title, str):
         return api_error(400, "VALIDATION_ERROR", "song_title обязателен")
