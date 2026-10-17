@@ -433,6 +433,13 @@ OrderChangeRequestsPanel), а не терялась среди обычных к
    прижимает её к себе, а не растягивает на всю ширину колонки. */
 .btn-link--danger { color: var(--danger); }
 .chat-thread-row__delete { align-self: flex-end; padding: 2px 4px; font-size: 12px; }
+/* Цвета сообщений в переписке (2026-10): гость — голубой, KJ — янтарный (акцент), администрация — фиолетовый */
+.chat-msg--guest { border-left: 4px solid #4da3ff; background: rgba(77, 163, 255, 0.10); }
+.chat-msg--guest > span:first-child { color: #4da3ff; font-weight: 600; }
+.chat-msg--kj { border-left: 4px solid var(--accent); background: rgba(255, 176, 32, 0.10); }
+.chat-msg--kj > span:first-child { color: var(--accent); font-weight: 600; }
+.chat-msg--admin { border-left: 4px solid #b388ff; background: rgba(179, 136, 255, 0.12); }
+.chat-msg--admin > span:first-child { color: #b388ff; font-weight: 600; }
 .chat-thread-header-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 
 .vip-row__actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
