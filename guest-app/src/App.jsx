@@ -3185,6 +3185,9 @@ export default function App() {
   // ДОБАВЛЕНО (2026-09-20, жалоба "нет возможности удалить" в "Мои заказы").
   const [cancelBusyOrderId, setCancelBusyOrderId] = useState(null);
   const [cancelError, setCancelError] = useState(null);
+  // ДОБАВЛЕНО (2026-10): массовое удаление не спетых заказов (без KJ).
+  const [bulkCancelBusy, setBulkCancelBusy] = useState(false);
+  const [bulkCancelInfo, setBulkCancelInfo] = useState(null);
   // ТЗ п.45 (финальная единая модель входа) — показывает ли экран "стол +
   // Google" прямо сейчас; открывается попыткой заказать, будучи Role 5
   // (см. handleSubmitOrder), закрывается после успешной активации (см.
@@ -3487,6 +3490,29 @@ export default function App() {
     }
   }
 
+  // ДОБАВЛЕНО (2026-10, решение пользователя "без контроля KJ, удалять можно,
+  // если это не первая или вторая песня"): гость удаляет все свои не спетые
+  // заказы сразу. Первые две песни стола сервер не трогает.
+  async function handleCancelUnplayed() {
+    if (!window.confirm("Удалить все не спетые песни? Первые две песни стола останутся.")) return;
+    setBulkCancelBusy(true);
+    setCancelError(null);
+    setBulkCancelInfo(null);
+    try {
+      const data = await api.cancelUnplayedOrders(session.token);
+      setBulkCancelInfo(
+        data && data.cancelled
+          ? `Удалено песен: ${data.cancelled}`
+          : "Удалять нечего: первые две песни стола не удаляются"
+      );
+      await refreshOrders();
+    } catch (err) {
+      setCancelError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBulkCancelBusy(false);
+    }
+  }
+
   // ТЗ п.45 (финальная единая модель входа): вызывается один раз, сразу
   // после успешного "стол + Google" в ActivationPanel — единственного
   // способа стать Role 4. Не переиспользуем refreshOrders/refreshMe-
@@ -3747,6 +3773,17 @@ export default function App() {
         {orderExtra === "orders" || orderExtra === "history" ? (
           <div className="profile-finance">
           <h2>{ordersTab === "history" ? "История" : "Мои заказы"}</h2>
+        {ordersTab !== "history" && orders.some((o) => o.status === "pending" || o.status === "queued") && (
+          <button
+            type="button"
+            className="link-btn bulk-cancel-btn"
+            disabled={bulkCancelBusy}
+            onClick={handleCancelUnplayed}
+          >
+            {bulkCancelBusy ? "Удаляем…" : "🗑 Удалить все не спетые"}
+          </button>
+        )}
+        {bulkCancelInfo && <div className="empty-hint">{bulkCancelInfo}</div>}
         {ordersTab === "history" && (
           <ClearStatsControl
             onClear={async (period) => {
