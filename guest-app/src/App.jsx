@@ -2990,6 +2990,22 @@ function TableCloseReceiptBanner({ closeRequest, onDismiss }) {
 // адрес в нём перепутает клуб при автоустановке. Обычное "На экран
 // Домой" браузера сохраняет именно текущую ссылку гостя (с его клубом),
 // поэтому это просто подсказка из двух шагов, без автоматизации.
+const FIRST_ORDER_NOTICE_KEY = "first_order_notice_seen";
+function isFirstOrderNoticeSeen() {
+  try {
+    return localStorage.getItem(FIRST_ORDER_NOTICE_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+function markFirstOrderNoticeSeen() {
+  try {
+    localStorage.setItem(FIRST_ORDER_NOTICE_KEY, "1");
+  } catch {
+    // localStorage недоступен — плашка может показаться ещё раз, это не критично
+  }
+}
+
 function AddToHomeScreenHint() {
   const [dismissed, setDismissed] = useState(() => {
     try {
@@ -3174,6 +3190,8 @@ export default function App() {
   const [serviceId, setServiceId] = useState("");
   const [showCategoryInfo, setShowCategoryInfo] = useState(false);
   const [pendingCrazyServiceId, setPendingCrazyServiceId] = useState(null);
+  // ОЗНАКОМИТЕЛЬНАЯ ПЛАШКА: показывается один раз, при первом заказе в этом браузере.
+  const [showFirstOrderNotice, setShowFirstOrderNotice] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
   // ДОБАВЛЕНО (2026-09-19, запрос пользователя): держим не просто "успех
@@ -3489,6 +3507,23 @@ export default function App() {
     event.preventDefault();
     if (!session || !songTitle.trim()) return;
 
+    // Ознакомительная плашка перед первым заказом (один раз в этом браузере).
+    if (!isFirstOrderNoticeSeen()) {
+      setShowFirstOrderNotice(true);
+      return;
+    }
+    await proceedSubmitOrder();
+  }
+
+  function acknowledgeFirstOrderNotice() {
+    markFirstOrderNoticeSeen();
+    setShowFirstOrderNotice(false);
+    proceedSubmitOrder();
+  }
+
+  async function proceedSubmitOrder() {
+    if (!session || !songTitle.trim()) return;
+
     // ТЗ п.45 (финальная единая модель входа): до выбора стола и входа
     // через Google заказ фактически не отправляется — вместо запроса
     // открывается единственный экран активации (см. ActivationPanel и
@@ -3737,6 +3772,23 @@ export default function App() {
   return (
     <div className="app-shell">
       {chatPopupEl}
+      {showFirstOrderNotice && (
+        <div className="msg-popup-overlay" role="alertdialog" aria-modal="true">
+          <div className="msg-popup">
+            <div className="msg-popup__title">ℹ️ Перед первым заказом</div>
+            <div className="msg-popup__text">
+              Запрещено для заказа: Теремная Романтика, Блатная лирика.
+              {"\n\n"}С уважением,
+              {"\n"}Администрация
+            </div>
+            <div className="msg-popup__actions">
+              <button type="button" onClick={acknowledgeFirstOrderNotice}>
+                Понятно
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <LangSwitcher />
       <header className="app-header">
         <h1>🎤 {meInfo.club_name || "Karaoke"}</h1>
