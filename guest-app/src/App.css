@@ -1103,3 +1103,4 @@ button.step-blink-fill { animation: button-fill-blink 1s ease-in-out infinite; }
 .song-lists__sort { display: flex; gap: 10px; justify-content: center; margin: 4px 0 6px; }
 .song-lists__sort-btn { font-size: 12px; opacity: 0.6; }
 .song-lists__sort-btn--active { opacity: 1; text-decoration: underline; }
+.song-lists__count { font-size: 12px; opacity: 0.6; }
