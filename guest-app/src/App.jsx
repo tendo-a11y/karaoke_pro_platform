@@ -600,6 +600,21 @@ function SongListsPanel({ token, onPick, tab, onTab }) {
   const [error, setError] = useState(null);
   const [page, setPage] = useState(0);
   const [sortBy, setSortBy] = useState(null);
+  // ДОБАВЛЕНО (2026-10, запрос пользователя "свернуть всю панель"): один
+  // треугольник сворачивает весь блок; выбранная вкладка запоминается.
+  const [collapsed, setCollapsed] = useState(false);
+  const [lastTab, setLastTab] = useState(null);
+
+  function toggleCollapsed() {
+    if (!collapsed) {
+      setLastTab(tab);
+      setCollapsed(true);
+      onTab(null);
+    } else {
+      setCollapsed(false);
+      if (lastTab) onTab(lastTab);
+    }
+  }
 
   const load = useCallback(async () => {
     try {
@@ -616,6 +631,18 @@ function SongListsPanel({ token, onPick, tab, onTab }) {
     const id = setInterval(load, 30000);
     return () => clearInterval(id);
   }, [tab, load]);
+
+  if (collapsed) {
+    return (
+      <div className="song-lists">
+        <div className="finder-modes song-lists__modes">
+          <button type="button" className="link-btn song-lists__collapse" onClick={toggleCollapsed} aria-expanded="false">
+            Списки песен ▼
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const current = SONG_LIST_TABS.find((t) => t.key === tab);
   const rawItems = (lists && tab && lists[tab]) || [];
@@ -652,6 +679,9 @@ function SongListsPanel({ token, onPick, tab, onTab }) {
               </span>
             </button>
           ))}
+          <button type="button" className="link-btn song-lists__collapse" onClick={toggleCollapsed} aria-expanded="true" aria-label="Свернуть списки">
+            ▲
+          </button>
         </div>
       </div>
       {current && sortOptions.length > 0 && (
