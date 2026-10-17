@@ -84,9 +84,28 @@ def popular(club_id: int, now=None) -> list[dict]:
     ]
 
 
-def new_songs(club_id: int) -> list[dict]:
+def new_songs(club_id: int, now=None) -> list[dict]:
+    # ДОБАВЛЕНО (2026-10, запрос пользователя "сортировка по частоте в Новинках"):
+    # у каждой новинки — число воспроизведений за тот же период, что и у
+    # "Популярных" (POPULAR_DAYS дней), чтобы гость мог отсортировать по частоте.
+    now = now or datetime.now(timezone.utc)
+    played = (
+        Order.query.with_entities(Order.song_title, Order.artist)
+        .filter(
+            Order.club_id == club_id,
+            Order.playing_at.isnot(None),
+            Order.playing_at >= now - timedelta(days=POPULAR_DAYS),
+        )
+        .all()
+    )
+    counter = Counter(norm_key(song_title, artist) for song_title, artist in played)
     rows = NewSong.query.filter_by(club_id=club_id).order_by(NewSong.created_at.desc(), NewSong.id.desc()).all()
-    return [r.to_dict() for r in rows]
+    result = []
+    for r in rows:
+        item = r.to_dict()
+        item["count"] = counter.get(norm_key(r.song_title, r.artist), 0)
+        result.append(item)
+    return result
 
 
 def hide(club_id: int, kind: str, song_title=None, artist=None, order_id=None) -> None:
