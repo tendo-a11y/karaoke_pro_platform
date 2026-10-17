@@ -34,26 +34,28 @@ def _kj_priority(client, kj_headers, order_id, flag):
     return client.put(f"/api/kj/order/{order_id}/priority", json={"priority": flag}, headers=kj_headers)
 
 
-def test_kj_priority_takes_slot_one_then_two_then_full(client, db, club, kj_headers):
+def test_kj_priority_new_song_becomes_first_and_previous_first_moves_to_second(client, db, club, kj_headers):
     token = _seated_guest(client, club.club_id, 6)
     a, b, c = (_order(client, token, t) for t in ("A", "B", "C"))
 
     assert _kj_priority(client, kj_headers, a, True).get_json()["data"]["priority_slot"] == 1
-    assert _kj_priority(client, kj_headers, b, True).get_json()["data"]["priority_slot"] == 2
-    full = _kj_priority(client, kj_headers, c, True)
-    assert full.status_code == 409
-    assert full.get_json()["error"] == "PRIORITY_SLOTS_FULL"
+    assert _kj_priority(client, kj_headers, b, True).get_json()["data"]["priority_slot"] == 1
+    # A ушла на второе место, B — первая
+    assert [o.id for o in table_queue_orders(club.club_id, 6)][:2] == [b, a]
+    # Третий приоритет не отклоняется: прежний второй (A) теряет приоритет
+    assert _kj_priority(client, kj_headers, c, True).get_json()["data"]["priority_slot"] == 1
+    assert [o.id for o in table_queue_orders(club.club_id, 6)] == [c, b, a]
 
 
 def test_priority_songs_come_first_in_table_queue(client, db, club, kj_headers):
     token = _seated_guest(client, club.club_id, 8)
     a, b, c = (_order(client, token, t) for t in ("A", "B", "C"))
     _kj_priority(client, kj_headers, c, True)   # место 1
-    _kj_priority(client, kj_headers, b, True)   # место 2
-    assert [o.id for o in table_queue_orders(club.club_id, 8)] == [c, b, a]
+    _kj_priority(client, kj_headers, b, True)   # место 1, C уходит на место 2
+    assert [o.id for o in table_queue_orders(club.club_id, 8)] == [b, c, a]
 
-    _kj_priority(client, kj_headers, c, False)  # снять — место 1 свободно
-    assert [o.id for o in table_queue_orders(club.club_id, 8)] == [b, a, c]
+    _kj_priority(client, kj_headers, b, False)  # снять — C остаётся на месте 2
+    assert [o.id for o in table_queue_orders(club.club_id, 8)] == [c, a, b]
 
 
 def test_guest_priority_request_needs_kj_confirmation(client, db, club, kj_headers):
