@@ -1092,3 +1092,9 @@ button.step-blink-fill { animation: button-fill-blink 1s ease-in-out infinite; }
   0%, 100% { box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6); }
   50% { box-shadow: 0 0 0 6px rgba(255, 176, 32, 0.35), 0 12px 40px rgba(0, 0, 0, 0.6); }
 }
+
+/* ДОБАВЛЕНО (2026-10): кнопка массового удаления не спетых заказов. */
+.bulk-cancel-btn {
+  display: block;
+  margin: 4px 0 8px;
+}
