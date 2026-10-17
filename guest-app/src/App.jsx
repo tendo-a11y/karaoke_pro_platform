@@ -1502,7 +1502,7 @@ function resizeImageToBase64(file) {
   });
 }
 
-function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSuggestOther, onSearchStart, active = false, showProfileTabs = true }) {
+function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSuggestOther, onSearchStart, onAiStatus, active = false, showProfileTabs = true }) {
   // "Не эта" под найденной песней: подсказываем другие способы — моргают "Ссылка" и "Скриншот".
   const [suggestOther, setSuggestOther] = useState(false);
   // Неудачный поиск — пусть ещё моргает поле "Название песни" (запрос пользователя 2026-10).
@@ -1568,12 +1568,16 @@ function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSu
       const data = await api.aiSearchSongs(token, text.trim());
       setResults(data);
       setSearched(true);
+      // ДОБАВЛЕНО (2026-10-18): ИИ-поиск отвечает — поля ввода песни остаются скрыты.
+      if (onAiStatus) onAiStatus(true);
       // ДОБАВЛЕНО (2026-10, запрос пользователя): неудачный поиск — сразу
       // моргают "Ссылка" и "Скриншот", как после "Не эта".
       if (!data || data.length === 0) setSuggestOther(true);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : String(err));
       setSuggestOther(true);
+      // ДОБАВЛЕНО (2026-10-18): ИИ-поиск не ответил — открываем поля названия и исполнителя.
+      if (onAiStatus) onAiStatus(false);
     } finally {
       setSearching(false);
     }
@@ -3761,7 +3765,9 @@ export default function App() {
   const canOrder = activated && groupOk;
   // ДОБАВЛЕНО (2026-10-18): поля названия и исполнителя скрыты, пока работает ИИ-поиск.
   // Показываются, если ИИ-поиск недоступен, или если выбранная песня пришла без исполнителя.
-  const aiSearchAvailable = meInfo?.ai_search_available === true;
+  // ДОБАВЛЕНО (2026-10-18): если ИИ-поиск не ответил хоть раз — поля названия и исполнителя открываются.
+  const [aiSearchFailed, setAiSearchFailed] = useState(false);
+  const aiSearchAvailable = meInfo?.ai_search_available === true && !aiSearchFailed;
   const manualFieldsVisible = !aiSearchAvailable || (songTitle.trim() && !artist.trim());
 
   // Экран "Сообщения" (запрос пользователя 2026-10-01) — собирает в одном
@@ -3892,6 +3898,7 @@ export default function App() {
           token={session.token}
           active={aiSearchStarted}
           onSearchStart={() => setAiSearchStarted(true)}
+          onAiStatus={(ok) => setAiSearchFailed(!ok)}
           onScreenshotHelp={() => {
             setView("screenshot");
           }}
