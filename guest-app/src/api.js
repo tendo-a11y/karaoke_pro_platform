@@ -134,6 +134,9 @@ export const api = {
     request(`/api/guest/order/${orderId}/priority-request`, { method: "POST", token }),
   cancelOrder: (token, orderId) =>
     request(`/api/guest/order/${orderId}/cancel`, { method: "POST", token }),
+  // ДОБАВЛЕНО (2026-10): массовое удаление своих не спетых заказов, без KJ.
+  cancelUnplayedOrders: (token) =>
+    request("/api/guest/orders/cancel-unplayed", { method: "POST", token }),
   getQueue: (token) => request("/api/guest/queue", { token }),
   getSongLists: (token) => request("/api/guest/song-lists", { token }),
   sendChatMessage: (token, messageText, imageDataUrl, serviceId) =>
