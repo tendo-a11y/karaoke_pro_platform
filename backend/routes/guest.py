@@ -186,6 +186,10 @@ def me():
         "vip_request_pending": pending_request is not None,
         "vip_balance_blocked": vip_balance_blocked,
         "vip_topup_pending": pending_topup_request is not None,
+        # ДОБАВЛЕНО (2026-10-18, запрос пользователя): работает ли ИИ-поиск песен
+        # (есть ли ключ ИИ). Если да — приложение гостя прячет поля ввода
+        # названия и исполнителя, и гость выбирает песню через ИИ-поиск.
+        "ai_search_available": bool(current_app.config.get("ANTHROPIC_API_KEY")),
     })
 
 
