@@ -566,7 +566,7 @@ const SONG_LIST_SORTS = {
     { key: "alpha", label: "А–Я" },
   ],
   new: [
-    { key: "new", label: "Сначала новые" },
+    { key: "freq", label: "По частоте" },
     { key: "alpha", label: "А–Я" },
   ],
 };
@@ -582,6 +582,9 @@ function SongListRow({ song, onPick }) {
           {song.artist ? `${song.artist} — ` : ""}
           {song.song_title}
         </span>
+        {typeof song.count === "number" && (
+          <span className="song-lists__count"> · {song.count}</span>
+        )}
         <button type="button" className="link-btn" onClick={() => onPick(song)}>
           Заказать
         </button>
@@ -623,7 +626,9 @@ function SongListsPanel({ token, onPick, tab, onTab }) {
         const name = (x) => `${x.artist ? `${x.artist} — ` : ""}${x.song_title || ""}`;
         return name(a).localeCompare(name(b), undefined, { sensitivity: "base" });
       })
-    : rawItems;
+    : activeSort === "freq"
+      ? [...rawItems].sort((a, b) => (b.count || 0) - (a.count || 0))
+      : rawItems;
   const pages = tab === "popular" ? Math.ceil(items.length / SONG_LIST_PAGE) : 1;
   const shown = tab === "popular" ? items.slice(page * SONG_LIST_PAGE, (page + 1) * SONG_LIST_PAGE) : items;
 
