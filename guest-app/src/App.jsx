@@ -557,6 +557,19 @@ const SONG_LIST_TABS = [
   { key: "new", label: "Новинки", empty: "Новинок пока нет." },
 ];
 const SONG_LIST_PAGE = 10;
+// ДОБАВЛЕНО (2026-10, запрос пользователя "сортировка по алфавиту и по частоте"):
+// варианты сортировки для каждого блока. "По частоте" — порядок с сервера
+// (сервер уже отдаёт популярные по числу воспроизведений).
+const SONG_LIST_SORTS = {
+  popular: [
+    { key: "freq", label: "По частоте" },
+    { key: "alpha", label: "А–Я" },
+  ],
+  new: [
+    { key: "new", label: "Сначала новые" },
+    { key: "alpha", label: "А–Я" },
+  ],
+};
 
 function SongListRow({ song, onPick }) {
   // ИЗМЕНЕНО (2026-10, запрос пользователя: "заказ стандартно — с морганием
@@ -583,6 +596,7 @@ function SongListsPanel({ token, onPick, tab, onTab }) {
   const [lists, setLists] = useState(null);
   const [error, setError] = useState(null);
   const [page, setPage] = useState(0);
+  const [sortBy, setSortBy] = useState(null);
 
   const load = useCallback(async () => {
     try {
@@ -601,7 +615,15 @@ function SongListsPanel({ token, onPick, tab, onTab }) {
   }, [tab, load]);
 
   const current = SONG_LIST_TABS.find((t) => t.key === tab);
-  const items = (lists && tab && lists[tab]) || [];
+  const rawItems = (lists && tab && lists[tab]) || [];
+  const sortOptions = (tab && SONG_LIST_SORTS[tab]) || [];
+  const activeSort = sortOptions.some((o) => o.key === sortBy) ? sortBy : sortOptions[0] && sortOptions[0].key;
+  const items = activeSort === "alpha"
+    ? [...rawItems].sort((a, b) => {
+        const name = (x) => `${x.artist ? `${x.artist} — ` : ""}${x.song_title || ""}`;
+        return name(a).localeCompare(name(b), undefined, { sensitivity: "base" });
+      })
+    : rawItems;
   const pages = tab === "popular" ? Math.ceil(items.length / SONG_LIST_PAGE) : 1;
   const shown = tab === "popular" ? items.slice(page * SONG_LIST_PAGE, (page + 1) * SONG_LIST_PAGE) : items;
 
@@ -627,6 +649,23 @@ function SongListsPanel({ token, onPick, tab, onTab }) {
           ))}
         </div>
       </div>
+      {current && sortOptions.length > 0 && (
+        <div className="song-lists__sort">
+          {sortOptions.map((o) => (
+            <button
+              key={o.key}
+              type="button"
+              className={`link-btn song-lists__sort-btn${activeSort === o.key ? " song-lists__sort-btn--active" : ""}`}
+              onClick={() => {
+                setSortBy(o.key);
+                setPage(0);
+              }}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+      )}
       {current && (
         <div className="song-lists__body">
           {error && <div className="banner banner--error">{error}</div>}
