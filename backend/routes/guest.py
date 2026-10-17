@@ -10,7 +10,7 @@ from extensions import db
 from models import STATUS_COMPLETED, STATUS_ERROR, STATUS_ORDER_CHANGE_PENDING, STATUS_REJECTED, ChatMessage, Club, GuestAccount, Order, OrderChangeRequest, Service
 from services import ai_search_service, billing_service, guest_account_service, guest_status_service, song_service, stats_clear_service, table_board_service, table_close_service, table_group_service, vdj_service, vip_service, vip_topup_request_service
 from services.google_auth_service import GoogleAuthError, verify_google_credential
-from sockets import emit_chat_message, emit_order_created, emit_vip_request_created
+from sockets import emit_chat_message, emit_order_created, emit_order_priority_requested, emit_vip_request_created
 from vdj import get_vdj_client
 
 YOUTUBE_URL_RE = re.compile(r"^https?://(www\.|m\.|music\.)?(youtube\.com|youtu\.be)/", re.IGNORECASE)
@@ -664,6 +664,7 @@ def request_order_priority(order_id):
 
     order.priority_requested = True
     db.session.commit()
+    emit_order_priority_requested(order)
     return api_ok(order.to_dict())
 
 
