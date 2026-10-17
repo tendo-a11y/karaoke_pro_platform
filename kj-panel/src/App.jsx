@@ -1681,7 +1681,7 @@ function AdminMessagesPanel({ token, clubId, socket }) {
       ) : (
         <ul className="vip-list">
           {messages.map((m) => (
-            <li key={m.id} className="vip-row chat-thread-row">
+            <li key={m.id} className={"vip-row chat-thread-row " + (m.from_admin ? "chat-msg--admin" : "chat-msg--kj")}>
               <span>{m.from_admin ? "Администрация" : "Вы"}:</span>
               <span>{m.message_text}</span>
               <button type="button" className="btn-link" title="Удалить сообщение" onClick={() => handleDelete(m.id)}>
@@ -3471,7 +3471,7 @@ function GuestCard({ token, clubId, guestId, onBack, onChanged }) {
                 {chatMessages && chatMessages.length > 0 && (
                   <ul className="vip-list">
                     {chatMessages.slice(-10).map((m) => (
-                      <li key={m.id} className="vip-row chat-thread-row">
+                      <li key={m.id} className={"vip-row chat-thread-row " + (m.from_guest ? "chat-msg--guest" : "chat-msg--kj")}>
                         <span>{m.from_guest ? "Гость" : "Вы"}:</span>
                         {m.image_data_url && (
                           <img src={m.image_data_url} alt="Скриншот от гостя" className="chat-thread-row__image" />
@@ -4427,6 +4427,7 @@ function OrdersBoard({ token, clubId, socket, onOpenGuest, onOpenTable }) {
     socket.on("order_confirmed", reload);
     socket.on("order_rejected", reload);
     socket.on("queue_updated", reload);
+    socket.on("order_priority_requested", reload);
     // ДОБАВЛЕНО (карточка стола, перенос стола 2026-09-28): перенос меняет
     // table_no сразу у пачки заказов через bulk UPDATE на сервере (см.
     // table_group_service.move_table), минуя обычные order_updated/
@@ -4829,7 +4830,11 @@ function MessagePopups({ items, onOpen, onClose }) {
     <div className="msg-popup-overlay" role="alertdialog" aria-live="assertive">
       <div className="msg-popup">
         <div className="msg-popup__title">
-          {item.kind === "admin" ? "📢 Сообщение от администрации" : `💬 Гость${item.table ? `, стол ${tableLabel(item.table)}` : ""}`}
+          {item.kind === "admin"
+            ? "📢 Сообщение от администрации"
+            : item.kind === "priority"
+              ? "⭐ Гость просит приоритет" + (item.table ? ", стол " + tableLabel(item.table) : "")
+              : "💬 Гость" + (item.table ? ", стол " + tableLabel(item.table) : "")}
           {items.length > 1 && <span className="msg-popup__count"> · ещё {items.length - 1}</span>}
         </div>
         <div className="msg-popup__text">{item.text || (item.hasImage ? "📷 Фото" : "")}</div>
@@ -5038,6 +5043,21 @@ export default function App() {
           `chat-${message.id}`
         );
       }
+    });
+    socket.on("order_priority_requested", (order) => {
+      if (!order || !order.priority_requested) return;
+      setHasNewMessages(true);
+      pushPopup({
+        key: "priority-" + order.id,
+        kind: "priority",
+        text: [order.artist, order.song_title].filter(Boolean).join(" — "),
+        table: order.table_no,
+      });
+      notifyBrowser(
+        order.table_no ? "Просьба о приоритете, стол " + tableLabel(order.table_no) : "Просьба о приоритете",
+        order.song_title || "",
+        "priority-" + order.id
+      );
     });
     socket.on("admin_message", (message) => {
       if (message.from_admin) {
