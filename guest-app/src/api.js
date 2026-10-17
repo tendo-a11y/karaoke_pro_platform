@@ -172,11 +172,12 @@ export const api = {
     }),
   deleteFavorite: (token, favoriteId) =>
     request(`/api/guest/favorites/${favoriteId}`, { method: "DELETE", token }),
-  reorderFavorite: (token, favoriteId, serviceId) =>
+  // ДОБАВЛЕНО (2026-10): тон при повторном заказе из избранного.
+  reorderFavorite: (token, favoriteId, serviceId, tone = null) =>
     request(`/api/guest/favorites/${favoriteId}/reorder`, {
       method: "POST",
       token,
-      body: { service_id: serviceId },
+      body: { service_id: serviceId, tone },
     }),
   getTableGroup: (token) => request("/api/guest/table-group", { token }),
   requestTableGroupJoin: (token) => request("/api/guest/table-group/request-join", { method: "POST", token }),
