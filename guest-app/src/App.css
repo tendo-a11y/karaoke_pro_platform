@@ -1098,3 +1098,8 @@ button.step-blink-fill { animation: button-fill-blink 1s ease-in-out infinite; }
   display: block;
   margin: 4px 0 8px;
 }
+
+/* ДОБАВЛЕНО (2026-10): сортировка "А–Я / По частоте" в блоках Популярные и Новинки. */
+.song-lists__sort { display: flex; gap: 10px; justify-content: center; margin: 4px 0 6px; }
+.song-lists__sort-btn { font-size: 12px; opacity: 0.6; }
+.song-lists__sort-btn--active { opacity: 1; text-decoration: underline; }
