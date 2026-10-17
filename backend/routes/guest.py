@@ -954,8 +954,16 @@ def reorder_favorite(favorite_id):
             "Пополните баланс, чтобы заказать ещё одну песню",
         )
 
+    # ДОБАВЛЕНО (2026-10): тон при повторном заказе из избранного — те же правила, что и в обычном заказе (от -6 до +6, ноль = без тона).
+    tone = payload.get("tone")
+    if tone is not None:
+        if isinstance(tone, bool) or not isinstance(tone, int) or tone < -6 or tone > 6:
+            return api_error(400, "VALIDATION_ERROR", "tone должен быть числом от -6 до 6")
+        if tone == 0:
+            tone = None
+
     result = vip_service.reorder_favorite(
-        g.club_id, g.guest_id, g.table_no, guest_type, favorite_id, max_active, service_id,
+        g.club_id, g.guest_id, g.table_no, guest_type, favorite_id, max_active, service_id, tone=tone,
     )
     if result.outcome == "not_found":
         return api_error(404, "FAVORITE_NOT_FOUND", "Не найдено")
