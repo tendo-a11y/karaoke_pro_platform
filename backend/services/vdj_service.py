@@ -247,6 +247,47 @@ def request_order_cancel(order_id: int, guest_id: int, club_id: int):
     return change_request, "requested"
 
 
+def cancel_all_unplayed_by_guest(guest_id: int, club_id: int) -> list:
+    """
+    Гость сам удаляет все свои ещё не сыгранные заказы одним действием
+    (решение пользователя 2026-10: "без контроля KJ"). Это отдельный путь от
+    request_order_cancel: здесь заявка KJ не создаётся, заказ сразу переходит
+    в STATUS_REJECTED.
+
+    Не трогаем: чужие заказы, заказы не в CANCELABLE_BY_GUEST_STATUSES, заказы
+    с уже поданной заявкой KJ, и первые две песни очереди своего стола
+    (места 1 и 2 — то, что играет следующим или стоит в приоритете).
+    Возвращает список реально отменённых заказов.
+    """
+    from services.table_board_service import table_queue_orders  # ленивый импорт: круговая зависимость
+
+    candidates = Order.query.filter(
+        Order.club_id == club_id,
+        Order.telegram_user_id == guest_id,
+        Order.status.in_(CANCELABLE_BY_GUEST_STATUSES),
+    ).all()
+
+    protected_by_table = {}
+    removed = []
+    for order in candidates:
+        if order.table_no is not None:
+            if order.table_no not in protected_by_table:
+                head = table_queue_orders(club_id, order.table_no)[:2]
+                protected_by_table[order.table_no] = {o.id for o in head}
+            if order.id in protected_by_table[order.table_no]:
+                continue
+        if get_pending_change_request(order.id) is not None:
+            continue
+        order.status = STATUS_REJECTED
+        order.rejected_at = _utcnow()
+        removed.append(order)
+
+    db.session.commit()
+    for order in removed:
+        emit_order_rejected(order)
+    return removed
+
+
 def mark_played(order_id: int, kj):
     """
     ЗАМЕНЯЕТ старую complete_order() (запрос пользователя 2026-09-30:
