@@ -583,7 +583,7 @@ function SongListRow({ song, onPick }) {
           {song.song_title}
         </span>
         {typeof song.count === "number" && (
-          <span className="song-lists__count"> · {song.count}</span>
+          <span className="song-lists__count">{song.count}</span>
         )}
         <button type="button" className="link-btn" onClick={() => onPick(song)}>
           Заказать
