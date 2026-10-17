@@ -206,8 +206,9 @@ def confirm(order_id):
 def set_order_priority(order_id):
     """
     Приоритет песни за столом (2026-10): KJ ставит галочку — песня встаёт
-    на место 1, если оно свободно, иначе на место 2; снятие галочки
-    освобождает место и отклоняет запрос гостя. Заказ гостя просит
+    на место 1, прежний первый уходит на место 2, прежний второй теряет
+    приоритет (2026-10-16); снятие галочки снимает приоритет и отклоняет
+    запрос гостя. Заказ гостя просит
     приоритет через POST /api/guest/order/<id>/priority-request, и песня
     поднимается только после этого подтверждения.
     """
@@ -227,23 +228,25 @@ def set_order_priority(order_id):
         return api_error(409, "ORDER_NOT_ACTIVE", "Приоритет можно поставить только активной песне")
 
     if flag:
-        if order.priority_slot is None:
-            taken = {
-                row[0] for row in (
-                    db.session.query(Order.priority_slot)
-                    .filter(
-                        Order.club_id == order.club_id,
-                        Order.table_no == order.table_no,
-                        Order.status.in_(ACTIVE_TABLE_STATUSES),
-                        Order.priority_slot.isnot(None),
-                    )
-                    .all()
-                )
-            }
-            free = [slot for slot in (1, 2) if slot not in taken]
-            if not free:
-                return api_error(409, "PRIORITY_SLOTS_FULL", "На этом столе уже заняты два приоритета")
-            order.priority_slot = free[0]
+        # 2026-10-16 (решение пользователя): новый приоритет всегда становится
+        # первым. Прежний первый уходит на второе место, прежний второй
+        # теряет приоритет и встаёт в обычную очередь по времени заказа.
+        if order.priority_slot != 1:
+            others = (
+                Order.query.filter(
+                    Order.club_id == order.club_id,
+                    Order.table_no == order.table_no,
+                    Order.status.in_(ACTIVE_TABLE_STATUSES),
+                    Order.priority_slot.isnot(None),
+                    Order.id != order.id,
+                ).all()
+            )
+            for other in others:
+                if other.priority_slot == 1:
+                    other.priority_slot = 2
+                elif other.priority_slot == 2:
+                    other.priority_slot = None
+            order.priority_slot = 1
         order.priority_requested = False
     else:
         order.priority_slot = None
