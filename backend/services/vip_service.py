@@ -472,7 +472,7 @@ def remove_favorite(club_id: int, guest_id: int, favorite_id: int) -> FavoriteAc
 
 
 def reorder_favorite(club_id: int, guest_id: int, table_no, guest_type: str, favorite_id: int,
-                      max_active: int, service_id: int) -> FavoriteActionResult:
+                      max_active: int, service_id: int, tone=None) -> FavoriteActionResult:
     """
     Старое: handlers/client.py::fav_reorder / handlers/vip.py::fav_reorder
     (п.3-4). Лимит активных песен проверяется как и в старом коде — ДО
@@ -513,6 +513,7 @@ def reorder_favorite(club_id: int, guest_id: int, table_no, guest_type: str, fav
         service_id=service_id,
         source="guest",
         channel="webapp",
+        tone=tone,
     )
     db.session.add(order)
     db.session.commit()
