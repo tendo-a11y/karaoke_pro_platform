@@ -305,6 +305,15 @@ def emit_order_change_request_decided(change_request):
     )
 
 
+def emit_order_priority_requested(order):
+    """
+    Гость попросил приоритет для своей песни за столом (2026-10). Тот же
+    паттерн, что и emit_order_created: KJ Panel узнаёт о просьбе сразу, а не
+    только после следующего обновления страницы.
+    """
+    socketio.emit("order_priority_requested", order.to_dict(), room=_club_room(order.club_id))
+
+
 def emit_chat_message(message):
     """
     Новое сообщение в чате гость↔KJ (см. models.py::ChatMessage). Пока
