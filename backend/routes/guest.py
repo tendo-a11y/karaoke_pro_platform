@@ -1073,6 +1073,20 @@ def cancel_order(order_id):
     return api_ok(change_request.to_dict(), status_code=201)
 
 
+# ДОБАВЛЕНО (2026-10, решение пользователя "без контроля KJ, удалять можно,
+# если это не первая или вторая песня"): массовое удаление своих не спетых
+# заказов одним нажатием. Заявки KJ не создаются; первые две песни стола не
+# трогаются (см. vdj_service.cancel_all_unplayed_by_guest).
+@bp.post("/orders/cancel-unplayed")
+@require_guest
+def cancel_unplayed_orders():
+    removed = vdj_service.cancel_all_unplayed_by_guest(g.guest_id, g.club_id)
+    return api_ok({
+        "cancelled": len(removed),
+        "order_ids": [o.id for o in removed],
+    })
+
+
 @bp.get("/orders")
 @require_guest
 def list_my_orders():
