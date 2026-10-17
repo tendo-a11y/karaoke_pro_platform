@@ -1157,6 +1157,8 @@ function FavoritesPanel({ token, services, onOrdered, orderingDisabled, embedded
   const [orderMessage, setOrderMessage] = useState(null);
   const [busyId, setBusyId] = useState(null);
   const [serviceSelections, setServiceSelections] = useState({});
+  // ДОБАВЛЕНО (2026-10): тон для каждой строки избранного — { [id]: { on, tone } }.
+  const [toneSelections, setToneSelections] = useState({});
   // Избранное, где уже начали выбирать категорию — у остальных строк подсказка-мигание гаснет (2026-10-14).
   const [pickedFavoriteId, setPickedFavoriteId] = useState(null);
   // ДОБАВЛЕНО (2026-10, запрос пользователя "раздел избранное должен
@@ -1193,11 +1195,18 @@ function FavoritesPanel({ token, services, onOrdered, orderingDisabled, embedded
     setError(null);
     setOrderMessage(null);
     try {
-      const created = await api.reorderFavorite(token, favoriteId, Number(serviceId));
+      const rowTone = toneSelections[favoriteId];
+      const toneValue = rowTone && rowTone.on && rowTone.tone != null ? rowTone.tone : null;
+      const created = await api.reorderFavorite(token, favoriteId, Number(serviceId), toneValue);
       const pos = created?.queue_position ?? 0;
       const title = favorites.find((x) => x.id === favoriteId)?.song_title || "Песня";
       setOrderMessage(pos > 0 ? `«${title}» — ваш номер в очереди: ${pos}.` : `«${title}» — заказ отправлен ✅`);
       setServiceSelections((prev) => {
+        const next = { ...prev };
+        delete next[favoriteId];
+        return next;
+      });
+      setToneSelections((prev) => {
         const next = { ...prev };
         delete next[favoriteId];
         return next;
@@ -1208,6 +1217,10 @@ function FavoritesPanel({ token, services, onOrdered, orderingDisabled, embedded
     } finally {
       setBusyId(null);
     }
+  }
+
+  function setRowTone(favoriteId, value) {
+    setToneSelections((prev) => ({ ...prev, [favoriteId]: { on: true, tone: value } }));
   }
 
   async function handleDelete(favoriteId) {
@@ -1264,6 +1277,49 @@ function FavoritesPanel({ token, services, onOrdered, orderingDisabled, embedded
                   onOpen={() => setPickedFavoriteId(f.id)}
                 />
               )}
+              <div className="tone-picker">
+                <label className="tone-picker__check">
+                  <input
+                    type="checkbox"
+                    checked={!!(toneSelections[f.id] && toneSelections[f.id].on)}
+                    disabled={busyId === f.id || orderingDisabled}
+                    onChange={(e) => {
+                      const on = e.target.checked;
+                      setToneSelections((prev) => ({
+                        ...prev,
+                        [f.id]: { on, tone: on ? (prev[f.id] && prev[f.id].tone) ?? null : null },
+                      }));
+                    }}
+                  />
+                  🎚 Тон
+                  {toneSelections[f.id] && toneSelections[f.id].on && toneSelections[f.id].tone != null ? (
+                    <span className="tone-badge">
+                      {toneSelections[f.id].tone > 0 ? `+${toneSelections[f.id].tone}` : toneSelections[f.id].tone}
+                    </span>
+                  ) : null}
+                  {toneSelections[f.id] && toneSelections[f.id].on && toneSelections[f.id].tone == null ? (
+                    <span className="tone-picker__hint">выберите</span>
+                  ) : null}
+                </label>
+                {toneSelections[f.id] && toneSelections[f.id].on && (
+                  <div className="tone-picker__row">
+                    <div className="tone-picker__side">
+                      {[-6, -5, -4, -3, -2, -1].map((t) => (
+                        <button key={t} type="button" className={`tone-picker__btn${toneSelections[f.id].tone === t ? " tone-picker__btn--active" : ""}`} disabled={busyId === f.id || orderingDisabled} onClick={() => setRowTone(f.id, t)}>
+                          {t}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="tone-picker__side">
+                      {[1, 2, 3, 4, 5, 6].map((t) => (
+                        <button key={t} type="button" className={`tone-picker__btn${toneSelections[f.id].tone === t ? " tone-picker__btn--active" : ""}`} disabled={busyId === f.id || orderingDisabled} onClick={() => setRowTone(f.id, t)}>
+                          +{t}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
               <div className="favorite-actions">
                 <button
                   type="button"
