@@ -3845,6 +3845,21 @@ function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged, auto
     }
   }
 
+  // ДОБАВЛЕНО (2026-10-19): частичное закрытие — рассчитать только сыгранные песни.
+  async function handleCloseSungOrders() {
+    if (!window.confirm("Закрыть сыгранные песни и выписать чек? Неспетые останутся в очереди.")) return;
+    setPrecheckBusy(true);
+    setPrecheckError(null);
+    try {
+      await api.closeSungOrders(token, clubId, tableNo);
+      setPrecheck(await api.getTablePrecheck(token, clubId, tableNo));
+    } catch (err) {
+      setPrecheckError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setPrecheckBusy(false);
+    }
+  }
+
   const [priorityError, setPriorityError] = useState(null);
   async function togglePriority(order, flag) {
     setPriorityError(null);
@@ -4233,6 +4248,16 @@ function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged, auto
                         })()}
                       />
                     </>
+                  )}
+                  {precheck.items.some((it) => it.sung && !it.paid) && (
+                    <button
+                      type="button"
+                      className="btn btn--accent"
+                      disabled={precheckBusy}
+                      onClick={handleCloseSungOrders}
+                    >
+                      Закрыть сыгранные песни (чек)
+                    </button>
                   )}
                   <div className="precheck__totals">
                     <div>Песен: <b>{precheck.song_count}</b></div>
