@@ -7,7 +7,7 @@ from auth import issue_kj_google_token, require_kj
 from errors import api_error, api_ok
 from extensions import db
 from models import AdminKjMessage, ChatMessage, Club, GuestAccount, KJOperator, KjSuggestion, Order, STATUS_PLAYING, TableGroupMember, VipClient, VipRequest
-from services import category_service, extra_table_service, guest_account_service, guest_directory_service, guest_status_service, song_service, table_board_service, table_close_service, table_group_service, vip_service, vip_topup_request_service
+from services import category_service, extra_table_service, vdj_service, guest_account_service, guest_directory_service, guest_status_service, song_service, table_board_service, table_close_service, table_group_service, vip_service, vip_topup_request_service
 from services.guest_directory_service import GUEST_TYPES, GuestDirectoryError
 from services.category_service import CategoryServiceError
 from services.google_auth_service import GoogleAuthError, verify_google_credential
@@ -447,6 +447,22 @@ def update_order_category_route(order_id):
         status_code, error_code, message = _QUEUE_EDIT_OUTCOME_HTTP[outcome]
         return api_error(status_code, error_code, message)
     return api_error(500, "INTERNAL_ERROR", "Неизвестный результат обработки заказа")
+
+
+@bp.post("/order/<int:order_id>/category-cancel")
+@require_kj
+def cancel_order_category_change_route(order_id):
+    """KJ отменяет смену категории, которую гость ещё не подтвердил."""
+    order, outcome = vdj_service.cancel_category_change(order_id, g.kj)
+    if outcome == "cancelled":
+        return api_ok(order.to_dict())
+    messages = {
+        "not_found": (404, "ORDER_NOT_FOUND", "Заказ не найден"),
+        "forbidden": (403, "FORBIDDEN", "Нет доступа к этому заказу"),
+        "no_pending": (409, "NO_PENDING_CHANGE", "Нет ожидающей смены категории"),
+    }
+    status_code, error_code, message = messages.get(outcome, (500, "INTERNAL_ERROR", "Неизвестный результат"))
+    return api_error(status_code, error_code, message)
 
 
 @bp.get("/chat/<int:club_id>")
