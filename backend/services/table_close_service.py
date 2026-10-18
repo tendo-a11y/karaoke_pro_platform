@@ -300,7 +300,9 @@ def update_table_order_category(club_id: int, table_no: int, order_id: int, kj, 
         if service is None or service.club_id != club_id:
             return order, "service_not_found"
 
-    order.service_id = service_id
+    # Как и в очереди: новая категория ждёт ответа гостя (см. vdj_service.respond_category_change).
+    order.pending_service_id = service_id
+    order.pending_category_at = datetime.now(timezone.utc)
     db.session.commit()
     emit_order_updated(order)
     return order, "updated"
