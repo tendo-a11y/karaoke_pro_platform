@@ -134,6 +134,10 @@ export const api = {
     request(`/api/guest/order/${orderId}/priority-request`, { method: "POST", token }),
   cancelOrder: (token, orderId) =>
     request(`/api/guest/order/${orderId}/cancel`, { method: "POST", token }),
+  // ДОБАВЛЕНО (2026-10-18): гость отвечает на смену категории от ведущего
+  // (accept: true — применить, false — удалить песню).
+  respondCategoryChange: (token, orderId, accept) =>
+    request(`/api/guest/order/${orderId}/category-response`, { method: "POST", token, body: { accept } }),
   // ДОБАВЛЕНО (2026-10): массовое удаление своих не спетых заказов, без KJ.
   cancelUnplayedOrders: (token) =>
     request("/api/guest/orders/cancel-unplayed", { method: "POST", token }),
