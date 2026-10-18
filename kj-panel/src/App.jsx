@@ -3,6 +3,21 @@ import { GOOGLE_CLIENT_ID, api, ApiError, resolveToken, storeToken } from "./api
 import { connectSocket } from "./socket";
 import "./App.css";
 
+// ДОБАВЛЕНО (2026-10-18, запрос пользователя): скриншот гостя открывается на весь экран (нажать — открыть, нажать ещё раз — закрыть).
+function ZoomableImage({ src, alt, className }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <img src={src} alt={alt} className={className} onClick={() => setOpen(true)} style={{ cursor: "zoom-in" }} />
+      {open && (
+        <div className="image-zoom-overlay" onClick={() => setOpen(false)}>
+          <img src={src} alt={alt} className="image-zoom-overlay__img" />
+        </div>
+      )}
+    </>
+  );
+}
+
 // ДОБАВЛЕНО (2026-10-13): доп. столы между обычными. Внутренний номер 7001
 // показывается как "7/1"; в полях номера стола можно вводить и "7/1".
 function tableLabel(n) {
@@ -1919,7 +1934,7 @@ function KjChatPanel({ token, clubId, socket }) {
             <span>{m.from_guest ? "Гость" : "Вы"}:</span>
             {m.service_name && <span className="chat-thread-row__category">Категория: {m.service_name}</span>}
             {m.image_data_url && (
-              <img src={m.image_data_url} alt="Скриншот от гостя" className="chat-thread-row__image" />
+              <ZoomableImage src={m.image_data_url} alt="Скриншот от гостя" className="chat-thread-row__image" />
             )}
             {m.message_text && <span>{m.message_text}</span>}
             <button
@@ -3474,7 +3489,7 @@ function GuestCard({ token, clubId, guestId, onBack, onChanged }) {
                       <li key={m.id} className={"vip-row chat-thread-row " + (m.from_guest ? "chat-msg--guest" : "chat-msg--kj")}>
                         <span>{m.from_guest ? "Гость" : "Вы"}:</span>
                         {m.image_data_url && (
-                          <img src={m.image_data_url} alt="Скриншот от гостя" className="chat-thread-row__image" />
+                          <ZoomableImage src={m.image_data_url} alt="Скриншот от гостя" className="chat-thread-row__image" />
                         )}
                         {m.message_text && <span>{m.message_text}</span>}
                       </li>
