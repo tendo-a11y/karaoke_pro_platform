@@ -761,8 +761,12 @@ select {
   0%, 100% { opacity: 0.45; transform: scale(1); }
   50% { opacity: 1; transform: scale(1.02); }
 }
-.order-form-panel .ai-search .order-form button[type="submit"].is-searching {
-  animation: find-button-pulse 1s ease-in-out infinite;
+/* Во время поиска кнопка «Ищем песню. Ждите...» такого же цвета, как остальные кнопки (без затемнения). */
+.order-form-panel .ai-search .order-form button[type="submit"].is-searching,
+.order-form-panel .ai-search .order-form button[type="submit"].is-searching:disabled {
+  opacity: 1;
+  animation: none;
+  cursor: progress;
 }
 
 /* ДОБАВЛЕНО (2026-10, запрос пользователя): в живой очереди гостя его
