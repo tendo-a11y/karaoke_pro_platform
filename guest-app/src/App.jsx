@@ -1712,7 +1712,7 @@ function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSu
               maxLength={300}
             />
             <button type="submit" className={searching ? "is-searching" : undefined} disabled={searching || !text.trim()}>
-              {searching ? "Ищем…" : "Найти"}
+              {searching ? "Ищем песню. Ждите..." : "Найти"}
             </button>
           </form>
           {error && <div className="banner banner--error">{error}</div>}
