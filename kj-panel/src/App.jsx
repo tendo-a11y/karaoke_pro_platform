@@ -284,6 +284,20 @@ function QueueTable({ queue, token, clubId }) {
     }
   }
 
+  // ДОБАВЛЕНО (2026-10-18): KJ отменяет смену категории, которую гость ещё не подтвердил.
+  async function handleCancelCategoryChange(orderId) {
+    setBusyKey(`cancel-cat-${orderId}`);
+    setRowError(orderId, null);
+    try {
+      await api.cancelOrderCategoryChange(token, orderId);
+    } catch (err) {
+      setRowError(orderId, err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+
   function claimDraftFor(item) {
     // По умолчанию сразу подставляем первую категорию (запрос пользователя
     // 2026-09-14 — "Без категории" убрана из списка совсем, см. select
@@ -568,6 +582,19 @@ function QueueTable({ queue, token, clubId }) {
                         </option>
                       ))}
                     </select>
+                  )}
+                  {item.pending_category_at && (
+                    <span className="empty-hint">
+                      ⏳ ждём ответа гостя{" "}
+                      <button
+                        type="button"
+                        className="btn-link"
+                        disabled={busyKey === `cancel-cat-${item.order_id}`}
+                        onClick={() => handleCancelCategoryChange(item.order_id)}
+                      >
+                        Отменить смену
+                      </button>
+                    </span>
                   )}
                   <button
                     type="button"
@@ -3804,6 +3831,20 @@ function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged, auto
       setPrecheckBusy(false);
     }
   }
+  // ДОБАВЛЕНО (2026-10-18): отмена ожидающей смены категории из пречека.
+  async function handleCancelPrecheckCategoryChange(orderId) {
+    setPrecheckBusy(true);
+    setPrecheckError(null);
+    try {
+      await api.cancelOrderCategoryChange(token, orderId);
+      setPrecheck(await api.getTablePrecheck(token, clubId, tableNo));
+    } catch (err) {
+      setPrecheckError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setPrecheckBusy(false);
+    }
+  }
+
   const [priorityError, setPriorityError] = useState(null);
   async function togglePriority(order, flag) {
     setPriorityError(null);
@@ -4139,6 +4180,19 @@ function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged, auto
                               {it.paid ? " · оплачено с VIP" : ""}
                             </span>
                           </span>
+                          {it.pending_category_at && (
+                            <span className="empty-hint">
+                              ⏳ ждём ответа гостя{" "}
+                              <button
+                                type="button"
+                                className="btn-link"
+                                disabled={precheckBusy}
+                                onClick={() => handleCancelPrecheckCategoryChange(it.order_id)}
+                              >
+                                Отменить смену
+                              </button>
+                            </span>
+                          )}
                           {!it.paid && precheckCategories && (
                             <select
                               className="queue-row__category-select"
