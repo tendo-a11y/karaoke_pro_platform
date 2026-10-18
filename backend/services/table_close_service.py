@@ -352,7 +352,7 @@ def preview_receipt(club_id: int, table_no: int) -> dict | None:
         .filter(
             Order.club_id == club_id,
             Order.table_no == table_no,
-            Order.status != STATUS_REJECTED,
+            Order.status == STATUS_PLAYING,
             Order.created_at >= since,
             Order.settled_at.is_(None),
             not_bonus_filter(),
@@ -505,18 +505,34 @@ def complete_table_orders(club_id: int, table_no: int, since) -> list[Order]:
             waiting_order.rejected_at = rejected_at
             waiting_ids.add(waiting_order.id)
 
+    # 2026-10-19 (решение пользователя): при закрытии стола списываются только
+    # песни, отмеченные "Готово" (STATUS_PLAYING). Неспетые песни этой сессии
+    # отклоняются без списания.
     orders = (
+        Order.query
+        .filter(
+            Order.club_id == club_id,
+            Order.table_no == table_no,
+            Order.status == STATUS_PLAYING,
+            Order.settled_at.is_(None),
+            Order.created_at >= since,
+        )
+        .all()
+    )
+    orders = [order for order in orders if order.id not in waiting_ids]
+    unsung = (
         Order.query
         .filter(
             Order.club_id == club_id,
             Order.table_no == table_no,
             Order.status != STATUS_REJECTED,
             Order.status != STATUS_COMPLETED,
+            Order.status != STATUS_PLAYING,
             Order.created_at >= since,
         )
         .all()
     )
-    orders = [order for order in orders if order.id not in waiting_ids]
+    unsung = [order for order in unsung if order.id not in waiting_ids]
     closed_ts = int(datetime.now(timezone.utc).timestamp())
     for order in orders:
         order.status = STATUS_COMPLETED
@@ -524,13 +540,17 @@ def complete_table_orders(club_id: int, table_no: int, since) -> list[Order]:
         # неё, даже если в VirtualDJ ещё стоит (см. vdj_service._merged_live_queue).
         if order.vdj_item_id and not order.vdj_item_id.startswith("closed:"):
             order.vdj_item_id = f"closed:{closed_ts}:{order.vdj_item_id}"[:255]
+    unsung_rejected_at = datetime.now(timezone.utc)
+    for skipped in unsung:
+        skipped.status = STATUS_REJECTED
+        skipped.rejected_at = unsung_rejected_at
     db.session.commit()
 
     # 2026-10-14: после закрытия стола KJ Panel не узнавала об этом — доска
     # "Заказы по столам" и живая очередь перезапрашиваются только по событиям
     # order_*/queue_updated, а здесь статусы менялись без них. Поэтому
     # закрытый стол висел с заказами и "следующая песня" до ручного обновления.
-    changed_orders = list(waiting) + list(orders)
+    changed_orders = list(waiting) + list(unsung) + list(orders)
     for changed in changed_orders:
         emit_order_updated(changed)
     if changed_orders:
