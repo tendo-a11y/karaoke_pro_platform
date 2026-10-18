@@ -2487,7 +2487,6 @@ function VipPanel({ token, clubId }) {
   return (
     <div className="vip-panel">
       <VipDescriptionPanel token={token} clubId={clubId} />
-      <FirstOrderBannerPanel token={token} clubId={clubId} />
 
       {actionError && <div className="banner banner--error">{actionError}</div>}
 
@@ -5366,6 +5365,7 @@ export default function App() {
       ) : view === "tables" ? (
         <>
           <TableSettingsPanel token={token} clubId={me.club_id} />
+          <FirstOrderBannerPanel token={token} clubId={me.club_id} />
           <AutoClosePanel token={token} />
         </>
       ) : view === "guests" ? (
