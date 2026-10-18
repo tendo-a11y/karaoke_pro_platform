@@ -180,6 +180,9 @@ export const api = {
   // фиксированного списка преимуществ, см. backend/routes/kj.py::
   // get_vip_settings/update_vip_settings.
   getVipSettings: (token, clubId) => request(`/api/kj/vip-settings/${clubId}`, { token }),
+  // ДОБАВЛЕНО (2026-10-18): плашка "Внимание" перед первым заказом — вкл/выкл и текст.
+  updateFirstOrderBanner: (token, clubId, body) =>
+    request(`/api/kj/vip-settings/${clubId}`, { method: "PUT", token, body }),
   updateVipSettings: (token, clubId, description) =>
     request(`/api/kj/vip-settings/${clubId}`, {
       method: "PUT", token, body: { vip_description: description },
