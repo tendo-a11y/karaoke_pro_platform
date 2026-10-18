@@ -1098,6 +1098,24 @@ def cancel_order(order_id):
 # если это не первая или вторая песня"): массовое удаление своих не спетых
 # заказов одним нажатием. Заявки KJ не создаются; первые две песни стола не
 # трогаются (см. vdj_service.cancel_all_unplayed_by_guest).
+@bp.post("/order/<int:order_id>/category-response")
+@require_guest
+def guest_respond_category_change(order_id):
+    """Гость отвечает на смену категории от KJ: accept=true — применить, false — удалить песню."""
+    payload = request.get_json(silent=True) or {}
+    accept = payload.get("accept")
+    if not isinstance(accept, bool):
+        return api_error(400, "VALIDATION_ERROR", "accept должен быть true или false")
+    order, outcome = vdj_service.respond_category_change(order_id, g.guest_id, g.club_id, accept)
+    if outcome == "not_found":
+        return api_error(404, "ORDER_NOT_FOUND", "Заказ не найден")
+    if outcome == "forbidden":
+        return api_error(403, "FORBIDDEN", "Нет доступа к этому заказу")
+    if outcome == "no_pending":
+        return api_error(409, "NO_PENDING_CHANGE", "Смены категории нет или на неё уже ответили")
+    return api_ok(order.to_dict())
+
+
 @bp.post("/orders/cancel-unplayed")
 @require_guest
 def cancel_unplayed_orders():
