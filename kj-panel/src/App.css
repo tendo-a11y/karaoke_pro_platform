@@ -1035,3 +1035,7 @@ img { max-width: 100%; }
 .precheck__item { display: flex; justify-content: space-between; gap: 10px; }
 .precheck__totals { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 8px; }
 .receipt-item { margin-top: 10px; }
+
+/* ДОБАВЛЕНО (2026-10-18): скриншот гостя открывается на весь экран. */
+.image-zoom-overlay { position: fixed; inset: 0; z-index: 10000; background: rgba(0, 0, 0, 0.85); display: flex; align-items: center; justify-content: center; padding: 16px; cursor: zoom-out; }
+.image-zoom-overlay__img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 8px; }
