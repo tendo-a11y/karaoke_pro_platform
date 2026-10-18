@@ -4089,8 +4089,8 @@ function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged, auto
           происходит одной суммой только при закрытии стола. "Вернуть"
           убирает песню из будущего чека, если она попала сюда по ошибке. */}
           {group.played_orders && group.played_orders.length > 0 && (
-            <div className="table-group-card__played">
-              <h3>Сыгранные песни этого стола</h3>
+            <details className="table-group-card__played" open>
+              <summary style={{ cursor: "pointer", fontWeight: 600, margin: "8px 0" }}>Сыгранные песни этого стола</summary>
               <ul className="vip-list">
                 {group.played_orders.map((order) => (
                   <li key={order.id} className="vip-row vip-row--client">
@@ -4113,7 +4113,7 @@ function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged, auto
                   </li>
                 ))}
               </ul>
-            </div>
+            </details>
           )}
 
           {actionError && <div className="banner banner--error">{actionError}</div>}
