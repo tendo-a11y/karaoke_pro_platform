@@ -121,7 +121,7 @@ def list_pending(club_id: int) -> list[TableCloseRequest]:
     )
 
 
-def _build_receipt(club_id: int, table_no: int, since) -> dict:
+def _build_receipt(club_id: int, table_no: int, since, order_ids=None) -> dict:
     """
     Чек только за эту сессию стола (created_at этого TableGroup, решение
     пользователя 2026-09-27 — не за весь вечер, стол мог до этого занимать
@@ -157,18 +157,20 @@ def _build_receipt(club_id: int, table_no: int, since) -> dict:
     с TX_TYPE_ORDER_PAYMENT для этого заказа — она появляется ТОЛЬКО когда
     charge_at_completion реально списал деньги, это и есть источник истины.
     """
-    orders = (
-        Order.query
-        .filter(
-            Order.club_id == club_id,
-            Order.table_no == table_no,
-            Order.status == STATUS_COMPLETED,
-            Order.created_at >= since,
-            # Bonus от KJ в чеке не показывается (2026-10-09).
-            not_bonus_filter(),
-        )
-        .all()
+    # 2026-10-19: частичное закрытие (close_sung_orders) — чек за конкретные
+    # песни (order_ids). Обычный чек стола — только ещё не рассчитанные песни.
+    query = Order.query.filter(
+        Order.club_id == club_id,
+        Order.table_no == table_no,
+        Order.status == STATUS_COMPLETED,
+        # Bonus от KJ в чеке не показывается (2026-10-09).
+        not_bonus_filter(),
     )
+    if order_ids is not None:
+        query = query.filter(Order.id.in_(list(order_ids)))
+    else:
+        query = query.filter(Order.created_at >= since, Order.settled_at.is_(None))
+    orders = query.all()
 
     service_ids = {o.service_id for o in orders if o.service_id is not None}
     services_by_id = {}
@@ -352,6 +354,7 @@ def preview_receipt(club_id: int, table_no: int) -> dict | None:
             Order.table_no == table_no,
             Order.status != STATUS_REJECTED,
             Order.created_at >= since,
+            Order.settled_at.is_(None),
             not_bonus_filter(),
         )
         .order_by(Order.created_at.asc(), Order.id.asc())
@@ -724,6 +727,87 @@ def close_table_directly(club_id: int, table_no: int, kj, hide_receipt: bool) ->
         guest_status_service.set_table(club_id, guest_id, None)
 
     return DecisionResult(outcome="ok", request=req, closed_orders=closed_orders)
+
+
+def close_sung_orders(club_id: int, table_no: int, kj) -> DecisionResult:
+    """
+    ДОБАВЛЕНО (2026-10-19, запрос пользователя "пол чека": 10 песен спеты,
+    в заказе ещё 6 неспетых — закрыть 10 и не потерять 6). Частичное
+    закрытие: берём только песни, отмеченные "Готово" (STATUS_PLAYING), и
+    рассчитываем их (списание, чек). Стол остаётся открытым, неспетые песни
+    остаются в очереди на своих местах. Рассчитанные песни помечаются
+    settled_at, чтобы не попасть в следующий чек. Чек за них сохраняется
+    как закрытый (hide_receipt=True — гостям не всплывает) и попадает в
+    итоги вечера.
+
+    outcome: "ok" | "not_found" (за столом никого и нет активных песен) |
+    "nothing" (нет сыгранных, ещё не рассчитанных песен).
+    """
+    group = table_group_service.get_group(club_id, table_no)
+    if group is not None:
+        since = _session_since(club_id, table_no, group.created_at)
+    else:
+        earliest = (
+            db.session.query(db.func.min(Order.created_at))
+            .filter(
+                Order.club_id == club_id,
+                Order.table_no == table_no,
+                Order.status.in_(ACTIVE_TABLE_STATUSES),
+            )
+            .scalar()
+        )
+        if earliest is None:
+            return DecisionResult(outcome="not_found")
+        since = earliest
+
+    sung = (
+        Order.query
+        .filter(
+            Order.club_id == club_id,
+            Order.table_no == table_no,
+            Order.status == STATUS_PLAYING,
+            Order.created_at >= since,
+            Order.settled_at.is_(None),
+        )
+        .order_by(Order.created_at.asc(), Order.id.asc())
+        .all()
+    )
+    if not sung:
+        return DecisionResult(outcome="nothing")
+
+    now = _utcnow()
+    closed_ts = int(now.timestamp())
+    for order in sung:
+        order.status = STATUS_COMPLETED
+        order.settled_at = now
+        if order.vdj_item_id and not order.vdj_item_id.startswith("closed:"):
+            order.vdj_item_id = f"closed:{closed_ts}:{order.vdj_item_id}"[:255]
+    db.session.commit()
+
+    for order in sung:
+        emit_order_updated(order)
+    from services.vdj_service import get_kj_queue_view
+    emit_queue_updated(club_id, get_kj_queue_view(club_id))
+
+    for order in sung:
+        billing_service.charge_at_completion(order)
+
+    order_ids = [order.id for order in sung]
+    receipt = _build_receipt(club_id, table_no, since, order_ids=order_ids)
+    req = TableCloseRequest(
+        club_id=club_id,
+        table_no=table_no,
+        requested_by_guest_id=-1,
+        status=STATUS_TABLE_CLOSE_APPROVED,
+        hide_receipt=True,
+        member_guest_ids=None,
+        receipt_json=receipt,
+        decided_at=_utcnow(),
+        decided_by=kj.id,
+    )
+    db.session.add(req)
+    db.session.commit()
+    return DecisionResult(outcome="ok", request=req, closed_orders=sung)
 
 
 class CloseAllResult:
