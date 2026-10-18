@@ -414,6 +414,7 @@ def preview_receipt(club_id: int, table_no: int) -> dict | None:
         items.append({
             "order_id": order.id,
             "service_id": order.service_id,
+            "pending_category_at": order.pending_category_at.isoformat() if order.pending_category_at else None,
             "song_title": order.song_title,
             "artist": order.artist,
             "category": name,
