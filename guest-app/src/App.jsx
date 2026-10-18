@@ -3240,13 +3240,12 @@ export default function App() {
   // Поиск песни начат — панель "Заказать песню" перестаёт мигать до отправки заказа.
   const [aiSearchStarted, setAiSearchStarted] = useState(false);
   const [aiSearchFailed, setAiSearchFailed] = useState(false);
-  // Предупреждение "Вы заказываете через Интернет" — после автовыбора категории по ссылке.
-  // "Больше не показывать" запоминаем в браузере гостя (localStorage, с try/catch).
+  // Предупреждение "Вы заказываете через Интернет" — показываем один раз, при первом
+  // автовыборе категории по ссылке. Флаг запоминаем в браузере гостя (localStorage, с try/catch).
   const [internetHint, setInternetHint] = useState(null);
   const [internetHintOff, setInternetHintOff] = useState(() => {
     try { return window.localStorage.getItem("internetHintOff") === "1"; } catch { return false; }
   });
-  const [internetHintNever, setInternetHintNever] = useState(false);
   const [artist, setArtist] = useState("");
   const [serviceId, setServiceId] = useState("");
   const [showCategoryInfo, setShowCategoryInfo] = useState(false);
@@ -3966,7 +3965,11 @@ export default function App() {
               const internet = services.find((s) => (s.name || "").trim().toUpperCase() === "INTERNET");
               if (internet) {
                 setServiceId(String(internet.id));
-                if (!internetHintOff) setInternetHint({ price: internet.price });
+                if (!internetHintOff) {
+                  setInternetHint({ price: internet.price });
+                  setInternetHintOff(true);
+                  try { window.localStorage.setItem("internetHintOff", "1"); } catch {}
+                }
               }
             }
           }}
@@ -3983,25 +3986,10 @@ export default function App() {
             <p>
               Вы заказываете через Интернет. Цена {Number(internetHint.price)} за заказ.
             </p>
-            <label className="internet-hint__never">
-              <input
-                type="checkbox"
-                checked={internetHintNever}
-                onChange={(e) => setInternetHintNever(e.target.checked)}
-              />
-              больше не показывать
-            </label>
             <button
               type="button"
               className="btn-link"
-              onClick={() => {
-                if (internetHintNever) {
-                  try { window.localStorage.setItem("internetHintOff", "1"); } catch {}
-                  setInternetHintOff(true);
-                }
-                setInternetHint(null);
-                setInternetHintNever(false);
-              }}
+              onClick={() => setInternetHint(null)}
             >
               Понятно
             </button>
