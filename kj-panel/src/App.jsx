@@ -2223,6 +2223,82 @@ function VipDescriptionPanel({ token, clubId }) {
   );
 }
 
+// ДОБАВЛЕНО (2026-10-18, запрос пользователя): плашка "Внимание" перед первым заказом гостя — вкл/выкл и текст.
+function FirstOrderBannerPanel({ token, clubId }) {
+  const [enabled, setEnabled] = useState(true);
+  const [draft, setDraft] = useState("");
+  const [loadError, setLoadError] = useState(null);
+  const [actionError, setActionError] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    api
+      .getVipSettings(token, clubId)
+      .then((data) => {
+        setEnabled(data.first_order_banner_enabled !== false);
+        setDraft(data.first_order_banner_text || "");
+        setLoadError(null);
+      })
+      .catch((err) => setLoadError(err instanceof ApiError ? err.message : String(err)));
+  }, [token, clubId]);
+
+  async function save(nextEnabled, nextText) {
+    setBusy(true);
+    setActionError(null);
+    setSaved(false);
+    try {
+      const data = await api.updateFirstOrderBanner(token, clubId, {
+        first_order_banner_enabled: nextEnabled,
+        first_order_banner_text: nextText,
+      });
+      setEnabled(data.first_order_banner_enabled !== false);
+      setDraft(data.first_order_banner_text || "");
+      setSaved(true);
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (loadError) return <div className="banner banner--error">{loadError}</div>;
+
+  return (
+    <section className="vip-description-panel">
+      <h2>Плашка «Внимание» перед первым заказом</h2>
+      <p className="empty-hint">Гость увидит её один раз, перед первым заказом. Выключите переключатель, чтобы плашка не показывалась.</p>
+      {actionError && <div className="banner banner--error">{actionError}</div>}
+      <label className="empty-hint">
+        <input type="checkbox" checked={enabled} disabled={busy} onChange={(e) => save(e.target.checked, draft)} /> Показывать плашку
+      </label>
+      <form
+        className="vip-description-form"
+        onSubmit={(e) => {
+          e.preventDefault();
+          save(enabled, draft);
+        }}
+      >
+        <textarea
+          rows={5}
+          placeholder="Текст плашки"
+          value={draft}
+          onChange={(e) => {
+            setDraft(e.target.value);
+            setSaved(false);
+          }}
+          disabled={busy}
+        />
+        <button type="submit" className="btn btn--accent" disabled={busy}>
+          {busy ? "Сохраняем…" : "Сохранить текст"}
+        </button>
+      </form>
+      {saved && <p className="empty-hint">Сохранено.</p>}
+    </section>
+  );
+}
+
+function VipPanel({ token, clubId }) {
 function VipPanel({ token, clubId }) {
   const [clients, setClients] = useState(null);
   const [loadError, setLoadError] = useState(null);
@@ -2411,6 +2487,7 @@ function VipPanel({ token, clubId }) {
   return (
     <div className="vip-panel">
       <VipDescriptionPanel token={token} clubId={clubId} />
+      <FirstOrderBannerPanel token={token} clubId={clubId} />
 
       {actionError && <div className="banner banner--error">{actionError}</div>}
 
