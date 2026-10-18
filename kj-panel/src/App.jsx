@@ -2299,7 +2299,6 @@ function FirstOrderBannerPanel({ token, clubId }) {
 }
 
 function VipPanel({ token, clubId }) {
-function VipPanel({ token, clubId }) {
   const [clients, setClients] = useState(null);
   const [loadError, setLoadError] = useState(null);
   const [actionError, setActionError] = useState(null);
