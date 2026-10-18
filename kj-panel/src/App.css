@@ -1039,3 +1039,27 @@ img { max-width: 100%; }
 /* ДОБАВЛЕНО (2026-10-18): скриншот гостя открывается на весь экран. */
 .image-zoom-overlay { position: fixed; inset: 0; z-index: 10000; background: rgba(0, 0, 0, 0.85); display: flex; align-items: center; justify-content: center; padding: 16px; cursor: zoom-out; }
 .image-zoom-overlay__img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 8px; }
+
+
+/* Сыгранные песни стола: раскрывающийся блок, стрелка справа. */
+.table-group-card__played > summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  list-style: none;
+  cursor: pointer;
+  font-weight: 600;
+  margin: 8px 0;
+}
+.table-group-card__played > summary::-webkit-details-marker {
+  display: none;
+}
+.table-group-card__played > summary::after {
+  content: "▼";
+  font-size: 12px;
+  color: #888;
+  margin-left: 8px;
+}
+.table-group-card__played[open] > summary::after {
+  content: "▲";
+}
