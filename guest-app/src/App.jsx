@@ -3477,6 +3477,55 @@ export default function App() {
     return () => clearInterval(id);
   }, [session, refreshOrders]);
 
+  // ДОБАВЛЕНО (2026-10-18, запрос пользователя): ведущий изменил категорию
+  // песни — гость подтверждает («Да») или удаляет песню. Пока гость не ответил,
+  // песня стоит в очереди со старой категорией (см. vdj_service.respond_category_change).
+  const pendingCategoryOrder = useMemo(
+    () => (Array.isArray(orders) ? orders.find((o) => o.pending_category_at) || null : null),
+    [orders],
+  );
+  const [categoryBusy, setCategoryBusy] = useState(false);
+  const pendingCategoryName = pendingCategoryOrder
+    ? services.find((s) => String(s.id) === String(pendingCategoryOrder.pending_service_id))?.name || "Без категории"
+    : "";
+
+  async function answerCategoryChange(accept) {
+    if (!pendingCategoryOrder || !session || categoryBusy) return;
+    setCategoryBusy(true);
+    try {
+      await api.respondCategoryChange(session.token, pendingCategoryOrder.id, accept);
+    } catch {
+      // уже ответили или сбой сети — список обновим ниже
+    } finally {
+      setCategoryBusy(false);
+      refreshOrders();
+    }
+  }
+
+  const categoryPopupEl = pendingCategoryOrder ? (
+    <div className="msg-popup-overlay" role="alertdialog" aria-modal="true">
+      <div className="msg-popup">
+        <div className="msg-popup__title">🎚️ Смена категории</div>
+        <div className="msg-popup__text">
+          {`Ведущий изменил категорию песни „${pendingCategoryOrder.song_title}“ на „${pendingCategoryName}“`}
+        </div>
+        <div className="msg-popup__actions">
+          <button type="button" disabled={categoryBusy} onClick={() => answerCategoryChange(true)}>
+            Да
+          </button>
+          <button
+            type="button"
+            className="link-btn"
+            disabled={categoryBusy}
+            onClick={() => answerCategoryChange(false)}
+          >
+            Удалить песню
+          </button>
+        </div>
+      </div>
+    </div>
+  ) : null;
+
   useEffect(() => {
     if (!session) return undefined;
     refreshQueue();
@@ -3776,6 +3825,7 @@ export default function App() {
     return (
       <div className="app-shell">
         {chatPopupEl}
+{categoryPopupEl}
         <header className="app-header">
           <h1>📷 Заказ через скриншот</h1>
           <button type="button" className="btn-link" onClick={() => setView("home")}>
@@ -3791,6 +3841,7 @@ export default function App() {
     return (
       <div className="app-shell">
         {chatPopupEl}
+{categoryPopupEl}
         <header className="app-header">
           <h1>✉️ Сообщения</h1>
           <button type="button" className="btn-link" onClick={() => setView("home")}>
@@ -3836,6 +3887,7 @@ export default function App() {
   return (
     <div className="app-shell">
       {chatPopupEl}
+{categoryPopupEl}
       {showFirstOrderNotice && (
         <div className="msg-popup-overlay" role="alertdialog" aria-modal="true">
           <div className="msg-popup">
