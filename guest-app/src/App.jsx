@@ -3569,7 +3569,7 @@ export default function App() {
     if (!session || !songTitle.trim()) return;
 
     // Ознакомительная плашка перед первым заказом (один раз в этом браузере).
-    if (!isFirstOrderNoticeSeen()) {
+    if (meInfo?.first_order_banner?.enabled && !isFirstOrderNoticeSeen()) {
       setShowFirstOrderNotice(true);
       return;
     }
@@ -3841,12 +3841,8 @@ export default function App() {
       {showFirstOrderNotice && (
         <div className="msg-popup-overlay" role="alertdialog" aria-modal="true">
           <div className="msg-popup">
-            <div className="msg-popup__title">ℹ️ Перед первым заказом</div>
-            <div className="msg-popup__text">
-              Запрещено для заказа: Теремная Романтика, Блатная лирика.
-              {"\n\n"}С уважением,
-              {"\n"}Администрация
-            </div>
+            <div className="msg-popup__title">ℹ️ Внимание</div>
+            <div className="msg-popup__text">{meInfo?.first_order_banner?.text || ""}</div>
             <div className="msg-popup__actions">
               <button type="button" onClick={acknowledgeFirstOrderNotice}>
                 Понятно
