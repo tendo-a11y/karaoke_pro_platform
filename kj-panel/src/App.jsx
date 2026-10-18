@@ -4157,6 +4157,29 @@ function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged, auto
                       ))}
                     </ul>
                   )}
+                  {precheck.items.some((it) => it.sung) && (
+                    <>
+                      <h4>По категориям (спето)</h4>
+                      <StatsTable
+                        head={["Категория", "Спето", "Сумма"]}
+                        rows={(() => {
+                          const byCat = new Map();
+                          for (const it of precheck.items) {
+                            if (!it.sung) continue;
+                            const key = it.category || "Без категории";
+                            const cur = byCat.get(key) || { count: 0, sum: 0 };
+                            cur.count += 1;
+                            cur.sum += Number(it.price || 0);
+                            byCat.set(key, cur);
+                          }
+                          const rowsOut = [...byCat.entries()].map(([name, v]) => [name, v.count, statsMoney(v.sum)]);
+                          const sum = [...byCat.values()].reduce((a, v) => ({ count: a.count + v.count, sum: a.sum + v.sum }), { count: 0, sum: 0 });
+                          rowsOut.push([<b>Итого</b>, <b>{sum.count}</b>, <b>{statsMoney(sum.sum)}</b>]);
+                          return rowsOut;
+                        })()}
+                      />
+                    </>
+                  )}
                   <div className="precheck__totals">
                     <div>Песен: <b>{precheck.song_count}</b></div>
                     <div>Итого: <b>{statsMoney(precheck.total)}</b></div>
