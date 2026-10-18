@@ -89,6 +89,10 @@ def _guest_type_and_vip(club_id: int, guest_id: int):
     return None, None
 
 
+# ДОБАВЛЕНО (2026-10-18): текст плашки "Внимание" по умолчанию, пока KJ не задал свой.
+FIRST_ORDER_BANNER_DEFAULT = "Запрещено для заказа: Теремная Романтика, Блатная лирика.\n\nС уважением,\nАдминистрация"
+
+
 @bp.get("/me")
 @require_guest
 def me():
@@ -190,6 +194,11 @@ def me():
         # (есть ли ключ ИИ). Если да — приложение гостя прячет поля ввода
         # названия и исполнителя, и гость выбирает песню через ИИ-поиск.
         "ai_search_available": bool(current_app.config.get("ANTHROPIC_API_KEY")),
+        # ДОБАВЛЕНО (2026-10-18): плашка "Внимание" перед первым заказом (настраивается в панели KJ).
+        "first_order_banner": {
+            "enabled": bool(club.first_order_banner_enabled) if club else False,
+            "text": (club.first_order_banner_text if club else None) or FIRST_ORDER_BANNER_DEFAULT,
+        },
     })
 
 
