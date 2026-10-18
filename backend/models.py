@@ -131,6 +131,9 @@ class Club(db.Model):
     # VIP (routes/kj.py::get_vip_settings/update_vip_settings). None —
     # ничего не добавлено клубом, гость видит только фиксированный текст.
     vip_description = db.Column(db.Text, nullable=True)
+    # ДОБАВЛЕНО (2026-10-18): плашка "Внимание" перед первым заказом гостя — текст и вкл/выкл в панели KJ.
+    first_order_banner_enabled = db.Column(db.Boolean, nullable=False, default=True, server_default=db.text("true"))
+    first_order_banner_text = db.Column(db.Text, nullable=True)
 
     # Секрет для локального VDJ-моста (см. vdj/bridge_client.py). Backend
     # централизован (обычно в облаке), а VirtualDJ стоит локально на
