@@ -369,6 +369,12 @@ class Order(db.Model):
     completed_at = db.Column(db.DateTime(timezone=True), nullable=True)
     rejected_at = db.Column(db.DateTime(timezone=True), nullable=True)
 
+    # Смена категории, ожидающая ответа гостя (2026-10-18): KJ предложил другую
+    # категорию, а гость ещё не нажал «Да». Пока pending_category_at не пуст,
+    # старая категория (service_id) остаётся в силе.
+    pending_service_id = db.Column(db.Integer, nullable=True)
+    pending_category_at = db.Column(db.DateTime(timezone=True), nullable=True)
+
     club = db.relationship("Club", back_populates="orders")
     transactions = db.relationship("Transaction", back_populates="order")
     service = db.relationship("Service")
@@ -407,6 +413,8 @@ class Order(db.Model):
             "playing_at": self.playing_at.isoformat() if self.playing_at else None,
             "completed_at": self.completed_at.isoformat() if self.completed_at else None,
             "rejected_at": self.rejected_at.isoformat() if self.rejected_at else None,
+            "pending_service_id": self.pending_service_id,
+            "pending_category_at": self.pending_category_at.isoformat() if self.pending_category_at else None,
         }
 
 
