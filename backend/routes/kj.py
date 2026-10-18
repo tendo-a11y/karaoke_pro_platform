@@ -1562,7 +1562,7 @@ def get_vip_settings(club_id):
     club = db.session.get(Club, club_id)
     if club is None:
         return api_error(404, "CLUB_NOT_FOUND", "Клуб не найден")
-    return api_ok({"vip_description": club.vip_description})
+    return api_ok({"vip_description": club.vip_description, "first_order_banner_enabled": club.first_order_banner_enabled, "first_order_banner_text": club.first_order_banner_text})
 
 
 @bp.put("/vip-settings/<int:club_id>")
@@ -1581,7 +1581,19 @@ def update_vip_settings(club_id):
             return api_error(400, "VALIDATION_ERROR", "vip_description должен быть строкой или null")
         club.vip_description = (value or "").strip() or None
         db.session.commit()
-    return api_ok({"vip_description": club.vip_description})
+    # ДОБАВЛЕНО (2026-10-18): плашка "Внимание" перед первым заказом — вкл/выкл и текст.
+    if "first_order_banner_enabled" in payload:
+        flag = payload.get("first_order_banner_enabled")
+        if not isinstance(flag, bool):
+            return api_error(400, "VALIDATION_ERROR", "first_order_banner_enabled должен быть true или false")
+        club.first_order_banner_enabled = flag
+    if "first_order_banner_text" in payload:
+        banner_text = payload.get("first_order_banner_text")
+        if banner_text is not None and not isinstance(banner_text, str):
+            return api_error(400, "VALIDATION_ERROR", "first_order_banner_text должен быть строкой или null")
+        club.first_order_banner_text = (banner_text or "").strip()[:1000] or None
+    db.session.commit()
+    return api_ok({"vip_description": club.vip_description, "first_order_banner_enabled": club.first_order_banner_enabled, "first_order_banner_text": club.first_order_banner_text})
 
 
 # --- Список гостей / карточка гостя (запрос пользователя 2026-09: сортировка
