@@ -1774,7 +1774,38 @@ function SuggestionPanel({ token, clubId }) {
   );
 }
 
+// Имя гостя, присвоенное KJ, показываем везде вместо номера.
+function useGuestNames(token, clubId) {
+  const [names, setNames] = useState({});
+  useEffect(() => {
+    let cancelled = false;
+    if (!token || !clubId) return undefined;
+    api
+      .listGuests(token, clubId)
+      .then((list) => {
+        if (cancelled) return;
+        const map = {};
+        for (const g of Array.isArray(list) ? list : []) {
+          if (!g || !g.display_name) continue;
+          if (g.guest_id != null) map[String(g.guest_id)] = g.display_name;
+          if (g.telegram_user_id != null) map[String(g.telegram_user_id)] = g.display_name;
+        }
+        setNames(map);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [token, clubId]);
+  return names;
+}
+
+function guestLabel(names, id) {
+  return names[String(id)] || `#${id}`;
+}
+
 function KjChatPanel({ token, clubId, socket }) {
+  const guestNames = useGuestNames(token, clubId);
   // ДОБАВЛЕНО (2026-10-01, запрос пользователя "кнопка Сообщения,
   // собирающая все обращения, включая личный чат с гостями") — сам чат
   // (ChatMessage, GET/POST /api/kj/chat) существовал на бэкенде уже
@@ -1898,7 +1929,7 @@ function KjChatPanel({ token, clubId, socket }) {
             <li key={t.guestId} className="vip-row">
               <span>
                 {t.lastMessage.from_guest ? "🆕 " : ""}
-                Стол {tableLabel(t.tableNo)} · гость #{t.guestId}: {t.lastMessage.message_text || (t.lastMessage.image_data_url ? "📷 Скриншот" : "")}
+                Стол {tableLabel(t.tableNo)} · гость {guestLabel(guestNames, t.guestId)}: {t.lastMessage.message_text || (t.lastMessage.image_data_url ? "📷 Скриншот" : "")}
                 {t.lastMessage.service_name ? ` (категория: ${t.lastMessage.service_name})` : ""}
               </span>
               <span className="vip-row__actions">
@@ -1919,7 +1950,7 @@ function KjChatPanel({ token, clubId, socket }) {
 
   return (
     <section className="order-change-requests-panel">
-      <h2>💬 Переписка — гость #{selectedGuestId}</h2>
+      <h2>💬 Переписка — гость {guestLabel(guestNames, selectedGuestId)}</h2>
       <div className="chat-thread-header-actions">
         <button type="button" className="btn-link" onClick={() => setSelectedGuestId(null)}>
           ← Все сообщения
@@ -1973,6 +2004,7 @@ function KjChatPanel({ token, clubId, socket }) {
 }
 
 function VipRequestsPanel({ token, clubId, socket }) {
+  const guestNames = useGuestNames(token, clubId);
   // ДОБАВЛЕНО (2026-10-01, запрос пользователя "кнопка Сообщения,
   // собирающая все обращения") — вынесено из VipPanel в отдельную панель,
   // чтобы показывать вместе со всеми остальными обращениями гостей на
@@ -2045,7 +2077,7 @@ function VipRequestsPanel({ token, clubId, socket }) {
       <ul className="vip-list">
         {pending.map((r) => (
           <li key={r.id} className="vip-row">
-            <span>Стол {tableLabel(r.table_no)} · гость #{r.telegram_user_id}</span>
+            <span>Стол {tableLabel(r.table_no)} · гость {guestLabel(guestNames, r.telegram_user_id)}</span>
             <span className="vip-row__actions">
               <button
                 type="button" className="btn btn--accent" disabled={busyKey === r.id}
@@ -2068,6 +2100,7 @@ function VipRequestsPanel({ token, clubId, socket }) {
 }
 
 function VipTopupRequestsPanel({ token, clubId, socket }) {
+  const guestNames = useGuestNames(token, clubId);
   // ДОБАВЛЕНО (2026-10-01) — та же логика, что раньше жила внутри
   // VipPanel ("Запросы на пополнение баланса"), вынесена сюда по той же
   // причине, что и VipRequestsPanel выше.
@@ -2130,7 +2163,7 @@ function VipTopupRequestsPanel({ token, clubId, socket }) {
       <ul className="vip-list">
         {pending.map((r) => (
           <li key={r.id} className="vip-row">
-            <span>Гость #{r.guest_id}</span>
+            <span>Гость {guestLabel(guestNames, r.guest_id)}</span>
             <span className="vip-row__actions">
               <button
                 type="button" className="btn btn--accent" disabled={busyKey === r.id}
@@ -3711,6 +3744,7 @@ function GuestCard({ token, clubId, guestId, onBack, onChanged }) {
 // очередь сама подхватит новый номер — см. докстринг table_group_service.
 // move_table на бэкенде).
 function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged, autoMove }) {
+  const guestNames = useGuestNames(token, clubId);
   const [group, setGroup] = useState(null);
   const [loadError, setLoadError] = useState(null);
   const [selectedGuestId, setSelectedGuestId] = useState(null);
@@ -4064,7 +4098,7 @@ function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged, auto
                       {order.song_title}
                       {order.artist && <span> — {order.artist}</span>}
                       <br />
-                      <span className="empty-hint">Гость #{order.telegram_user_id}</span>
+                      <span className="empty-hint">Гость {guestLabel(guestNames, order.telegram_user_id)}</span>
                     </div>
                     <div className="vip-row__actions">
                       <button
