@@ -3485,9 +3485,15 @@ export default function App() {
     [orders],
   );
   const [categoryBusy, setCategoryBusy] = useState(false);
-  const pendingCategoryName = pendingCategoryOrder
-    ? services.find((s) => String(s.id) === String(pendingCategoryOrder.pending_service_id))?.name || "Без категории"
-    : "";
+  const pendingCategory = pendingCategoryOrder
+    ? services.find((s) => String(s.id) === String(pendingCategoryOrder.pending_service_id)) || null
+    : null;
+  const pendingCategoryName = pendingCategory?.name || "Без категории";
+  const pendingCategoryPrice = !pendingCategory
+    ? ""
+    : pendingCategory.is_free
+      ? "Бесплатно"
+      : `Цена: ${pendingCategory.price} лей`;
 
   async function answerCategoryChange(accept) {
     if (!pendingCategoryOrder || !session || categoryBusy) return;
@@ -3509,6 +3515,7 @@ export default function App() {
         <div className="msg-popup__text">
           {`Ведущий изменил категорию песни „${pendingCategoryOrder.song_title}“ на „${pendingCategoryName}“`}
         </div>
+        {pendingCategoryPrice && <div className="msg-popup__text">{pendingCategoryPrice}</div>}
         <div className="msg-popup__actions">
           <button type="button" disabled={categoryBusy} onClick={() => answerCategoryChange(true)}>
             Да
