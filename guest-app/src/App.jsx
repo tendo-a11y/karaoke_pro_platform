@@ -3239,6 +3239,7 @@ export default function App() {
   const [songTitle, setSongTitle] = useState("");
   // Поиск песни начат — панель "Заказать песню" перестаёт мигать до отправки заказа.
   const [aiSearchStarted, setAiSearchStarted] = useState(false);
+  const [aiSearchFailed, setAiSearchFailed] = useState(false);
   // Предупреждение "Вы заказываете через Интернет" — после автовыбора категории по ссылке.
   // "Больше не показывать" запоминаем в браузере гостя (localStorage, с try/catch).
   const [internetHint, setInternetHint] = useState(null);
@@ -3766,7 +3767,6 @@ export default function App() {
   // ДОБАВЛЕНО (2026-10-18): поля названия и исполнителя скрыты, пока работает ИИ-поиск.
   // Показываются, если ИИ-поиск недоступен, или если выбранная песня пришла без исполнителя.
   // ДОБАВЛЕНО (2026-10-18): если ИИ-поиск не ответил хоть раз — поля названия и исполнителя открываются.
-  const [aiSearchFailed, setAiSearchFailed] = useState(false);
   const aiSearchAvailable = meInfo?.ai_search_available === true && !aiSearchFailed;
   const manualFieldsVisible = !aiSearchAvailable || (songTitle.trim() && !artist.trim());
 
