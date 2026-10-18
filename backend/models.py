@@ -374,6 +374,9 @@ class Order(db.Model):
     # старая категория (service_id) остаётся в силе.
     pending_service_id = db.Column(db.Integer, nullable=True)
     pending_category_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    # Песня уже рассчитана частичным закрытием стола (чек выписан, стол остался открыт).
+    # Такие песни не попадают в следующий чек — см. table_close_service.close_sung_orders.
+    settled_at = db.Column(db.DateTime(timezone=True), nullable=True)
 
     club = db.relationship("Club", back_populates="orders")
     transactions = db.relationship("Transaction", back_populates="order")
