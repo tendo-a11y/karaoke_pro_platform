@@ -3767,8 +3767,6 @@ export default function App() {
   // ДОБАВЛЕНО (2026-10-18): поля названия и исполнителя скрыты, пока работает ИИ-поиск.
   // Показываются, если ИИ-поиск недоступен, или если выбранная песня пришла без исполнителя.
   // ДОБАВЛЕНО (2026-10-18): если ИИ-поиск не ответил хоть раз — поля названия и исполнителя открываются.
-  const aiSearchAvailable = meInfo?.ai_search_available === true && !aiSearchFailed;
-  const manualFieldsVisible = !aiSearchAvailable || (songTitle.trim() && !artist.trim());
 
   // Экран "Сообщения" (запрос пользователя 2026-10-01) — собирает в одном
   // месте пополнение VIP-баланса, чат с ведущим и ещё два пункта-заглушки
@@ -4046,8 +4044,6 @@ export default function App() {
         ) : (
           <>
             <form className="order-form" onSubmit={handleSubmitOrder}>
-              {manualFieldsVisible && (
-                <>
               <input
                 type="text"
                 value={songTitle}
@@ -4066,8 +4062,6 @@ export default function App() {
                 required
                 className={songTitle.trim() && !artist.trim() ? "step-blink" : undefined}
               />
-                </>
-              )}
               {services.length > 0 && (
                 // "Без тарифа" убран из списка (запрос пользователя
                 // 2026-09-14 — тариф в клубе есть всегда). Значение всегда
