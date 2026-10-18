@@ -333,6 +333,9 @@ export const api = {
     request(`/api/kj/extra-tables/${clubId}`, { method: "POST", token, body: { after_table: afterTable, name } }),
   deleteExtraTable: (token, clubId, tableNo) =>
     request(`/api/kj/extra-tables/${clubId}/${tableNo}`, { method: "DELETE", token }),
+  // Частичное закрытие: рассчитать только сыгранные песни, стол остаётся открытым (2026-10-19).
+  closeSungOrders: (token, clubId, tableNo) =>
+    request(`/api/kj/table-groups/${clubId}/${tableNo}/close-sung`, { method: "POST", token }),
   // Смена категории песни из пречека (2026-10-13).
   updateTableOrderCategory: (token, clubId, tableNo, orderId, serviceId) =>
     request(`/api/kj/table-groups/${clubId}/${tableNo}/orders/${orderId}/category`, {
