@@ -764,11 +764,6 @@ select {
 .order-form-panel .ai-search .order-form button[type="submit"].is-searching {
   animation: find-button-pulse 1s ease-in-out infinite;
 }
-/* ДОБАВЛЕНО (2026-10-18): во время ИИ-поиска надпись на кнопке красная на зелёном фоне. */
-.order-form-panel .ai-search .order-form button[type="submit"].is-searching {
-  color: #ff2d2d;
-  background: #1e8a3a;
-}
 
 /* ДОБАВЛЕНО (2026-10, запрос пользователя): в живой очереди гостя его
    песня мигает зелёным, песни его стола отмечены слабее, Crazy — красные. */
