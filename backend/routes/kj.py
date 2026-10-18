@@ -2122,6 +2122,25 @@ def close_table_group_route(club_id, table_no):
     })
 
 
+@bp.post("/table-groups/<int:club_id>/<int:table_no>/close-sung")
+@require_kj
+def close_sung_table_orders_route(club_id, table_no):
+    """Частичное закрытие: рассчитать только сыгранные песни стола, стол и
+    неспетые песни остаются открытыми (см. table_close_service.close_sung_orders)."""
+    denied = _ensure_own_club(club_id)
+    if denied:
+        return denied
+    result = table_close_service.close_sung_orders(club_id, table_no, g.kj)
+    if result.outcome == "not_found":
+        return api_error(404, "TABLE_EMPTY", "За этим столом сейчас никого нет")
+    if result.outcome == "nothing":
+        return api_error(409, "NOTHING_TO_CLOSE", "Нет сыгранных песен, которые ещё не рассчитаны")
+    return api_ok({
+        "request": result.request.to_dict(),
+        "closed_order_ids": [order.id for order in result.closed_orders],
+    })
+
+
 @bp.put("/table-groups/<int:club_id>/close-all")
 @require_kj
 def close_all_table_groups_route(club_id):
