@@ -824,11 +824,71 @@ def update_order_category(order_id: int, kj, service_id):
         if service is None or service.club_id != kj.club_id:
             return order, "service_not_found"
 
-    order.service_id = service_id
+    # Смена категории НЕ применяется сразу: гость получает запрос «Да / Удалить
+    # песню» (см. respond_category_change). Пока он не ответил, песня остаётся
+    # в очереди со старой категорией (service_id не меняем).
+    order.pending_service_id = service_id
+    order.pending_category_at = _utcnow()
     db.session.commit()
     emit_order_updated(order)
     emit_queue_updated(order.club_id, get_kj_queue_view(order.club_id))
     return order, "updated"
+
+
+def respond_category_change(order_id: int, guest_id: int, club_id: int, accept: bool):
+    """
+    Ответ гостя на смену категории, которую предложил KJ.
+    accept=True — новая категория применяется к песне.
+    accept=False — гость удаляет песню из очереди (без возврата: оплата
+    списывается только при закрытии стола, см. complete_table_orders).
+    Возвращает (order, outcome): accepted, removed, not_found, forbidden, no_pending.
+    """
+    order = db.session.get(Order, order_id)
+    if order is None:
+        return None, "not_found"
+    if order.club_id != club_id or order.telegram_user_id != guest_id:
+        return None, "forbidden"
+    if order.pending_category_at is None:
+        return order, "no_pending"
+
+    if accept:
+        order.service_id = order.pending_service_id
+        order.pending_service_id = None
+        order.pending_category_at = None
+        db.session.commit()
+        emit_order_updated(order)
+        emit_queue_updated(order.club_id, get_kj_queue_view(order.club_id))
+        return order, "accepted"
+
+    order.pending_service_id = None
+    order.pending_category_at = None
+    order.status = STATUS_REJECTED
+    order.rejected_at = _utcnow()
+    db.session.commit()
+    emit_order_rejected(order)
+    emit_queue_updated(order.club_id, get_kj_queue_view(order.club_id))
+    return order, "removed"
+
+
+def cancel_category_change(order_id: int, kj):
+    """
+    KJ отменяет ожидающую смену категории вручную (гость не ответил).
+    Песня остаётся со старой категорией. Возвращает (order, outcome):
+    cancelled, not_found, forbidden, no_pending.
+    """
+    order = db.session.get(Order, order_id)
+    if order is None:
+        return None, "not_found"
+    if order.club_id != kj.club_id:
+        return None, "forbidden"
+    if order.pending_category_at is None:
+        return order, "no_pending"
+    order.pending_service_id = None
+    order.pending_category_at = None
+    db.session.commit()
+    emit_order_updated(order)
+    emit_queue_updated(order.club_id, get_kj_queue_view(order.club_id))
+    return order, "cancelled"
 
 
 def _norm_song_name(value) -> str:
