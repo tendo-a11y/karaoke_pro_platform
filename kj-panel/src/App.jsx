@@ -1536,7 +1536,21 @@ function SongListsAdminPanel({ token }) {
         )}
         {tab === "popular" && data && data.hidden_popular.length > 0 && (
           <>
-            <h3>Скрытые из «Популярных»</h3>
+            <h3>
+              Скрытые из «Популярных»{" "}
+              <button
+                type="button"
+                className="btn-link"
+                disabled={busy}
+                onClick={() => {
+                  if (window.confirm("Удалить все скрытые песни из «Популярных» без возможности восстановления?")) {
+                    run(() => api.clearPopularHidden(token));
+                  }
+                }}
+              >
+                Очистить
+              </button>
+            </h3>
             <ul className="song-admin__list">
               {data.hidden_popular.map((h) => (
                 <li key={h.id} className="song-admin__row">
