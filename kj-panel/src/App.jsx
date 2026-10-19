@@ -1397,21 +1397,6 @@ function StatsPanel({ token, clubId }) {
                 тональность, "Название исправлял KJ" и блок "Откуда заказы". */}
           </section>
 
-          <section>
-            <h2>Время</h2>
-            <p>
-              Среднее ожидание от заказа до выхода:{" "}
-              <b>{data.timing.avg_wait_minutes == null ? "—" : `${data.timing.avg_wait_minutes} мин`}</b>
-            </p>
-            <h3>Заказы по часам</h3>
-            {data.timing.by_hour.length === 0 ? (
-              <p className="empty-hint">Нет данных за период.</p>
-            ) : (
-              <StatsBars rows={data.timing.by_hour.map((h) => ({ label: `${String(h.hour).padStart(2, "0")}:00`, count: h.count }))} />
-            )}
-            <h3>Заказы по дням недели</h3>
-            <StatsBars rows={data.timing.by_weekday.map((d) => ({ label: d.day, count: d.count }))} />
-          </section>
         </>
       )}
     </main>
