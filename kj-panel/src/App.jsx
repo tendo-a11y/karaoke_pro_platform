@@ -1386,12 +1386,7 @@ function StatsPanel({ token, clubId }) {
           </section>
 
           <section>
-            <h2>Топ песен</h2>
-            <StatsTable
-              head={["Исполнитель", "Песня", "Раз"]}
-              rows={data.songs.top_songs.map((s) => [s.artist || "—", s.title, s.count])}
-            />
-            <h3>Топ исполнителей</h3>
+            <h2>Топ исполнителей</h2>
             <StatsTable head={["Исполнитель", "Раз"]} rows={data.songs.top_artists.map((a) => [a.artist, a.count])} />
             {/* Убрано (2026-10-13, запрос пользователя "вся эта статистика вообще не нужна"):
                 тональность, "Название исправлял KJ" и блок "Откуда заказы". */}
