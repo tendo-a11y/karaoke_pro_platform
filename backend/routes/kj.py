@@ -1368,8 +1368,7 @@ def update_table_settings(club_id):
         updates["queue_start_table"] = value
         # 2026-10-13: KJ заново задал "Начало очереди" — круг начинается с
         # этого стола, уже спетые песни на положение круга больше не влияют.
-        if value != club.queue_start_table:
-            updates["queue_round_since"] = datetime.now(timezone.utc)
+        updates["queue_round_since"] = datetime.now(timezone.utc)
 
     for field, value in updates.items():
         setattr(club, field, value)
