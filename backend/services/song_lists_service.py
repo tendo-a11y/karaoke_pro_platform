@@ -137,6 +137,14 @@ def unhide(club_id: int, hidden_id: int) -> None:
         db.session.commit()
 
 
+def clear_hidden_popular(club_id: int) -> int:
+    """Полностью удалить все скрытые из "Популярных" записи клуба (без восстановления).
+    "История за час" не трогаем. Возвращает, сколько записей удалено."""
+    removed = SongListHidden.query.filter_by(club_id=club_id, kind="popular").delete(synchronize_session=False)
+    db.session.commit()
+    return removed
+
+
 def hidden_popular(club_id: int) -> list[dict]:
     rows = (
         SongListHidden.query.filter_by(club_id=club_id, kind="popular")
