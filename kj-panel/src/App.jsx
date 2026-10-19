@@ -33,28 +33,6 @@ function receiptTimeColor(id) {
   return RECEIPT_TIME_COLORS[Math.abs(Number(id) || 0) % RECEIPT_TIME_COLORS.length];
 }
 
-// Группы для статистики по чекам (запрос 2026-10-14): «Караоке», «Интернет», «Песни KJ», «CRAZY».
-// «Песни KJ» — песни без гостя (добавлены KJ/VirtualDJ); «KARAOKE BACK» относим к «Караоке».
-const STATS_GROUPS = ["Караоке", "Интернет", "Песни KJ", "CRAZY"];
-function statsGroupOf(item) {
-  if (!item.guest_name) return "Песни KJ";
-  const c = String(item.category || "").toLowerCase();
-  if (c.includes("karaoke") || c.includes("караоке")) return "Караоке";
-  if (c.includes("интернет") || c.includes("internet")) return "Интернет";
-  if (c.includes("crazy")) return "CRAZY";
-  return null;
-}
-// Считает по группам список позиций одного или нескольких чеков: { группа: { count, sum } }.
-function statsGroupTotals(items) {
-  const out = Object.fromEntries(STATS_GROUPS.map((g) => [g, { count: 0, sum: 0 }]));
-  for (const it of items) {
-    const g = statsGroupOf(it);
-    if (!g) continue;
-    out[g].count += 1;
-    out[g].sum += Number(it.price) || 0;
-  }
-  return out;
-}
 
 // Пояснение к строке "К оплате" в чеке (2026-10-14): если к оплате 0 (или меньше
 // итога), значит часть или все песни уже списаны автоматически с VIP-счёта гостя.
@@ -1249,13 +1227,6 @@ function StatsPanel({ token, clubId }) {
                 ],
               ]}
             />
-            <StatsTable
-              head={["Группа", "Песен", "Сумма"]}
-              rows={(() => {
-                const totals = statsGroupTotals(evening.receipts.flatMap((r) => r.receipt?.items || []));
-                return STATS_GROUPS.map((g) => [g, totals[g].count, statsMoney(totals[g].sum)]);
-              })()}
-            />
 
             <StatsTiles
               items={[
@@ -1280,14 +1251,6 @@ function StatsPanel({ token, clubId }) {
                   {payableNote(r.receipt?.total ?? 0, r.receipt?.payable_total ?? 0)}
                   {r.hide_receipt ? " · гостю не показан" : ""}
                 </summary>
-                {r.receipt?.items && r.receipt.items.length > 0 && (
-                  <p className="empty-hint">
-                    {STATS_GROUPS.map((g) => {
-                      const t = statsGroupTotals(r.receipt.items)[g];
-                      return t.count > 0 ? `${g}: ${t.count} · ${statsMoney(t.sum)}` : null;
-                    }).filter(Boolean).join(" | ")}
-                  </p>
-                )}
                 {r.receipt?.items && r.receipt.items.length > 0 && (
                   <ul className="precheck__items">
                     {r.receipt.items.map((it, idx) => (
