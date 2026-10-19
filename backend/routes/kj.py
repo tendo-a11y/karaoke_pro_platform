@@ -1465,6 +1465,15 @@ def kj_song_lists_hide():
     return api_ok({"hidden": True})
 
 
+@bp.post("/song-lists/clear-popular-hidden")
+@require_kj
+def kj_song_lists_clear_popular_hidden():
+    """Полностью удалить все скрытые из «Популярных» записи клуба (без восстановления)."""
+    from services import song_lists_service
+    removed = song_lists_service.clear_hidden_popular(g.club_id)
+    return api_ok({"removed": removed})
+
+
 @bp.post("/song-lists/unhide/<int:hidden_id>")
 @require_kj
 def kj_song_lists_unhide(hidden_id):
