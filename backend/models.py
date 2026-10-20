@@ -473,7 +473,19 @@ class Service(db.Model):
             "kj_only": self.kj_only,
             "temp_hidden": self.temp_hidden,
             "color": self.color,
+            "display_color": self.display_color(),
         }
+
+    def display_color(self):
+        # Цвет текста категории: свой (если KJ выбрал), иначе стандартный по названию, иначе из набора.
+        if self.color:
+            return self.color
+        defaults = {"Караоке 35": "#2563eb", "Интернет 100": "#16a34a", "Крези": "#dc2626"}
+        if self.name in defaults:
+            return defaults[self.name]
+        palette = ["#f59e0b", "#a855f7", "#0891b2", "#db2777", "#65a30d", "#ea580c"]
+        return palette[(self.id or 0) % len(palette)]
+
 
 
 class Song(db.Model):
