@@ -358,6 +358,18 @@ function QueueTable({ queue, token, clubId }) {
     }
   }
 
+  const [skipOverride, setSkipOverride] = useState({});
+  async function handleToggleSkipRound(item, checked) {
+    setSkipOverride((prev) => ({ ...prev, [item.order_id]: checked }));
+    setRowError(item.order_id, null);
+    try {
+      await api.setOrderSkipRound(token, item.order_id, checked);
+    } catch (err) {
+      setSkipOverride((prev) => ({ ...prev, [item.order_id]: !checked }));
+      setRowError(item.order_id, err instanceof ApiError ? err.message : String(err));
+    }
+  }
+
   async function handleRemove(item) {
     const key = item.vdj_item_id ?? `no-id-${item.order_id}`;
     setBusyKey(`remove-${key}`);
@@ -451,6 +463,16 @@ function QueueTable({ queue, token, clubId }) {
                 <span className="queue-row__orphaned-badge" title="Эта песня больше не найдена в самом VirtualDJ — например, из-за перезапуска сервера. Можно только удалить.">
                   ⚠ нет в VDJ
                 </span>
+              )}
+              {item.order_id != null && (
+                <label className="queue-row__skip" title="Песня уйдёт на следующий круг и останется на своём месте в очереди">
+                  <input
+                    type="checkbox"
+                    checked={skipOverride[item.order_id] ?? !!item.skip_round}
+                    onChange={(e) => handleToggleSkipRound(item, e.target.checked)}
+                  />
+                  <span>Следующий круг</span>
+                </label>
               )}
               {item.tone ? (
                 <span className="tone-badge">🎚 Тон {item.tone > 0 ? `+${item.tone}` : item.tone}</span>
