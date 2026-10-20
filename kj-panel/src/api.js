@@ -299,6 +299,9 @@ export const api = {
     request(`/api/kj/guests/${clubId}${guestType ? `?type=${encodeURIComponent(guestType)}` : ""}`, { token }),
   getGuest: (token, clubId, guestId) =>
     request(`/api/kj/guests/${clubId}/${encodeURIComponent(guestId)}`, { token }),
+  // ДОБАВЛЕНО (2026-10): KJ ставит избранные песни гостя в очередь одним действием.
+  queueGuestFavorites: (token, guestId, favoriteIds) =>
+    request("/api/kj/guests/" + encodeURIComponent(guestId) + "/favorites-to-queue", { method: "POST", token, body: { favorite_ids: favoriteIds } }),
   blockGuest: (token, guestId) =>
     request(`/api/kj/guests/${encodeURIComponent(guestId)}/block`, { method: "POST", token }),
   unblockGuest: (token, guestId) =>
