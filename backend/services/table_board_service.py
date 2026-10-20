@@ -255,6 +255,7 @@ def _round_robin_order(
             anchor = 1
         table_sequence = list(range(anchor, table_count + 1)) + list(range(1, anchor))
 
+    base_sequence = list(sequence) if sequence else list(range(1, table_count + 1))
     cursor = {table_no: 0 for table_no in by_table}
     sequence: list[Order] = []
     remaining = len(orders)
@@ -262,7 +263,7 @@ def _round_robin_order(
     while remaining > 0:
         progressed = False
         skipped_anchor = False
-        for table_no in table_sequence:
+        for table_no in (table_sequence if first_pass else base_sequence):
             bucket = by_table.get(table_no)
             if not bucket:
                 continue
