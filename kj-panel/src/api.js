@@ -193,6 +193,10 @@ export const api = {
     request(`/api/kj/guests/${guestId}/photo`, {
       method: "PUT", token, body: { photo_data_url: photoDataUrl },
     }),
+  setOrderSkipRound: (token, orderId, skipRound) =>
+    request("/api/kj/orders/" + orderId + "/skip-round", {
+      method: "PUT", token, body: { skip_round: skipRound },
+    }),
   getClubStats: (token, clubId, from, to) => {
     const params = new URLSearchParams();
     if (from) params.set("from", from);
