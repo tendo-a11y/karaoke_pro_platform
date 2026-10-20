@@ -141,6 +141,11 @@ def update_category(club_id: int, category_id: int, **fields) -> Service:
         category.is_free = bool(fields["is_free"])
     if "temp_hidden" in fields:
         category.temp_hidden = bool(fields["temp_hidden"])
+    if "color" in fields:
+        color = fields["color"]
+        if color is not None and not (isinstance(color, str) and len(color) == 7 and color.startswith("#") and all(c in "0123456789abcdefABCDEF" for c in color[1:])):
+            raise CategoryServiceError("VALIDATION_ERROR", "Цвет должен быть в формате #rrggbb")
+        category.color = color or None
     db.session.commit()
     return category
 
