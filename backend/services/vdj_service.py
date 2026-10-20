@@ -1416,6 +1416,7 @@ def get_kj_queue_view(club_id: int) -> list[dict]:
                 "in_vdj": True,
                 "guest_song_text": matched.guest_song_text if matched else None,
                 "tone": matched.tone if matched else None,
+                "skip_round": bool(matched.skip_round) if matched else False,
             }
         )
     for order in waiting:
@@ -1432,6 +1433,7 @@ def get_kj_queue_view(club_id: int) -> list[dict]:
                 "in_vdj": False,
                 "guest_song_text": order.guest_song_text,
                 "tone": order.tone,
+                "skip_round": bool(order.skip_round),
             }
         )
     return _apply_table_round(club_id, [(row["order_id"], row) for row in result])
