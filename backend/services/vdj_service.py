@@ -1493,6 +1493,7 @@ def get_guest_queue_view(club_id: int, guest_id: int) -> list[dict]:
                 "is_vip": bool(matched and matched.guest_type == "vip"),
                 "is_mine": bool(matched and matched.telegram_user_id == guest_id),
                 "is_crazy": bool(matched and _is_crazy(matched.service_id)),
+                "category_color": matched.service.display_color() if matched and matched.service else None,
             }
         )
     for order in waiting:
@@ -1507,6 +1508,7 @@ def get_guest_queue_view(club_id: int, guest_id: int) -> list[dict]:
                 "is_vip": order.guest_type == "vip",
                 "is_mine": order.telegram_user_id == guest_id,
                 "is_crazy": _is_crazy(order.service_id),
+                "category_color": order.service.display_color() if order.service else None,
             }
         )
 
