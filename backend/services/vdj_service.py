@@ -117,6 +117,23 @@ def confirm_order(order_id: int, kj):
     return order, "queued"
 
 
+def has_pending_category_change(club_id: int, guest_id: int) -> bool:
+    """
+    Блокировка действий гостя (запрос пользователя 2026-10-20): пока висит смена категории, на которую гость не ответил («Да» или «Удалить песню»), он не может заказывать, менять или отменять песни.
+    """
+    return (
+        Order.query
+        .filter(
+            Order.club_id == club_id,
+            Order.telegram_user_id == guest_id,
+            Order.pending_service_id.isnot(None),
+            Order.status.in_((STATUS_PENDING, STATUS_PROCESSING, STATUS_QUEUED, STATUS_ERROR)),
+        )
+        .first()
+        is not None
+    )
+
+
 def reject_order(order_id: int, kj):
     """
     ТЗ п.19: отклонение заказа, ещё не переданного в VirtualDJ. Тоже атомарно —
