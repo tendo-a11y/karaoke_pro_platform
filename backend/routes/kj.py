@@ -1735,6 +1735,23 @@ def set_guest_photo(guest_id):
     return api_ok(account.to_dict())
 
 
+@bp.put("/orders/<int:order_id>/skip-round")
+@require_kj
+def set_order_skip_round(order_id):
+    """Галочка «Следующий круг» у песни в очереди (запрос пользователя 2026-10-20).
+    Тело запроса: {"skip_round": true} или {"skip_round": false}."""
+    data = request.get_json(silent=True) or {}
+    skip = data.get("skip_round")
+    if not isinstance(skip, bool):
+        return api_error(400, "VALIDATION_ERROR", "skip_round должен быть true или false")
+    order = Order.query.filter_by(id=order_id, club_id=g.kj.club_id).first()
+    if order is None:
+        return api_error(404, "ORDER_NOT_FOUND", "Заказ не найден")
+    order.skip_round = skip
+    db.session.commit()
+    return api_ok(order.to_dict())
+
+
 @bp.post("/guests/<guest_id>/make-vip")
 @require_kj
 def make_guest_vip(guest_id):
