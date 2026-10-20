@@ -260,7 +260,10 @@ def _round_robin_order(
     sequence: list[Order] = []
     remaining = len(orders)
     first_pass = True
+    pass_of: dict[int, int] = {}
+    pass_no = 0
     while remaining > 0:
+        pass_no += 1
         progressed = False
         skipped_anchor = False
         for table_no in (table_sequence if first_pass else base_sequence):
@@ -281,6 +284,8 @@ def _round_robin_order(
             take = bucket[start:start + limit]
             sequence.extend(take)
             cursor[table_no] = start + len(take)
+            for taken in take:
+                pass_of[id(taken)] = pass_no
             remaining -= len(take)
             progressed = True
         first_pass = False
@@ -298,6 +303,15 @@ def _round_robin_order(
             leftover.sort(key=lambda o: (o.created_at, o.id))
             sequence.extend(leftover)
             remaining = 0
+    def _pass_key(item):
+        idx, o = item
+        p = pass_of.get(id(o))
+        if p is None:
+            return (1, idx, 0)
+        return (0, p + (1 if o.skip_round else 0), idx)
+    if any(o.skip_round for o in sequence):
+        indexed = sorted(enumerate(sequence), key=_pass_key)
+        sequence = [o for _, o in indexed]
     return sequence
 
 
