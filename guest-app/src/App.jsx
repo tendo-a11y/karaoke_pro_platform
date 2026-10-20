@@ -4282,7 +4282,8 @@ export default function App() {
               if (isMyTable) itemClasses.push("queue-item--my-table");
               if (item.is_mine) itemClasses.push("queue-item--mine");
               return (
-                <li key={item.key ?? item.vdj_item_id} className={itemClasses.join(" ")}>
+                <li key={item.key ?? item.vdj_item_id} className={itemClasses.join(" ")}
+                  style={item.category_color ? { borderLeft: "4px solid " + item.category_color } : undefined}>
                   {item.is_vip ? "👑 " : ""}
                   {item.is_crazy ? "🔥 " : ""}
                   🎵 {item.artist ? `${item.artist} — ` : ""}
