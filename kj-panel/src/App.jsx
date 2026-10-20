@@ -573,6 +573,7 @@ function QueueTable({ queue, token, clubId }) {
                     <select
                       className="queue-row__category-select"
                       value={item.service_id ?? categories[0]?.id ?? ""}
+                      style={{ color: item.category_color || undefined }}
                       disabled={busyKey === `category-${item.order_id}`}
                       onChange={(event) => handleChangeCategory(item, event.target.value)}
                     >
