@@ -3361,6 +3361,8 @@ function GuestCard({ token, clubId, guestId, onBack, onChanged }) {
   const [chatDraft, setChatDraft] = useState("");
   const [chatBusy, setChatBusy] = useState(false);
   const [chatError, setChatError] = useState(null);
+  const [favSelected, setFavSelected] = useState([]);
+  const [favBusy, setFavBusy] = useState(false);
 
   async function reload() {
     try {
@@ -3380,6 +3382,26 @@ function GuestCard({ token, clubId, guestId, onBack, onChanged }) {
   useEffect(() => {
     if (guest) setNameDraft(guest.display_name || "");
   }, [guest]);
+
+  function toggleFavSelected(favId, checked) {
+    setFavSelected((prev) => (checked ? [...prev.filter((x) => x !== favId), favId] : prev.filter((x) => x !== favId)));
+  }
+
+  async function handleQueueFavorites() {
+    if (favSelected.length === 0) return;
+    setFavBusy(true);
+    setActionError(null);
+    try {
+      await api.queueGuestFavorites(token, guestId, favSelected);
+      setFavSelected([]);
+      await reload();
+      onChanged?.();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setFavBusy(false);
+    }
+  }
 
   async function handleToggleBlock() {
     setBusy(true);
@@ -3745,11 +3767,17 @@ function GuestCard({ token, clubId, guestId, onBack, onChanged }) {
           )}
 
           <h3 style={{ marginTop: 16 }}>Избранные песни ({guest.favorites.length})</h3>
+          {guest.favorites.length > 0 && (
+            <button type="button" onClick={handleQueueFavorites} disabled={favBusy || favSelected.length === 0} style={{ margin: "8px 0" }}>
+              Отправить в очередь ({favSelected.length})
+            </button>
+          )}
           {guest.favorites.length === 0 && <p className="empty-hint">Пока ничего не добавлено.</p>}
           {guest.favorites.length > 0 && (
             <ul className="song-search__results">
               {guest.favorites.map((f) => (
                 <li key={f.id} style={{ padding: "8px 12px" }}>
+                  <input type="checkbox" checked={favSelected.includes(f.id)} disabled={favBusy} onChange={(e) => toggleFavSelected(f.id, e.target.checked)} style={{ marginRight: 8 }} />
                   {f.artist ? `${f.artist} — ${f.song_title}` : f.song_title}
                 </li>
               ))}
