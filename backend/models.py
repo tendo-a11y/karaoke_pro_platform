@@ -457,6 +457,8 @@ class Service(db.Model):
     # KJ: "Временно убрать" — категория не показывается гостям (GET /api/guest/services),
     # пока галочка стоит. Сбрасывается сама при закрытии вечера (см. table_close_service.close_all_tables).
     temp_hidden = db.Column(db.Boolean, nullable=False, default=False)
+    # Цвет текста категории в очереди и у гостя (например, "#2563eb"); пусто — цвет по умолчанию.
+    color = db.Column(db.String(16), nullable=True)
 
     club = db.relationship("Club")
 
@@ -470,6 +472,7 @@ class Service(db.Model):
             "is_free": self.is_free,
             "kj_only": self.kj_only,
             "temp_hidden": self.temp_hidden,
+            "color": self.color,
         }
 
 
