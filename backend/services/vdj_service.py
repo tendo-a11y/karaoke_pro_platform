@@ -117,6 +117,62 @@ def confirm_order(order_id: int, kj):
     return order, "queued"
 
 
+def queue_favorites_for_guest(kj, guest_id: int, favorite_ids: list[int]):
+    """
+    KJ ставит избранные песни гостя в очередь одним действием (запрос пользователя, 2026-10).
+    Каждая песня становится заказом гостя (telegram_user_id = guest_id) сразу в статусе
+    STATUS_QUEUED, как add_manual_song, но за гостем: со столом гостя и категорией из избранного.
+    Списание по «Готово» и оплата такие же, как у обычного заказа гостя.
+    Лимит активных песен и проверку баланса VIP здесь не делаем: это решение KJ.
+
+    Возвращает (orders, outcome): outcome "ok" или "no_table" (у гостя нет стола).
+    """
+    from models import Favorite, GuestStatus, VipClient
+
+    status = GuestStatus.query.filter_by(club_id=kj.club_id, telegram_user_id=guest_id).first()
+    table_no = status.table_no if status is not None else None
+    if table_no is None:
+        return [], "no_table"
+
+    favorites = Favorite.query.filter(
+        Favorite.club_id == kj.club_id,
+        Favorite.telegram_user_id == guest_id,
+        Favorite.id.in_(favorite_ids),
+    ).all()
+    by_id = {f.id: f for f in favorites}
+    is_vip = VipClient.query.filter_by(club_id=kj.club_id, telegram_user_id=guest_id).first() is not None
+    guest_type = "vip" if is_vip else "client"
+
+    created = []
+    for fav_id in dict.fromkeys(favorite_ids):
+        fav = by_id.get(fav_id)
+        if fav is None:
+            continue
+        order = Order(
+            telegram_user_id=guest_id,
+            club_id=kj.club_id,
+            table_no=table_no,
+            guest_type=guest_type,
+            song_title=fav.song_title,
+            artist=fav.artist,
+            service_id=fav.service_id,
+            source="guest",
+            channel="webapp",
+            status=STATUS_QUEUED,
+            queued_at=_utcnow(),
+            confirmed_by=kj.id,
+            confirmed_at=_utcnow(),
+        )
+        db.session.add(order)
+        created.append(order)
+    db.session.commit()
+
+    for order in created:
+        emit_order_updated(order)
+
+    return created, "ok"
+
+
 def has_pending_category_change(club_id: int, guest_id: int) -> bool:
     """
     Блокировка действий гостя (запрос пользователя 2026-10-20): пока висит смена категории, на которую гость не ответил («Да» или «Удалить песню»), он не может заказывать, менять или отменять песни.
@@ -1713,6 +1769,62 @@ def push_order_to_queue(order_id: int, kj):
     return order, "queued"
 
 
+def queue_favorites_for_guest(kj, guest_id: int, favorite_ids: list[int]):
+    """
+    KJ ставит избранные песни гостя в очередь одним действием (запрос пользователя, 2026-10).
+    Каждая песня становится заказом гостя (telegram_user_id = guest_id) сразу в статусе
+    STATUS_QUEUED, как add_manual_song, но за гостем: со столом гостя и категорией из избранного.
+    Списание по «Готово» и оплата такие же, как у обычного заказа гостя.
+    Лимит активных песен и проверку баланса VIP здесь не делаем: это решение KJ.
+
+    Возвращает (orders, outcome): outcome "ok" или "no_table" (у гостя нет стола).
+    """
+    from models import Favorite, GuestStatus, VipClient
+
+    status = GuestStatus.query.filter_by(club_id=kj.club_id, telegram_user_id=guest_id).first()
+    table_no = status.table_no if status is not None else None
+    if table_no is None:
+        return [], "no_table"
+
+    favorites = Favorite.query.filter(
+        Favorite.club_id == kj.club_id,
+        Favorite.telegram_user_id == guest_id,
+        Favorite.id.in_(favorite_ids),
+    ).all()
+    by_id = {f.id: f for f in favorites}
+    is_vip = VipClient.query.filter_by(club_id=kj.club_id, telegram_user_id=guest_id).first() is not None
+    guest_type = "vip" if is_vip else "client"
+
+    created = []
+    for fav_id in dict.fromkeys(favorite_ids):
+        fav = by_id.get(fav_id)
+        if fav is None:
+            continue
+        order = Order(
+            telegram_user_id=guest_id,
+            club_id=kj.club_id,
+            table_no=table_no,
+            guest_type=guest_type,
+            song_title=fav.song_title,
+            artist=fav.artist,
+            service_id=fav.service_id,
+            source="guest",
+            channel="webapp",
+            status=STATUS_QUEUED,
+            queued_at=_utcnow(),
+            confirmed_by=kj.id,
+            confirmed_at=_utcnow(),
+        )
+        db.session.add(order)
+        created.append(order)
+    db.session.commit()
+
+    for order in created:
+        emit_order_updated(order)
+
+    return created, "ok"
+
+
 def add_manual_song(kj, song_title: str, artist, table_no: int):
     """
     KJ добавляет песню на карточку стола прямо из панели KJ Pro, минуя
@@ -1770,3 +1882,59 @@ def add_manual_song(kj, song_title: str, artist, table_no: int):
     emit_order_updated(order)
 
     return order, "queued"
+
+
+def queue_favorites_for_guest(kj, guest_id: int, favorite_ids: list[int]):
+    """
+    KJ ставит избранные песни гостя в очередь одним действием (запрос пользователя, 2026-10).
+    Каждая песня становится заказом гостя (telegram_user_id = guest_id) сразу в статусе
+    STATUS_QUEUED, как add_manual_song, но за гостем: со столом гостя и категорией из избранного.
+    Списание по «Готово» и оплата такие же, как у обычного заказа гостя.
+    Лимит активных песен и проверку баланса VIP здесь не делаем: это решение KJ.
+
+    Возвращает (orders, outcome): outcome "ok" или "no_table" (у гостя нет стола).
+    """
+    from models import Favorite, GuestStatus, VipClient
+
+    status = GuestStatus.query.filter_by(club_id=kj.club_id, telegram_user_id=guest_id).first()
+    table_no = status.table_no if status is not None else None
+    if table_no is None:
+        return [], "no_table"
+
+    favorites = Favorite.query.filter(
+        Favorite.club_id == kj.club_id,
+        Favorite.telegram_user_id == guest_id,
+        Favorite.id.in_(favorite_ids),
+    ).all()
+    by_id = {f.id: f for f in favorites}
+    is_vip = VipClient.query.filter_by(club_id=kj.club_id, telegram_user_id=guest_id).first() is not None
+    guest_type = "vip" if is_vip else "client"
+
+    created = []
+    for fav_id in dict.fromkeys(favorite_ids):
+        fav = by_id.get(fav_id)
+        if fav is None:
+            continue
+        order = Order(
+            telegram_user_id=guest_id,
+            club_id=kj.club_id,
+            table_no=table_no,
+            guest_type=guest_type,
+            song_title=fav.song_title,
+            artist=fav.artist,
+            service_id=fav.service_id,
+            source="guest",
+            channel="webapp",
+            status=STATUS_QUEUED,
+            queued_at=_utcnow(),
+            confirmed_by=kj.id,
+            confirmed_at=_utcnow(),
+        )
+        db.session.add(order)
+        created.append(order)
+    db.session.commit()
+
+    for order in created:
+        emit_order_updated(order)
+
+    return created, "ok"
