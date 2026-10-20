@@ -505,7 +505,7 @@ function ServiceSelect({ services, value, onChange, disabled, highlight = false,
               style={highlight && !value ? { animationDelay: `${index}s`, animationDuration: `${Math.max(services.length, 3)}s` } : undefined}
             >
               <div className="service-picker__row">
-                <button type="button" className="service-picker__option" onClick={() => choose(s)}>
+                <button type="button" className="service-picker__option" style={s.display_color ? { color: s.display_color } : undefined} onClick={() => choose(s)}>
                   {labelOf(s)}
                 </button>
                 <button
