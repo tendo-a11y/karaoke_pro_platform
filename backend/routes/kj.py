@@ -1712,7 +1712,7 @@ def guest_favorites_to_queue(guest_id):
     created, outcome = vdj_service.queue_favorites_for_guest(g.kj, parsed_id, favorite_ids)
     if outcome == "no_table":
         return api_error(409, "NO_TABLE", "У гостя нет стола — сначала посадите его за стол")
-    return api_ok({"added": len(created), "orders": [o.to_dict() for o in created]})
+    return api_ok({"added": len(created), "requested": len(favorite_ids), "stopped_by": None if outcome == "ok" else outcome, "orders": [o.to_dict() for o in created]})
 
 
 @bp.post("/guests/<guest_id>/block")
