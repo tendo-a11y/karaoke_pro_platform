@@ -202,8 +202,19 @@ def me():
     })
 
 
+def _block_pending_category(f):
+    """Пока гость не ответил на смену категории, он не может заказывать, менять или отменять песни."""
+    def wrapper(*args, **kwargs):
+        if vdj_service.has_pending_category_change(g.club_id, g.guest_id):
+            return api_error(409, "PENDING_CATEGORY_CHANGE", "Сначала ответьте на смену категории: «Да» или «Удалить песню»")
+        return f(*args, **kwargs)
+    wrapper.__name__ = f.__name__
+    return wrapper
+
+
 @bp.post("/order")
 @require_guest
+@_block_pending_category
 def create_order():
     """
     Гостевое создание заказа через Guest App — параллельный путь к
@@ -1003,6 +1014,7 @@ def reorder_favorite(favorite_id):
 
 @bp.post("/order/<int:order_id>/replace")
 @require_guest
+@_block_pending_category
 def replace_order(order_id):
     """
     Заявка на замену песни в уже созданном заказе (старое: handlers/client.py
@@ -1069,6 +1081,7 @@ def replace_order(order_id):
 # replace_order выше, здесь ровно та же смена модели.
 @bp.post("/order/<int:order_id>/cancel")
 @require_guest
+@_block_pending_category
 def cancel_order(order_id):
     """Гость подаёт заявку на отмену своего заказа, пока он ещё не сыгран
     (см. vdj_service.request_order_cancel) — владелец заказа проверяется
@@ -1118,6 +1131,7 @@ def guest_respond_category_change(order_id):
 
 @bp.post("/orders/cancel-unplayed")
 @require_guest
+@_block_pending_category
 def cancel_unplayed_orders():
     removed = vdj_service.cancel_all_unplayed_by_guest(g.guest_id, g.club_id)
     return api_ok({
