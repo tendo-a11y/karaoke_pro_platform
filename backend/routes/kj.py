@@ -1695,6 +1695,26 @@ def get_guest_history(club_id, guest_id):
     return api_ok(guest_directory_service.get_guest_song_history(club_id, parsed_id, date_from, date_to))
 
 
+@bp.post("/guests/<guest_id>/favorites-to-queue")
+@require_kj
+def guest_favorites_to_queue(guest_id):
+    parsed_id = _parse_guest_id(guest_id)
+    if parsed_id is None:
+        return api_error(400, "VALIDATION_ERROR", "guest_id должен быть числом")
+    payload = request.get_json(silent=True) or {}
+    favorite_ids = payload.get("favorite_ids")
+    if (
+        not isinstance(favorite_ids, list)
+        or not favorite_ids
+        or not all(isinstance(x, int) and not isinstance(x, bool) for x in favorite_ids)
+    ):
+        return api_error(400, "VALIDATION_ERROR", "favorite_ids должен быть непустым списком номеров избранных песен")
+    created, outcome = vdj_service.queue_favorites_for_guest(g.kj, parsed_id, favorite_ids)
+    if outcome == "no_table":
+        return api_error(409, "NO_TABLE", "У гостя нет стола — сначала посадите его за стол")
+    return api_ok({"added": len(created), "orders": [o.to_dict() for o in created]})
+
+
 @bp.post("/guests/<guest_id>/block")
 @require_kj
 def block_guest(guest_id):
