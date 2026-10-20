@@ -2614,6 +2614,15 @@ function VipPanel({ token, clubId }) {
   );
 }
 
+// Цвета категорий по умолчанию (запрос пользователя 2026-10-20): пока ведущий сам не выбрал цвет.
+const CATEGORY_DEFAULT_COLORS = { "Караоке 35": "#2563eb", "Интернет 100": "#16a34a", "Крези": "#dc2626" };
+const CATEGORY_PALETTE = ["#f59e0b", "#a855f7", "#0891b2", "#db2777", "#65a30d", "#ea580c"];
+function defaultCategoryColor(category) {
+  if (category.color) return category.color;
+  if (CATEGORY_DEFAULT_COLORS[category.name]) return CATEGORY_DEFAULT_COLORS[category.name];
+  return CATEGORY_PALETTE[(Number(category.id) || 0) % CATEGORY_PALETTE.length];
+}
+
 function CategoriesPanel({ token, clubId }) {
   const [categories, setCategories] = useState(null);
   const [loadError, setLoadError] = useState(null);
@@ -2699,6 +2708,19 @@ function CategoriesPanel({ token, clubId }) {
     setActionError(null);
     try {
       await api.updateCategory(token, clubId, category.id, { temp_hidden: checked });
+      await reload();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  async function handleChangeColor(category, color) {
+    setBusyKey("color-" + category.id);
+    setActionError(null);
+    try {
+      await api.updateCategory(token, clubId, category.id, { color });
       await reload();
     } catch (err) {
       setActionError(err instanceof ApiError ? err.message : String(err));
@@ -2825,6 +2847,15 @@ function CategoriesPanel({ token, clubId }) {
                     disabled={saving || deleting || busyKey === `hide-${category.id}`}
                   />
                   Временно убрать
+                </label>
+                <label className="category-row__color" title="Цвет текста категории в очереди и у гостя">
+                  <input
+                    type="color"
+                    value={defaultCategoryColor(category)}
+                    onChange={(e) => handleChangeColor(category, e.target.value)}
+                    disabled={saving || deleting || busyKey === "color-" + category.id}
+                  />
+                  Цвет
                 </label>
                 <div className="category-row__actions">
                   <button
