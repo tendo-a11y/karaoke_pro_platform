@@ -377,6 +377,7 @@ class Order(db.Model):
     # Песня уже рассчитана частичным закрытием стола (чек выписан, стол остался открыт).
     # Такие песни не попадают в следующий чек — см. table_close_service.close_sung_orders.
     settled_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    skip_round = db.Column(db.Boolean, nullable=False, default=False, server_default="false")
 
     club = db.relationship("Club", back_populates="orders")
     transactions = db.relationship("Transaction", back_populates="order")
