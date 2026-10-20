@@ -1717,13 +1717,18 @@ def queue_favorites_for_guest(kj, guest_id: int, favorite_ids: list[int]):
     """
     KJ ставит избранные песни гостя в очередь одним действием (запрос пользователя, 2026-10).
     Каждая песня становится заказом гостя (telegram_user_id = guest_id) сразу в статусе
-    STATUS_QUEUED, как add_manual_song, но за гостем: со столом гостя и категорией из избранного.
-    Списание по «Готово» и оплата такие же, как у обычного заказа гостя.
-    Лимит активных песен и проверку баланса VIP здесь не делаем: это решение KJ.
+    STATUS_QUEUED, со столом гостя и категорией из избранного. Списание по «Готово» такое же,
+    как у обычного заказа гостя.
+    Действуют те же ограничения, что и на заказ гостя: не больше MAX_ACTIVE_SONGS_PER_GUEST
+    активных заказов и проверка баланса VIP. Добавление останавливается на первой песне,
+    которая не проходит проверку; остальные не добавляются, уже добавленные сохраняются.
 
-    Возвращает (orders, outcome): outcome "ok" или "no_table" (у гостя нет стола).
+    Возвращает (orders, outcome): outcome "ok", "limit" или "balance" (остановлено на проверке),
+    либо "no_table" (у гостя нет стола, ничего не добавлено).
     """
+    from flask import current_app
     from models import Favorite, GuestStatus, VipClient
+    from services import billing_service, vip_service
 
     status = GuestStatus.query.filter_by(club_id=kj.club_id, telegram_user_id=guest_id).first()
     table_no = status.table_no if status is not None else None
@@ -1738,12 +1743,22 @@ def queue_favorites_for_guest(kj, guest_id: int, favorite_ids: list[int]):
     by_id = {f.id: f for f in favorites}
     is_vip = VipClient.query.filter_by(club_id=kj.club_id, telegram_user_id=guest_id).first() is not None
     guest_type = "vip" if is_vip else "client"
+    max_active = current_app.config["MAX_ACTIVE_SONGS_PER_GUEST"]
+    active_now = vip_service.count_active_orders(kj.club_id, guest_id)
 
     created = []
+    outcome = "ok"
     for fav_id in dict.fromkeys(favorite_ids):
         fav = by_id.get(fav_id)
         if fav is None:
             continue
+        if active_now + len(created) >= max_active:
+            outcome = "limit"
+            break
+        service = db.session.get(Service, fav.service_id) if fav.service_id else None
+        if billing_service.check_vip_balance(kj.club_id, guest_id, guest_type, service).blocked:
+            outcome = "balance"
+            break
         order = Order(
             telegram_user_id=guest_id,
             club_id=kj.club_id,
@@ -1760,13 +1775,14 @@ def queue_favorites_for_guest(kj, guest_id: int, favorite_ids: list[int]):
             confirmed_at=_utcnow(),
         )
         db.session.add(order)
+        db.session.flush()
         created.append(order)
     db.session.commit()
 
     for order in created:
         emit_order_updated(order)
 
-    return created, "ok"
+    return created, outcome
 
 
 def add_manual_song(kj, song_title: str, artist, table_no: int):
