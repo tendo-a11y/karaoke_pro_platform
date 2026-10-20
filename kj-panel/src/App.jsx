@@ -3392,7 +3392,10 @@ function GuestCard({ token, clubId, guestId, onBack, onChanged }) {
     setFavBusy(true);
     setActionError(null);
     try {
-      await api.queueGuestFavorites(token, guestId, favSelected);
+      const res = await api.queueGuestFavorites(token, guestId, favSelected);
+      if (res && res.stopped_by) {
+        setActionError("Добавлено " + res.added + " из " + res.requested + (res.stopped_by === "limit" ? ": достигнут лимит активных песен. Остальные не добавлены." : ": не хватает баланса VIP. Остальные не добавлены."));
+      }
       setFavSelected([]);
       await reload();
       onChanged?.();
