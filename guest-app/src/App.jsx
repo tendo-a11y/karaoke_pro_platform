@@ -1502,7 +1502,69 @@ function resizeImageToBase64(file) {
   });
 }
 
-function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSuggestOther, onSearchStart, onAiStatus, active = false, showProfileTabs = true }) {
+const TYPING_PHRASES = ["Рюмка водки Лепс", "Oriunde ai fi Balan"];
+
+function useTypingPlaceholder(phrases, enabled) {
+  const [hint, setHint] = useState("");
+  useEffect(() => {
+    if (!enabled) { setHint(""); return; }
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+      setHint(phrases[0]);
+      return;
+    }
+    let phraseIdx = 0, charIdx = 0, deleting = false, timer;
+    const tick = () => {
+      const phrase = phrases[phraseIdx];
+      if (!deleting) {
+        charIdx++;
+        setHint(phrase.slice(0, charIdx));
+        if (charIdx === phrase.length) { deleting = true; timer = setTimeout(tick, 1800); return; }
+        timer = setTimeout(tick, 70);
+      } else {
+        charIdx--;
+        setHint(phrase.slice(0, charIdx));
+        if (charIdx === 0) { deleting = false; phraseIdx = (phraseIdx + 1) % phrases.length; timer = setTimeout(tick, 400); return; }
+        timer = setTimeout(tick, 40);
+      }
+    };
+    timer = setTimeout(tick, 400);
+    return () => clearTimeout(timer);
+  }, [enabled, phrases]);
+  return hint;
+}
+
+const TYPING_PHRASES = ["Рюмка водки Лепс", "Oriunde ai fi Balan"];
+
+function useTypingPlaceholder(phrases, enabled) {
+  const [hint, setHint] = useState("");
+  useEffect(() => {
+    if (!enabled) { setHint(""); return; }
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+      setHint(phrases[0]);
+      return;
+    }
+    let phraseIdx = 0, charIdx = 0, deleting = false, timer;
+    const tick = () => {
+      const phrase = phrases[phraseIdx];
+      if (!deleting) {
+        charIdx++;
+        setHint(phrase.slice(0, charIdx));
+        if (charIdx === phrase.length) { deleting = true; timer = setTimeout(tick, 1800); return; }
+        timer = setTimeout(tick, 70);
+      } else {
+        charIdx--;
+        setHint(phrase.slice(0, charIdx));
+        if (charIdx === 0) { deleting = false; phraseIdx = (phraseIdx + 1) % phrases.length; timer = setTimeout(tick, 400); return; }
+        timer = setTimeout(tick, 40);
+      }
+    };
+    timer = setTimeout(tick, 400);
+    return () => clearTimeout(timer);
+  }, [enabled, phrases]);
+  return hint;
+}
+
+function AiSearch({({({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSuggestOther, onSearchStart, onAiStatus, active = false, showProfileTabs = true }) {
   // "Не эта" под найденной песней: подсказываем другие способы — моргают "Ссылка" и "Скриншот".
   const [suggestOther, setSuggestOther] = useState(false);
   // Неудачный поиск — пусть ещё моргает поле "Название песни" (запрос пользователя 2026-10).
