@@ -1645,9 +1645,10 @@ function AiSearch({({({ token, onPick, onScreenshotHelp, extra = null, onExtra, 
     }
   }
 
+  const typingHint = useTypingPlaceholder(TYPING_PHRASES, mode === "text" && !text);
   const placeholder = mode === "link"
     ? "🔗 Вставьте ссылку на песню с YouTube"
-    : "🤖 Опишите песню своими словами";
+    : (typingHint || "🤖 Опишите песню своими словами");
   const emptyHint = mode === "link"
     ? "По этой ссылке не удалось определить песню — проверьте, что это ссылка на конкретный трек."
     : "Ничего не нашлось по описанию — попробуйте другой режим поиска.";
