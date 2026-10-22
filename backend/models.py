@@ -565,6 +565,7 @@ class GuestAccount(db.Model):
     # файловое хранилище было бы лишней инфраструктурой; фронтенд уменьшает
     # фото перед отправкой, сервер дополнительно ограничивает размер строки.
     photo_data_url = db.Column(db.Text, nullable=True)
+    trusted = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
 
     created_at = db.Column(db.DateTime(timezone=True), default=utcnow, nullable=False)
 
@@ -1245,6 +1246,7 @@ class GuestStatus(db.Model):
     telegram_user_id = db.Column(db.BigInteger, nullable=False, index=True)
     table_no = db.Column(db.Integer, nullable=True)
     is_blocked = db.Column(db.Boolean, nullable=False, default=False)
+    trusted = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
     blocked_at = db.Column(db.DateTime(timezone=True), nullable=True)
     blocked_by = db.Column(db.Integer, db.ForeignKey("kj_operators.id"), nullable=True)
     updated_at = db.Column(db.DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
