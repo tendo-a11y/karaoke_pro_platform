@@ -7,7 +7,7 @@ from flask import Blueprint, current_app, g, request
 from auth import issue_guest_token, require_guest
 from errors import api_error, api_ok
 from extensions import db
-from models import STATUS_COMPLETED, STATUS_ERROR, STATUS_ORDER_CHANGE_PENDING, STATUS_REJECTED, ChatMessage, Club, GuestAccount, Order, OrderChangeRequest, Service
+from models import STATUS_COMPLETED, STATUS_ERROR, STATUS_ORDER_CHANGE_PENDING, STATUS_QUEUED, STATUS_REJECTED, ChatMessage, Club, GuestAccount, GuestStatus, Order, OrderChangeRequest, Service
 from services import ai_search_service, billing_service, guest_account_service, guest_status_service, song_service, stats_clear_service, table_board_service, table_close_service, table_group_service, vdj_service, vip_service, vip_topup_request_service
 from services.google_auth_service import GoogleAuthError, verify_google_credential
 from sockets import emit_chat_message, emit_order_created, emit_order_priority_requested, emit_vip_request_created
@@ -202,6 +202,19 @@ def me():
     })
 
 
+def _auto_accept_fields(club_id: int, guest_id: int, guest_type: str) -> dict:
+    """Auto-accept (2026-10): VIP always; others when the trusted flag is set. Order goes straight to the queue."""
+    trusted = guest_type == "vip"
+    if not trusted:
+        account = GuestAccount.query.filter_by(club_id=club_id, telegram_user_id=guest_id).first()
+        status = GuestStatus.query.filter_by(club_id=club_id, telegram_user_id=guest_id).first()
+        trusted = (account is not None and bool(account.trusted)) or (status is not None and bool(status.trusted))
+    if not trusted:
+        return {}
+    now = datetime.now(timezone.utc)
+    return {"status": STATUS_QUEUED, "queued_at": now, "confirmed_at": now}
+
+
 def _block_pending_category(f):
     """Пока гость не ответил на смену категории, он не может заказывать, менять или отменять песни."""
     def wrapper(*args, **kwargs):
@@ -351,6 +364,7 @@ def create_order():
         song_url=song_url,
         source="guest",
         channel="webapp",
+        **_auto_accept_fields(g.club_id, g.guest_id, guest_type),
     )
     db.session.add(order)
     db.session.commit()
