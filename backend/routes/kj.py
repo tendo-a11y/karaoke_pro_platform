@@ -2264,3 +2264,8 @@ def get_bridge_status(club_id):
         # но ещё не успел ни разу проверить (первые секунды после connect).
         "vdj_reachable": bridge_status.vdj_reachable(club_id),
     })
+
+
+@bp.post("/guests/<guest_id>/trusted")
+@require_kj
+def set_guest_trusted(guest_id): parsed_id = _parse_guest_id(guest_id); body = request.get_json(silent=True) or {}; return api_error(400, "VALIDATION_ERROR", "guest_id должен быть числом") if parsed_id is None else api_ok({"guest_id": str(parsed_id), "trusted": guest_status_service.set_trusted(g.club_id, parsed_id, bool(body.get("trusted"))).trusted})
