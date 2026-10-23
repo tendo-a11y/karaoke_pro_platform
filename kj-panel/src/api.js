@@ -306,7 +306,7 @@ export const api = {
     request(`/api/kj/guests/${encodeURIComponent(guestId)}/block`, { method: "POST", token }),
   unblockGuest: (token, guestId) =>
     request(`/api/kj/guests/${encodeURIComponent(guestId)}/unblock`, { method: "POST", token }),
-  removeGuestFromTable: (token, guestId) =>
+  setGuestTrusted: (token, guestId, trusted) => request(`/api/kj/guests/${encodeURIComponent(guestId)}/trusted`, { method: "POST", token, body: { trusted } }),   removeGuestFromTable: (token, guestId) =>
     request(`/api/kj/guests/${encodeURIComponent(guestId)}/remove-table`, { method: "POST", token }),
   // Запрос пользователя 2026-09-19 "Закрыть стол": снять со стола +
   // заблокировать + отклонить оставшиеся заказы стола одним действием —
