@@ -1630,3 +1630,13 @@ def queue():
     if club is not None and not club.guest_queue_visible:
         return api_ok({"visible": False, "items": []})
     return api_ok(vdj_service.get_guest_queue_view(g.club_id, g.guest_id))
+
+@bp.get("/precheck")
+@require_guest
+def guest_precheck():
+    if g.table_no is None:
+        return api_error(409, "NO_TABLE", "Сначала выберите стол")
+    receipt = table_close_service.preview_receipt(g.club_id, g.table_no)
+    if receipt is None:
+        return api_error(404, "TABLE_EMPTY", "За этим столом сейчас песен нет")
+    return api_ok(receipt)
