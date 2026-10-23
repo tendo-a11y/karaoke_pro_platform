@@ -3950,7 +3950,7 @@ export default function App() {
         </button>
       </header>
 
-      <AddToHomeScreenHint />
+      <AddToHomeScreenHint /><OfflineBanner />
 
       {meInfo.table_close_receipt && !dismissedCloseRequestIds.has(meInfo.table_close_receipt.id) && (
         <TableCloseReceiptBanner
