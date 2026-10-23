@@ -2069,7 +2069,7 @@ function TableGroupPanel({ token, guestId, hasTable, status, onGroupChanged, tab
         👥 Групповой стол{tableNo != null ? ` · ${tableLabel(tableNo)}` : ""}
         <span className={`collapsible-caret${open ? " collapsible-caret--blink" : ""}`}>{open ? "▲" : "▼"}</span>
       </h2>
-      {adminLine && <p className="table-admin-line">{adminLine}</p>}
+      {adminLine && <p className="table-admin-line">{adminLine}</p>} {tableNo != null && <GuestPrecheck token={token} />}
       {open && (
       <>
       {error && <div className="banner banner--error">{error}</div>}
@@ -4038,7 +4038,7 @@ export default function App() {
         ) : null}
         {orderExtra === "orders" || orderExtra === "history" ? (
           <div className="profile-finance">
-          <h2>{ordersTab === "history" ? "История" : "Мои заказы"}</h2>
+          <h2>{ordersTab === "history" ? "История" : "Мои заказы"}</h2> {ordersTab !== "history" && <GuestPrecheck token={session?.token} />}
         {ordersTab !== "history" && orders.some((o) => o.status === "pending" || o.status === "queued") && (
           <button
             type="button"
@@ -4332,6 +4332,72 @@ export default function App() {
           </>
         )}
       </section>
+    </div>
+  );
+}
+
+function GuestPrecheck({ token }) {
+  const [open, setOpen] = useState(false);
+  const [data, setData] = useState(null);
+  const [err, setErr] = useState(null);
+  const [busy, setBusy] = useState(false);
+  async function toggle() {
+    if (open) {
+      setOpen(false);
+      return;
+    }
+    setOpen(true);
+    setData(null);
+    setErr(null);
+    setBusy(true);
+    try {
+      setData(await api.getGuestPrecheck(token));
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+  const money = (v) => `${Number(v || 0).toFixed(2)} MDL`;
+  return (
+    <div className="guest-precheck">
+      <button type="button" className="btn" disabled={busy} onClick={toggle}>
+        {open ? "Скрыть пречек" : "🧾 Пречек"}
+      </button>
+      {open && (
+        <div className="precheck">
+          <h3>🧾 Пречек стола</h3>
+          <p className="empty-hint">Так будет выглядеть чек, если закрыть стол сейчас. Стол не закрывается.</p>
+          {err && <div className="banner banner--error">{err}</div>}
+          {!data && !err && <p className="empty-hint">Загрузка…</p>}
+          {data && (
+            <>
+              {data.items.length === 0 ? (
+                <p className="empty-hint">Песен пока нет.</p>
+              ) : (
+                <ul className="precheck__items">
+                  {data.items.map((it) => (
+                    <li key={it.order_id} className="precheck__item">
+                      <span>
+                        {it.sung ? "✅" : "⏳"} {it.artist ? `${it.artist} — ` : ""}{it.song_title}
+                        <span className="empty-hint">
+                          {" "}· {it.category}{it.paid ? " · оплачено с VIP" : ""}
+                        </span>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="precheck__totals">
+                <div>Песен: <b>{data.song_count}</b></div>
+                <div>Итого: <b>{money(data.total)}</b></div>
+                <div>К оплате на месте: <b>{money(data.payable_total)}</b></div>
+              </div>
+              <p className="empty-hint">✅ — уже спета, ⏳ — ещё не спета.</p>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
