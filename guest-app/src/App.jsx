@@ -4401,3 +4401,22 @@ function GuestPrecheck({ token }) {
     </div>
   );
 }
+function OfflineBanner() {
+  const [offline, setOffline] = useState(() => typeof navigator !== "undefined" && navigator.onLine === false);
+  useEffect(() => {
+    const on = () => setOffline(false);
+    const off = () => setOffline(true);
+    window.addEventListener("online", on);
+    window.addEventListener("offline", off);
+    return () => {
+      window.removeEventListener("online", on);
+      window.removeEventListener("offline", off);
+    };
+  }, []);
+  if (!offline) return null;
+  return (
+    <section role="alert" style={{ background: "#fde68a", color: "#7c2d12", padding: "10px 12px", margin: "8px 12px", borderRadius: 8 }}>
+      <p style={{ margin: 0 }}>⚠️ Нет связи с интернетом. Заказы сейчас не отправятся. Пожалуйста, оформите заказ у ведущего на бумажке.</p>
+    </section>
+  );
+}
