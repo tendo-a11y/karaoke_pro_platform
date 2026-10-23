@@ -66,7 +66,7 @@ async function request(path, { method = "GET", token, body } = {}) {
   return json?.data;
 }
 
-export const api = {
+export const api = { getGuestPrecheck: (token) => request("/api/guest/precheck", { token }),
   // ТЗ п.45 (финальная единая модель входа): table_no сюда больше не
   // передаётся — QR никогда не приносит номер стола, сессия всегда
   // создаётся без стола. Стол появляется только вместе со входом через
