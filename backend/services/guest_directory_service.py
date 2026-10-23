@@ -149,7 +149,7 @@ def list_guests(club_id: int, guest_type_filter: str | None = None) -> list[dict
             "guest_id": str(gid),
             "guest_type": guest_type,
             "table_no": current_table_no,
-            "is_blocked": is_blocked,
+            "is_blocked": is_blocked, "trusted": bool(status.trusted) if status else False,
             "at_table": at_table,
             "app_open": app_open,
             "is_online": at_table or app_open,
@@ -203,7 +203,7 @@ def get_guest_detail(club_id: int, guest_id: int) -> dict:
         "guest_id": str(guest_id),
         "guest_type": guest_type,
         "table_no": current_table_no,
-        "is_blocked": bool(status.is_blocked) if status else False,
+        "is_blocked": bool(status.is_blocked) if status else False, "trusted": bool(status.trusted) if status else False,
         "email": account.email if account else None,
         "display_name": account.display_name if account else None,
         # ДОБАВЛЕНО (запрос пользователя 2026-10: "Kj должен иметь
