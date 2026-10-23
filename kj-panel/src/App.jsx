@@ -3406,7 +3406,7 @@ function GuestCard({ token, clubId, guestId, onBack, onChanged }) {
     }
   }
 
-  async function handleToggleBlock() {
+  async function handleToggleTrusted(next) { setBusy(true); setActionError(null); try { await api.setGuestTrusted(token, guestId, next); await reload(); onChanged?.(); } catch (err) { setActionError(err instanceof ApiError ? err.message : String(err)); } finally { setBusy(false); } }   async function handleToggleBlock() {
     setBusy(true);
     setActionError(null);
     try {
@@ -3596,7 +3596,7 @@ function GuestCard({ token, clubId, guestId, onBack, onChanged }) {
 
           {actionError && <div className="banner banner--error">{actionError}</div>}
 
-          <div className="vip-row__actions" style={{ marginTop: 10 }}>
+          <label className="empty-hint" style={{ display: "block", marginTop: 8 }}><input type="checkbox" checked={!!guest.trusted} disabled={busy} onChange={(e) => handleToggleTrusted(e.target.checked)} /> Доверяем</label> <div className="vip-row__actions" style={{ marginTop: 10 }}>
             <button type="button" className="btn btn--reject" disabled={busy} onClick={handleToggleBlock}>
               {guest.is_blocked ? "Разблокировать" : "🚫 Заблокировать"}
             </button>
