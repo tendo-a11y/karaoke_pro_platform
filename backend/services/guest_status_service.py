@@ -129,3 +129,6 @@ def close_table(club_id: int, guest_id: int, kj) -> dict:
     status = set_table(club_id, guest_id, None)
 
     return {"status": status, "closed_orders": closed_orders}
+
+
+def set_trusted(club_id: int, guest_id: int, trusted: bool) -> GuestStatus: status = _get_or_create(club_id, guest_id); status.trusted = bool(trusted); db.session.commit(); return status
