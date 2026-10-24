@@ -783,7 +783,7 @@ function OrderRow({
     setReorderError(null);
     setReorderDone(false);
     try {
-      const created = await api.createOrder(token, order.song_title, order.artist || null, Number(reorderServiceId));
+      const created = await createOrderMarked(token, order.song_title, order.artist || null, Number(reorderServiceId));
       setReorderServiceId("");
       setReorderQueuePos(created?.queue_position ?? 0);
       setReorderDone(true);
@@ -3603,7 +3603,7 @@ export default function App() {
     setSubmitError(null);
     setSubmitOk(null);
     try {
-      const created = await api.createOrder(
+      const created = await createOrderMarked(
         token, songTitle.trim(), artist.trim() || null,
         serviceId ? Number(serviceId) : null,
         toneOn && tone != null ? tone : null,
@@ -3939,14 +3939,14 @@ export default function App() {
           </div>
         </div>
       )}
-      <LangSwitcher />
+      
       <header className="app-header">
         <h1>🎤 {meInfo.club_name || "Karaoke"}</h1>
-        <span className="app-header__table">
+        <LanguageButton /><span className="app-header__table" style={{ display: guestHasOrdered() ? undefined : "none" }}>
           {meInfo.table_no != null ? `Стол ${tableLabel(meInfo.table_no)}` : "Без стола"}
         </span>
-        <button type="button" className="btn-link" onClick={() => setView("messages")}>
-          ✉️ Сообщения
+        <button type="button" className="btn-link" style={{ display: guestHasOrdered() ? undefined : "none" }} onClick={() => setView("messages")}>
+          ✏️
         </button>
       </header>
 
@@ -4418,5 +4418,52 @@ function OfflineBanner() {
     <section role="alert" style={{ background: "#fde68a", color: "#7c2d12", padding: "10px 12px", margin: "8px 12px", borderRadius: 8 }}>
       <p style={{ margin: 0 }}>⚠️ Нет связи с интернетом. Заказы сейчас не отправятся. Пожалуйста, оформите заказ у ведущего на бумажке.</p>
     </section>
+  );
+}
+
+function guestHasOrdered() {
+  try {
+    return localStorage.getItem("guest_has_ordered") === "1";
+  } catch {
+    return false;
+  }
+}
+
+async function createOrderMarked(...args) {
+  const result = await api.createOrder(...args);
+  try {
+    localStorage.setItem("guest_has_ordered", "1");
+  } catch {
+    // localStorage недоступен: кнопки останутся скрытыми до перезагрузки
+  }
+  return result;
+}
+
+function LanguageButton() {
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={{ position: "relative", display: "inline-block" }}>
+      <button type="button" className="btn-link" onClick={() => setOpen((v) => !v)}>
+        🌐 Язык
+      </button>
+      {open && (
+        <div style={{ position: "absolute", right: 0, top: "100%", background: "#fff", border: "1px solid #ccc", borderRadius: 8, padding: 4, zIndex: 50 }}>
+          {LANGS.map((l) => (
+            <button
+              key={l.code}
+              type="button"
+              className={`lang-switch__btn${LANG === l.code ? " lang-switch__btn--active" : ""}`}
+              onClick={() => {
+                setOpen(false);
+                if (LANG !== l.code) setLang(l.code);
+              }}
+            >
+              <span>{l.label}</span>
+              <span className="lang-switch__flag">{LANG_FLAGS[l.code]}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
