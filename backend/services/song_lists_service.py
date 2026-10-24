@@ -35,7 +35,7 @@ def _hidden_history_ids(club_id: int) -> set:
 
 
 def _hidden_popular_keys(club_id: int) -> set:
-    return {r.norm_key for r in SongListHidden.query.filter_by(club_id=club_id, kind="popular").all()}
+    return {r.norm_key for r in SongListHidden.query.filter(SongListHidden.club_id == club_id, SongListHidden.kind.in_(["popular", "popular_archived"])).all()}
 
 
 def recent_hour(club_id: int, now=None) -> list[dict]:
@@ -140,7 +140,7 @@ def unhide(club_id: int, hidden_id: int) -> None:
 def clear_hidden_popular(club_id: int) -> int:
     """Полностью удалить все скрытые из "Популярных" записи клуба (без восстановления).
     "История за час" не трогаем. Возвращает, сколько записей удалено."""
-    removed = SongListHidden.query.filter_by(club_id=club_id, kind="popular").delete(synchronize_session=False)
+    removed = SongListHidden.query.filter_by(club_id=club_id, kind="popular").update({"kind": "popular_archived"}, synchronize_session=False)
     db.session.commit()
     return removed
 
