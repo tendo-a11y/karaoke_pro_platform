@@ -898,6 +898,9 @@ img { max-width: 100%; }
   50% { background: rgba(47, 191, 113, 0.45); box-shadow: 0 0 0 6px rgba(47, 191, 113, 0.18); color: #fff; }
 }
 
+/* Доп. столы: раскрывающийся список на экране входа. */
+.extra-table-picker-wrap { width: 100%; }
+.extra-table-picker__summary { cursor: pointer; padding: 6px 0; font-weight: 600; color: var(--text); }
 /* Затемнение шагов, которые сейчас не нужны: мигает только следующий шаг. */
 .step-dim { opacity: 0.4; transition: opacity 0.2s; }
 /* ДОБАВЛЕНО (2026-10): подсветка следующего шага при заказе песни. */
