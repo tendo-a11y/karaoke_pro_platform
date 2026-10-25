@@ -2962,7 +2962,7 @@ function ActivationPanel({ token, onActivated, onCancel }) {
         <input
           type="number"
           min="1"
-          className={!tableNoValid ? "step-blink" : undefined}
+          className={!tableNoValid ? "step-blink" : "step-dim"}
           value={tableNo}
           onChange={(e) => {
             setTableNo(e.target.value);
@@ -2989,7 +2989,7 @@ function ActivationPanel({ token, onActivated, onCancel }) {
             ))}
           </div>
         )}
-        <button type="button" className="activation-nologin" onClick={handleNoLogin} disabled={busy || !tableNoValid}>
+        <button type="button" className="activation-nologin step-dim" onClick={handleNoLogin} disabled={busy || !tableNoValid}>
           Заказать без входа
         </button>
         {/* Шаг 2: моргает, когда стол уже выбран (первый шаг — номер стола). */}
