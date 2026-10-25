@@ -5633,7 +5633,8 @@ function NewOrderBanner({ socket }) {
   if (!order) return null;
   const table = order.table_no != null ? `Стол ${order.table_no}` : "Без стола";
   return (
-    <div role="alert" style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 1000, background: "#facc15", color: "#111", padding: "14px 16px", fontSize: 18, fontWeight: 700, boxShadow: "0 4px 16px rgba(0,0,0,0.3)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+    <div role="alert" style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 1000, background: "#facc15", color: "#111", padding: "14px 16px", fontSize: 18, fontWeight: 700, boxShadow: "0 4px 16px rgba(0,0,0,0.3)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, animation: "kpOrderBlink 1s ease-in-out infinite" }}>
+      <style>{"@keyframes kpOrderBlink{0%,100%{opacity:1}50%{opacity:0.35}}"}</style>
       <span>
         🎤 Новый заказ · {table}
         <br />
