@@ -3951,6 +3951,7 @@ export default function App() {
       </header>
 
       <AddToHomeScreenHint /><OfflineBanner />
+      <TableJoinBanner token={session?.token} status={meInfo.table_group_status} hasTable={meInfo.table_no != null} tableNo={meInfo.table_no} onGoOrders={() => { setOrdersTab("current"); setOrderExtra("orders"); }} />
 
       {meInfo.table_close_receipt && !dismissedCloseRequestIds.has(meInfo.table_close_receipt.id) && (
         <TableCloseReceiptBanner
@@ -4401,6 +4402,93 @@ function GuestPrecheck({ token }) {
     </div>
   );
 }
+function TableJoinBanner({ token, status, hasTable, tableNo, onGoOrders }) {
+  const [view, setView] = useState(null);
+  const [notice, setNotice] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const prevStatusRef = useRef(status);
+  const isAdmin = status === "admin";
+  const tableText = tableNo != null ? tableLabel(tableNo) : "";
+
+  useEffect(() => {
+    const prev = prevStatusRef.current;
+    prevStatusRef.current = status;
+    if (prev === "pending" && (status === "member" || status === "admin")) setNotice("approved");
+    else if (prev === "pending" && status === "not_joined") setNotice("rejected");
+  }, [status]);
+
+  const loadView = useCallback(async () => {
+    if (!token) return;
+    try {
+      setView(await api.getTableGroup(token));
+    } catch {
+      // Временный сбой опроса — следующий тик подтянет.
+    }
+  }, [token]);
+
+  useEffect(() => {
+    if (!isAdmin || !hasTable) return undefined;
+    loadView();
+    const id = setInterval(loadView, POLL_TABLE_GROUP_MS);
+    return () => clearInterval(id);
+  }, [isAdmin, hasTable, loadView]);
+
+  const requests = isAdmin && view && Array.isArray(view.pending_requests) ? view.pending_requests : [];
+  const first = requests[0];
+
+  async function act(kind) {
+    if (!first || busy) return;
+    setBusy(true);
+    try {
+      if (kind === "approve") await api.approveJoinRequest(token, first.id);
+      else await api.rejectJoinRequest(token, first.id);
+      await loadView();
+    } catch {
+      // ошибка действия — заявка останется, можно нажать ещё раз
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const boxStyle = { margin: "8px 12px", padding: "12px", borderRadius: 10, fontSize: 16, fontWeight: 600 };
+  const btnStyle = { padding: "8px 14px", borderRadius: 8, border: "none", fontWeight: 700, fontSize: 15, marginRight: 8, marginTop: 8 };
+
+  if (notice === "approved") {
+    return (
+      <section role="alert" style={{ ...boxStyle, background: "#bbf7d0", color: "#14532d" }}>
+        <p style={{ margin: 0 }}>✅ Вас приняли за стол {tableText}. Вы можете заказывать.</p>
+        <button type="button" style={{ ...btnStyle, background: "#14532d", color: "#fff" }} onClick={() => { setNotice(null); onGoOrders(); }}>ОК</button>
+      </section>
+    );
+  }
+  if (notice === "rejected") {
+    return (
+      <section role="alert" style={{ ...boxStyle, background: "#fecaca", color: "#7f1d1d" }}>
+        <p style={{ margin: 0 }}>❌ Заявка на стол {tableText} отклонена.</p>
+        <button type="button" style={{ ...btnStyle, background: "#7f1d1d", color: "#fff" }} onClick={() => setNotice(null)}>ОК</button>
+      </section>
+    );
+  }
+  if (status === "pending") {
+    return (
+      <section role="status" style={{ ...boxStyle, background: "#bfdbfe", color: "#1e3a8a" }}>
+        <p style={{ margin: 0 }}>⏳ Запрос отправлен админу стола. Админ стола — тот, кто первым сел за стол. Ждите подтверждения.</p>
+      </section>
+    );
+  }
+  if (first) {
+    const who = first.display_name || "Гость " + first.guest_id;
+    return (
+      <section role="alert" style={{ ...boxStyle, background: "#facc15", color: "#422006" }}>
+        <p style={{ margin: 0 }}>🙋 {who} хочет присоединиться к столу {tableText}</p>
+        <button type="button" disabled={busy} style={{ ...btnStyle, background: "#15803d", color: "#fff" }} onClick={() => act("approve")}>✅ Принять</button>
+        <button type="button" disabled={busy} style={{ ...btnStyle, background: "#991b1b", color: "#fff" }} onClick={() => act("reject")}>✖ Отклонить</button>
+      </section>
+    );
+  }
+  return null;
+}
+
 function OfflineBanner() {
   const [offline, setOffline] = useState(() => typeof navigator !== "undefined" && navigator.onLine === false);
   useEffect(() => {
