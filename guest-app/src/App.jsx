@@ -3143,6 +3143,7 @@ export default function App() {
 
   const [session, setSession] = useState(null);
   const [meInfo, setMeInfo] = useState(null);
+  const [closedSignal, setClosedSignal] = useState(0);
   // Дедупликация показа чека закрытия стола "один раз" по id заявки — см.
   // докстринг TableCloseReceiptBanner выше.
   // ИЗМЕНЕНО (2026-10, запрос пользователя): закрытый чек запоминается на
@@ -3489,8 +3490,13 @@ export default function App() {
     try {
       const data = await api.me(session.token);
       setMeInfo(data);
-    } catch {
-      // Временный сбой опроса баланса — не критично, следующий тик подтянет.
+    } catch (err) {
+      // Блокировка KJ (закрытие стола из панели) — показываем плашку "Стол закрыт".
+      if (err instanceof ApiError && err.code === "GUEST_BLOCKED") {
+        setClosedSignal((n) => n + 1);
+        setMeInfo((prev) => (prev ? { ...prev, table_no: null } : prev));
+      }
+      // Иначе — временный сбой опроса, не критично, следующий тик подтянет.
     }
   }, [session]);
 
@@ -3949,6 +3955,7 @@ export default function App() {
 
       <AddToHomeScreenHint /><OfflineBanner />
       <TableJoinBanner token={session?.token} status={meInfo.table_group_status} hasTable={meInfo.table_no != null} tableNo={meInfo.table_no} onGoOrders={() => { setOrdersTab("current"); setOrderExtra("orders"); }} />
+      <TableClosedBanner tableNo={meInfo?.table_no} enabled={Boolean(session)} signal={closedSignal} />
 
       {meInfo.table_close_receipt && !dismissedCloseRequestIds.has(meInfo.table_close_receipt.id) && (
         <TableCloseReceiptBanner
@@ -4491,6 +4498,30 @@ function TableJoinBanner({ token, status, hasTable, tableNo, onGoOrders }) {
     );
   }
   return null;
+}
+
+function TableClosedBanner({ tableNo, enabled, signal }) {
+  const [show, setShow] = useState(false);
+  const prevTableRef = useRef(tableNo);
+  useEffect(() => {
+    const prev = prevTableRef.current;
+    prevTableRef.current = tableNo;
+    if (enabled && prev != null && tableNo == null) setShow(true);
+  }, [tableNo, enabled]);
+  useEffect(() => {
+    if (enabled && signal > 0 && tableNo != null) setShow(true);
+  }, [signal]);
+  if (!show) return null;
+  const box = { position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)", zIndex: 1001, width: "calc(100% - 32px)", maxWidth: 460, boxSizing: "border-box", padding: "22px 18px", borderRadius: 16, textAlign: "center", fontSize: 22, fontWeight: 800, lineHeight: 1.3, boxShadow: "0 12px 40px rgba(0,0,0,0.5)", margin: 0, background: "#e5e7eb", color: "#111827" };
+  return (
+    <>
+      <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.6)", zIndex: 1000 }} />
+      <section role="alert" style={box}>
+        <p style={{ margin: 0 }}>🔒 Стол закрыт. Повторите вход.</p>
+        <button type="button" style={{ display: "block", width: "100%", padding: "16px", borderRadius: 12, border: "none", fontWeight: 800, fontSize: 20, marginTop: 12, color: "#fff", background: "#111827", cursor: "pointer" }} onClick={() => setShow(false)}>ОК</button>
+      </section>
+    </>
+  );
 }
 
 function OfflineBanner() {
