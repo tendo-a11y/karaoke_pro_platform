@@ -4466,7 +4466,7 @@ function TableJoinBanner({ token, status, hasTable, tableNo, onGoOrders }) {
   }
   if (status === "pending") {
     return (
-      <section role="status" style={{ ...boxStyle, background: "#bfdbfe", color: "#1e3a8a", animation: "kpPendingBlink 1s ease-in-out infinite" }}>
+      <section role="status" style={{ ...boxStyle, margin: 0, position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)", zIndex: 1000, width: "calc(100% - 32px)", maxWidth: 420, boxSizing: "border-box", textAlign: "center", boxShadow: "0 8px 24px rgba(0,0,0,0.35)", background: "#bfdbfe", color: "#1e3a8a", animation: "kpPendingBlink 1s ease-in-out infinite" }}>
         <style>{"@keyframes kpPendingBlink{0%,100%{opacity:1}50%{opacity:0.35}}"}</style>
         <p style={{ margin: 0 }}>⏳ Запрос отправлен админу стола. Админ стола — тот, кто первым сел за стол. Ждите подтверждения.</p>
       </section>
