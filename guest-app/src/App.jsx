@@ -2074,11 +2074,6 @@ function TableGroupPanel({ token, guestId, hasTable, status, onGroupChanged, tab
       <>
       {error && <div className="banner banner--error">{error}</div>}
 
-      {status === "pending" && (
-        <p className="table-wait-notice">
-          ⏳ Заявка на стол{tableNo != null ? ` ${tableLabel(tableNo)}` : ""} отправлена. Ждите. {acceptsText}
-        </p>
-      )}
       {status === "not_joined" && (
         <>
           <p className="empty-hint">
@@ -4471,7 +4466,8 @@ function TableJoinBanner({ token, status, hasTable, tableNo, onGoOrders }) {
   }
   if (status === "pending") {
     return (
-      <section role="status" style={{ ...boxStyle, background: "#bfdbfe", color: "#1e3a8a" }}>
+      <section role="status" style={{ ...boxStyle, background: "#bfdbfe", color: "#1e3a8a", animation: "kpPendingBlink 1s ease-in-out infinite" }}>
+        <style>{"@keyframes kpPendingBlink{0%,100%{opacity:1}50%{opacity:0.35}}"}</style>
         <p style={{ margin: 0 }}>⏳ Запрос отправлен админу стола. Админ стола — тот, кто первым сел за стол. Ждите подтверждения.</p>
       </section>
     );
