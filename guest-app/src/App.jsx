@@ -479,7 +479,7 @@ function ServiceSelect({ services, value, onChange, disabled, highlight = false,
       />
       <button
         type="button"
-        className={`service-picker__toggle${highlight && !value && !open ? " step-blink" : ""}${highlight === false ? " step-dim" : ""}`}
+        className={`service-picker__toggle${highlight && !value && !open ? " step-blink" : ""}`}
         disabled={disabled}
         aria-expanded={open}
         onClick={() => {
@@ -2972,8 +2972,9 @@ function ActivationPanel({ token, onActivated, onCancel }) {
           required={selectedExtra == null}
         />
         {extraTables.length > 0 && (
-          <div className="extra-table-picker">
-            <span className="empty-hint">Доп. столы:</span>
+          <details className="extra-table-picker-wrap">
+            <summary className="extra-table-picker__summary">Доп. столы</summary>
+            <div className="extra-table-picker">
             {extraTables.map((t) => (
               <button
                 key={t.table_no}
@@ -2987,7 +2988,8 @@ function ActivationPanel({ token, onActivated, onCancel }) {
                 {t.title}
               </button>
             ))}
-          </div>
+            </div>
+          </details>
         )}
         <button type="button" className="activation-nologin step-dim" onClick={handleNoLogin} disabled={busy || !tableNoValid}>
           Заказать без входа
@@ -4124,7 +4126,7 @@ export default function App() {
                 value={songTitle}
                 onChange={(e) => setSongTitle(e.target.value)}
                 placeholder="Название песни"
-                className={!songTitle.trim() ? (titleHint ? "step-blink" : undefined) : "step-dim"}
+                className={titleHint && !songTitle.trim() ? "step-blink" : undefined}
                 maxLength={200}
                 required
               />
@@ -4135,7 +4137,7 @@ export default function App() {
                 placeholder="Исполнитель (обязательно)"
                 maxLength={200}
                 required
-                className={!songTitle.trim() || artist.trim() ? "step-dim" : "step-blink"}
+                className={songTitle.trim() && !artist.trim() ? "step-blink" : undefined}
               />
               {services.length > 0 && (
                 // "Без тарифа" убран из списка (запрос пользователя
@@ -4204,7 +4206,7 @@ export default function App() {
                   // моргает только этот шаг, а не кнопка "Заказать".
                   !submitting && !showActivation && songTitle.trim() && artist.trim() && (serviceId || services.length === 0)
                     ? "step-blink"
-                    : submitting ? undefined : "step-dim"
+                    : undefined
                 }
               >
                 {submitting ? "Отправляем…" : "🎶 Заказать"}
