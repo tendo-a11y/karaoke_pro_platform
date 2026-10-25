@@ -3229,7 +3229,12 @@ export default function App() {
           setChatPopup(null);
           return;
         }
-        if (latest.id > Number(seen)) setChatPopup(latest);
+        // Автоматическое "Вы следующий" / "Приготовьтесь" уже видно зелёной плашкой очереди — окно не всплывает.
+        const autoQueue = /^🎤 (Вы следующий|Приготовьтесь)/.test(latest.message_text || "");
+        if (latest.id > Number(seen)) {
+          if (autoQueue) markChatSeen(latest.id);
+          else setChatPopup(latest);
+        }
       } catch {
         // молча — следующий опрос попробует снова
       }
