@@ -1405,8 +1405,8 @@ function SongListsAdminPanel({ token }) {
 
   useEffect(() => {
     load();
-    const id = setInterval(load, 30000);
-    return () => clearInterval(id);
+    window.addEventListener("kj-queue-start-saved", load);
+    return () => window.removeEventListener("kj-queue-start-saved", load);
   }, [load]);
 
   async function run(action) {
@@ -4646,6 +4646,7 @@ function OrdersBoard({ token, clubId, socket, onOpenGuest, onOpenTable }) {
       const data = await api.updateTableSettings(token, clubId, { queue_start_table: value });
       setQueueStartTableDraft(String(data.queue_start_table || 1));
       setQueueStartTableSaved(true);
+      window.dispatchEvent(new Event("kj-queue-start-saved"));
     } catch (err) {
       setQueueStartTableError(err instanceof ApiError ? err.message : String(err));
     } finally {
