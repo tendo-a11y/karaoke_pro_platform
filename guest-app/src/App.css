@@ -898,6 +898,8 @@ img { max-width: 100%; }
   50% { background: rgba(47, 191, 113, 0.45); box-shadow: 0 0 0 6px rgba(47, 191, 113, 0.18); color: #fff; }
 }
 
+/* Затемнение шагов, которые сейчас не нужны: мигает только следующий шаг. */
+.step-dim { opacity: 0.4; transition: opacity 0.2s; }
 /* ДОБАВЛЕНО (2026-10): подсветка следующего шага при заказе песни. */
 .step-blink { animation: step-blink 1s ease-in-out infinite; }
 @keyframes step-blink {
