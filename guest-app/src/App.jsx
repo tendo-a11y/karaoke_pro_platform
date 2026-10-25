@@ -479,7 +479,7 @@ function ServiceSelect({ services, value, onChange, disabled, highlight = false,
       />
       <button
         type="button"
-        className={`service-picker__toggle${highlight && !value && !open ? " step-blink" : ""}`}
+        className={`service-picker__toggle${highlight && !value && !open ? " step-blink" : ""}${highlight === false ? " step-dim" : ""}`}
         disabled={disabled}
         aria-expanded={open}
         onClick={() => {
@@ -4124,7 +4124,7 @@ export default function App() {
                 value={songTitle}
                 onChange={(e) => setSongTitle(e.target.value)}
                 placeholder="Название песни"
-                className={titleHint && !songTitle.trim() ? "step-blink" : undefined}
+                className={!songTitle.trim() ? (titleHint ? "step-blink" : undefined) : "step-dim"}
                 maxLength={200}
                 required
               />
@@ -4135,7 +4135,7 @@ export default function App() {
                 placeholder="Исполнитель (обязательно)"
                 maxLength={200}
                 required
-                className={songTitle.trim() && !artist.trim() ? "step-blink" : undefined}
+                className={!songTitle.trim() || artist.trim() ? "step-dim" : "step-blink"}
               />
               {services.length > 0 && (
                 // "Без тарифа" убран из списка (запрос пользователя
@@ -4204,7 +4204,7 @@ export default function App() {
                   // моргает только этот шаг, а не кнопка "Заказать".
                   !submitting && !showActivation && songTitle.trim() && artist.trim() && (serviceId || services.length === 0)
                     ? "step-blink"
-                    : undefined
+                    : submitting ? undefined : "step-dim"
                 }
               >
                 {submitting ? "Отправляем…" : "🎶 Заказать"}
