@@ -4445,28 +4445,29 @@ function TableJoinBanner({ token, status, hasTable, tableNo, onGoOrders }) {
     }
   }
 
-  const boxStyle = { margin: "8px 12px", padding: "12px", borderRadius: 10, fontSize: 16, fontWeight: 600 };
-  const btnStyle = { padding: "8px 14px", borderRadius: 8, border: "none", fontWeight: 700, fontSize: 15, marginRight: 8, marginTop: 8 };
+  const bigBox = { position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)", zIndex: 1001, width: "calc(100% - 32px)", maxWidth: 460, boxSizing: "border-box", padding: "22px 18px", borderRadius: 16, textAlign: "center", fontSize: 22, fontWeight: 800, lineHeight: 1.3, boxShadow: "0 12px 40px rgba(0,0,0,0.5)", margin: 0 };
+  const bigBtn = { display: "block", width: "100%", padding: "16px", borderRadius: 12, border: "none", fontWeight: 800, fontSize: 20, marginTop: 12, color: "#fff", cursor: "pointer" };
+  const overlay = { position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.6)", zIndex: 1000 };
 
   if (notice === "approved") {
     return (
-      <section role="alert" style={{ ...boxStyle, background: "#bbf7d0", color: "#14532d" }}>
+      <section role="alert" style={{ ...bigBox, background: "#bbf7d0", color: "#14532d" }}>
         <p style={{ margin: 0 }}>✅ Вас приняли за стол {tableText}. Вы можете заказывать.</p>
-        <button type="button" style={{ ...btnStyle, background: "#14532d", color: "#fff" }} onClick={() => { setNotice(null); onGoOrders(); }}>ОК</button>
+        <button type="button" style={{ ...bigBtn, background: "#14532d" }} onClick={() => { setNotice(null); onGoOrders(); }}>ОК</button>
       </section>
     );
   }
   if (notice === "rejected") {
     return (
-      <section role="alert" style={{ ...boxStyle, background: "#fecaca", color: "#7f1d1d" }}>
+      <section role="alert" style={{ ...bigBox, background: "#fecaca", color: "#7f1d1d" }}>
         <p style={{ margin: 0 }}>❌ Заявка на стол {tableText} отклонена.</p>
-        <button type="button" style={{ ...btnStyle, background: "#7f1d1d", color: "#fff" }} onClick={() => setNotice(null)}>ОК</button>
+        <button type="button" style={{ ...bigBtn, background: "#7f1d1d" }} onClick={() => setNotice(null)}>ОК</button>
       </section>
     );
   }
   if (status === "pending") {
     return (
-      <section role="status" style={{ ...boxStyle, margin: 0, position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)", zIndex: 1000, width: "calc(100% - 32px)", maxWidth: 420, boxSizing: "border-box", textAlign: "center", boxShadow: "0 8px 24px rgba(0,0,0,0.35)", background: "#bfdbfe", color: "#1e3a8a", animation: "kpPendingBlink 1s ease-in-out infinite" }}>
+      <section role="status" style={{ ...bigBox, background: "#bfdbfe", color: "#1e3a8a", animation: "kpPendingBlink 1s ease-in-out infinite" }}>
         <style>{"@keyframes kpPendingBlink{0%,100%{opacity:1}50%{opacity:0.35}}"}</style>
         <p style={{ margin: 0 }}>⏳ Запрос отправлен админу стола. Админ стола — тот, кто первым сел за стол. Ждите подтверждения.</p>
       </section>
@@ -4475,11 +4476,16 @@ function TableJoinBanner({ token, status, hasTable, tableNo, onGoOrders }) {
   if (first) {
     const who = first.display_name || "Гость " + first.guest_id;
     return (
-      <section role="alert" style={{ ...boxStyle, background: "#facc15", color: "#422006" }}>
-        <p style={{ margin: 0 }}>🙋 {who} хочет присоединиться к столу {tableText}</p>
-        <button type="button" disabled={busy} style={{ ...btnStyle, background: "#15803d", color: "#fff" }} onClick={() => act("approve")}>✅ Принять</button>
-        <button type="button" disabled={busy} style={{ ...btnStyle, background: "#991b1b", color: "#fff" }} onClick={() => act("reject")}>✖ Отклонить</button>
-      </section>
+      <>
+        <div style={overlay} />
+        <section role="alert" style={{ ...bigBox, background: "#facc15", color: "#422006", animation: "kpJoinBlink 1s ease-in-out infinite" }}>
+          <style>{"@keyframes kpJoinBlink{0%,100%{opacity:1}50%{opacity:0.5}}"}</style>
+          <p style={{ margin: 0 }}>🙋 {who}</p>
+          <p style={{ margin: "8px 0 0", fontSize: 18 }}>хочет присоединиться к столу {tableText}</p>
+          <button type="button" disabled={busy} style={{ ...bigBtn, background: "#15803d" }} onClick={() => act("approve")}>✅ Принять</button>
+          <button type="button" disabled={busy} style={{ ...bigBtn, background: "#991b1b" }} onClick={() => act("reject")}>✖ Отклонить</button>
+        </section>
+      </>
     );
   }
   return null;
