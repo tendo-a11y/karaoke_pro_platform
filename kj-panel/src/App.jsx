@@ -5512,6 +5512,8 @@ export default function App() {
 
       <ConnectionOverviewPanel connected={connected} bridgeStatus={bridgeStatus} />
 
+      <NewOrderBanner socket={socketInstance} />
+
       {view === "messages" ? (
         <main className="app-main">
           {/* ДОБАВЛЕНО (2026-10-01, запрос пользователя "кнопка Сообщения,
@@ -5523,7 +5525,7 @@ export default function App() {
           <AdminMessagesPanel token={token} clubId={me.club_id} socket={socketInstance} />
           <SuggestionPanel token={token} clubId={me.club_id} />
           <GeneralChatToggle token={token} />
-          <NewOrderBanner socket={socketInstance} /><OrderChangeRequestsPanel token={token} clubId={me.club_id} socket={socketInstance} />
+          <OrderChangeRequestsPanel token={token} clubId={me.club_id} socket={socketInstance} />
           <TableCloseRequestsPanel token={token} clubId={me.club_id} socket={socketInstance} />
           <VipRequestsPanel token={token} clubId={me.club_id} socket={socketInstance} />
           <VipTopupRequestsPanel token={token} clubId={me.club_id} socket={socketInstance} />
