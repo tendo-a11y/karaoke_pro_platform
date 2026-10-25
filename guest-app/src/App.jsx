@@ -2842,6 +2842,7 @@ function ActivationPanel({ token, onActivated, onCancel }) {
   const [error, setError] = useState(null);
   const panelRef = useRef(null);
   const googleButtonRef = useRef(null);
+  const [skipHint, setSkipHint] = useState(false);
 
   // Живой тест показал: гость нажимал "Заказать", этот экран появлялся
   // ниже видимой части страницы, гость его не замечал и решал, что кнопка
@@ -2991,11 +2992,23 @@ function ActivationPanel({ token, onActivated, onCancel }) {
             </div>
           </details>
         )}
-        <button type="button" className={`activation-nologin ${tableNoValid ? "step-blink-alt" : "step-dim"}`} onClick={handleNoLogin} disabled={busy || !tableNoValid}>
-          Заказать без входа
-        </button>
-        {/* Шаг 2: моргает, когда стол уже выбран (первый шаг — номер стола). */}
-        <div ref={googleButtonRef} className={`activation-google${tableNoValid && !busy ? " step-blink" : ""}`} />
+        <div className="activation-zone">
+          <button type="button" className={`activation-nologin ${tableNoValid ? "step-blink-alt" : "step-dim"}`} onClick={handleNoLogin} disabled={busy || !tableNoValid}>
+            Заказать без входа
+          </button>
+          {/* Шаг 2: моргает, когда стол уже выбран (первый шаг — номер стола). */}
+          <div ref={googleButtonRef} className={`activation-google${tableNoValid && !busy ? " step-blink" : ""}`} />
+          {!tableNoValid && <div className="activation-zone__guard" onClick={() => setSkipHint(true)} />}
+        </div>
+        {skipHint && (
+          <>
+            <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.6)", zIndex: 1000 }} />
+            <section role="alert" style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)", zIndex: 1001, width: "calc(100% - 32px)", maxWidth: 460, boxSizing: "border-box", padding: "28px 22px", borderRadius: 16, textAlign: "center", fontSize: 26, fontWeight: 800, lineHeight: 1.3, boxShadow: "0 12px 40px rgba(0,0,0,0.5)", margin: 0, background: "#facc15", color: "#422006" }}>
+              <p style={{ margin: 0 }}>⚠️ Сначала выберите номер стола</p>
+              <button type="button" style={{ display: "block", width: "100%", padding: "18px", borderRadius: 12, border: "none", fontWeight: 800, fontSize: 22, marginTop: 14, color: "#fff", background: "#422006", cursor: "pointer" }} onClick={() => setSkipHint(false)}>ОК</button>
+            </section>
+          </>
+        )}
         {busy && <p className="empty-hint">Входим…</p>}
         <button type="button" className="link-btn" onClick={onCancel} disabled={busy}>
           Отмена
