@@ -677,6 +677,9 @@ select {
 .service-picker__list li { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
 /* Пока открыт список категорий, остальные поля формы заказа скрыты. */
 .order-form--picking > :not(.service-picker) { display: none; }
+/* Пока открыт список категорий, скрыто всё на странице, кроме списка категорий. */
+.app-shell--picking > :not(.order-form-panel):not(.msg-popup-overlay) { display: none !important; }
+.app-shell--picking .order-form-panel > :not(.order-form) { display: none !important; }
 .service-picker__row { display: flex; align-items: stretch; }
 .service-picker__option {
   flex: 1; min-width: 0; text-align: left;
