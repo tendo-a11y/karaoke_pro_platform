@@ -4042,14 +4042,11 @@ export default function App() {
             // Заказ по ссылке — сразу категория "Интернет", если она есть в списке гостя
             // (скрытые "Временно убрать" в /services не приходят).
             if (song.link) {
-              const internet = services.find((s) => s.link_default);
-              if (internet) {
-                setServiceId(String(internet.id));
-                if (!internetHintOff) {
-                  setInternetHint({ price: internet.price });
-                  setInternetHintOff(true);
-                  try { window.localStorage.setItem("internetHintOff", "1"); } catch {}
-                }
+              const linkCategory = services.find((s) => s.link_default);
+              if (linkCategory) {
+                setServiceId(String(linkCategory.id));
+                // Каждый заказ по ссылке: гость обязан подтвердить или отменить цену.
+                setInternetHint({ name: linkCategory.name, price: linkCategory.price });
               }
             }
           }}
@@ -4062,17 +4059,29 @@ export default function App() {
           }}
         />
         {internetHint ? (
-          <div className="internet-hint" role="alert">
-            <p>
-              Вы заказываете через Интернет. Цена {Number(internetHint.price)} за заказ.
-            </p>
-            <button
-              type="button"
-              className="btn-link"
-              onClick={() => setInternetHint(null)}
-            >
-              Понятно
-            </button>
+          <div className="link-confirm-overlay" role="alertdialog" aria-modal="true">
+            <div className="link-confirm-plate">
+              <p>Заказ по ссылке. Категория: <b>{internetHint.name}</b></p>
+              <p>Цена {Number(internetHint.price)} лей. Подтвердите заказ или отмените его.</p>
+              <div className="link-confirm-buttons">
+                <button type="button" className="link-confirm-yes" onClick={() => setInternetHint(null)}>
+                  ✅ Подтвердить {Number(internetHint.price)} лей
+                </button>
+                <button
+                  type="button"
+                  className="link-confirm-cancel"
+                  onClick={() => {
+                    setInternetHint(null);
+                    setSongUrl(null);
+                    setServiceId("");
+                    setSongTitle("");
+                    setArtist("");
+                  }}
+                >
+                  ✕ Отменить
+                </button>
+              </div>
+            </div>
           </div>
         ) : null}
         {orderExtra === "fav" ? (
