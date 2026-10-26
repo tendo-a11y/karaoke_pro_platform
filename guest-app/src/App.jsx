@@ -436,6 +436,9 @@ function LegalPageScreen({ page }) {
 // категории) и подтверждением цены для Crazy — то же, что уже есть в
 // главной форме заказа, теперь и в "Заказать снова", "Заменить песню" и
 // "Заказ через скриншот", чтобы предупреждение о цене нельзя было обойти.
+// Категории первой рамки в списке выбора; остальные идут во вторую рамку.
+const TOP_SERVICE_NAMES = ["KARAOKE", "INTERNET"];
+
 function ServiceSelect({ services, value, onChange, disabled, highlight = false, onOpen, onOpenChange }) {
   // Свой список выбора категории вместо системного (запрос пользователя
   // 2026-10): в раскрытом списке у каждой категории кнопка "❓", которая
@@ -494,35 +497,42 @@ function ServiceSelect({ services, value, onChange, disabled, highlight = false,
         <span>{open ? "▲" : "▼"}</span>
       </button>
       {open && (
-        <ul className="service-picker__list">
-          {services.map((s, index) => (
-            <li
-              key={s.id}
-              className={
-                selected && selected.id === s.id
-                  ? "service-picker__item--selected"
-                  : highlight && !value
-                    ? "step-blink-item"
-                    : undefined
-              }
-              style={highlight && !value ? { animationDelay: `${index}s`, animationDuration: `${Math.max(services.length, 3)}s` } : undefined}
-            >
-              <div className="service-picker__row">
-                <button type="button" className="service-picker__option" style={s.display_color ? { color: s.display_color } : undefined} onClick={() => choose(s)}>
-                  {labelOf(s)}
-                </button>
-                <button
-                  type="button"
-                  className="service-picker__info"
-                  title="Описание категории"
-                  onClick={() => setCardId(s.id)}
+        <div className="service-picker__list">
+          {[
+            services.map((s, index) => ({ s, index })).filter(({ s }) => TOP_SERVICE_NAMES.includes((s.name || "").trim().toUpperCase())),
+            services.map((s, index) => ({ s, index })).filter(({ s }) => !TOP_SERVICE_NAMES.includes((s.name || "").trim().toUpperCase())),
+          ].filter((group) => group.length > 0).map((group, gi) => (
+            <ul className="service-picker__group" key={gi}>
+              {group.map(({ s, index }) => (
+                <li
+                  key={s.id}
+                  className={
+                    selected && selected.id === s.id
+                      ? "service-picker__item--selected"
+                      : highlight && !value
+                        ? "step-blink-item"
+                        : undefined
+                  }
+                  style={highlight && !value ? { animationDelay: `${index}s `, animationDuration: `${Math.max(services.length, 3)}s ` } : undefined}
                 >
-                  ❓
-                </button>
-              </div>
-            </li>
+                  <div className="service-picker__row">
+                    <button type="button" className="service-picker__option" style={s.display_color ? { color: s.display_color } : undefined} onClick={() => choose(s)}>
+                      {labelOf(s)}
+                    </button>
+                    <button
+                      type="button"
+                      className="service-picker__info"
+                      title="Описание категории"
+                      onClick={() => setCardId(s.id)}
+                    >
+                      ❓
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
           ))}
-        </ul>
+        </div>
       )}
       {card && (
         <div className="service-card-overlay" onClick={() => setCardId(null)}>
