@@ -2630,7 +2630,7 @@ function CategoriesPanel({ token, clubId }) {
   const [actionError, setActionError] = useState(null);
   const [busyKey, setBusyKey] = useState(null);
   const [drafts, setDrafts] = useState({});
-  const [newDraft, setNewDraft] = useState({ name: "", description: "", price: "", isFree: false });
+  const [newDraft, setNewDraft] = useState({ name: "", description: "", price: "", isFree: false, section: "main" });
 
   async function reload() {
     try {
@@ -2730,6 +2730,19 @@ function CategoriesPanel({ token, clubId }) {
     }
   }
 
+  async function handleChangeSection(category, section) {
+    setBusyKey("section-" + category.id);
+    setActionError(null);
+    try {
+      await api.updateCategory(token, clubId, category.id, { section });
+      await reload();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
   async function handleCreate(event) {
     event.preventDefault();
     if (!newDraft.name.trim() || newDraft.price === "") return;
@@ -2741,8 +2754,9 @@ function CategoriesPanel({ token, clubId }) {
         description: newDraft.description.trim(),
         price: newDraft.price,
         isFree: newDraft.isFree,
+        section: newDraft.section,
       });
-      setNewDraft({ name: "", description: "", price: "", isFree: false });
+      setNewDraft({ name: "", description: "", price: "", isFree: false, section: "main" });
       await reload();
     } catch (err) {
       setActionError(err instanceof ApiError ? err.message : String(err));
@@ -2796,10 +2810,13 @@ function CategoriesPanel({ token, clubId }) {
         </label>
       </section>
 
-      <section>
-        <h2>Категории песни ({categories.length})</h2>
+      {[["main", "Основные категории"], ["extra", "Дополнительные категории"]].map(([sectionKey, sectionTitle]) => {
+        const sectionCats = categories.filter((c) => (c.section || "main") === sectionKey);
+        return (
+      <section key={sectionKey}>
+        <h2>{sectionTitle} ({sectionCats.length})</h2>
         <ul className="categories-list">
-          {categories.map((category) => {
+          {sectionCats.map((category) => {
             const draft = draftFor(category);
             const saving = busyKey === `save-${category.id}`;
             const deleting = busyKey === `del-${category.id}`;
@@ -2858,6 +2875,16 @@ function CategoriesPanel({ token, clubId }) {
                   />
                   Цвет
                 </label>
+                <label className="category-row__free" title="Отсек, в котором категория показывается гостю">
+                  <select
+                    value={category.section || "main"}
+                    onChange={(e) => handleChangeSection(category, e.target.value)}
+                    disabled={saving || deleting || busyKey === "section-" + category.id}
+                  >
+                    <option value="main">Основная</option>
+                    <option value="extra">Дополнительная</option>
+                  </select>
+                </label>
                 <div className="category-row__actions">
                   <button
                     type="button" className="btn-link" disabled={saving || deleting}
@@ -2877,10 +2904,20 @@ function CategoriesPanel({ token, clubId }) {
           })}
         </ul>
       </section>
+        );
+      })}
 
       <section>
         <h2>Добавить категорию</h2>
         <form className="category-add-form" onSubmit={handleCreate}>
+          <select
+            value={newDraft.section}
+            onChange={(e) => setNewDraft((prev) => ({ ...prev, section: e.target.value }))}
+            disabled={busyKey === "create"}
+          >
+            <option value="main">Основная</option>
+            <option value="extra">Дополнительная</option>
+          </select>
           <input
             type="text"
             placeholder="Название"
