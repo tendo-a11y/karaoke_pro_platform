@@ -470,7 +470,7 @@ function ChatAlertToggle() {
   return (
     <button
       type="button"
-      className="link-btn"
+      className={`link-btn chat-alert-toggle${on ? "" : " chat-alert-toggle--off"}`}
       onClick={() => {
         const next = !on;
         setChatAlertOn(next);
