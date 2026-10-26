@@ -1,10 +1,3 @@
-
-/* Выбор категории у строки избранного: на экране только эта песня и её категории (тон остаётся). */
-.app-shell:has(.favorites-panel--picking) > :not(.order-form-panel):not(.msg-popup-overlay) { display: none !important; }
-.order-form-panel:has(> .favorites-panel--picking) > :not(.favorites-panel--picking) { display: none !important; }
-.favorites-panel--picking > :not(.order-list) { display: none !important; }
-.favorites-panel--picking .order-list > li:not(.row-pick-keep) { display: none !important; }
-.favorites-panel--picking li.row-pick-keep > :not(.order-row__song):not(.order-row__artist):not(.service-picker):not(.tone-picker) { display: none !important; }
 :root {
   --bg: #14161c;
   --panel: #1d2029;
@@ -1186,9 +1179,11 @@ button.step-blink-fill { animation: button-fill-blink 1s ease-in-out infinite; }
 /* Списки песен (избранное, новинки и т.д.) открыты: на экране только они и заголовок очереди для закрытия. */
 .app-shell--lists > :not(.panel--lists-focus):not(.msg-popup-overlay) { display: none !important; }
 .panel--lists-focus > :not(.song-lists):not(.active-queue-title) { display: none !important; }
-/* Выбор категории у строки избранного: на экране только эта песня и её категории (тон остаётся). */
-.app-shell:has(.favorites-panel--picking) > :not(.order-form-panel):not(.msg-popup-overlay) { display: none !important; }
-.order-form-panel:has(> .favorites-panel--picking) > :not(.favorites-panel--picking) { display: none !important; }
-.favorites-panel--picking > :not(.order-list) { display: none !important; }
-.favorites-panel--picking .order-list > li:not(.row-pick-keep) { display: none !important; }
-.favorites-panel--picking li.row-pick-keep > :not(.order-row__song):not(.order-row__artist):not(.service-picker):not(.tone-picker) { display: none !important; }
+/* Выбор категории у строки (избранное, история заказов): на экране только эта песня и её категории (тон остаётся). Классы ставит React, без :has(). */
+.app-shell--fav-pick > :not(.order-form-panel):not(.msg-popup-overlay) { display: none !important; }
+.order-form-panel--fav-pick > :not(.pick-scope) { display: none !important; }
+.favorites-panel--picking > :not(.order-list),
+.orders-block--pick > :not(.order-list) { display: none !important; }
+.favorites-panel--picking .order-list > li:not(.row-pick-keep),
+.orders-block--pick .order-list > li:not(.row-pick-keep) { display: none !important; }
+.row-pick-keep > :not(.order-row__song):not(.order-row__artist):not(.service-picker):not(.tone-picker) { display: none !important; }
