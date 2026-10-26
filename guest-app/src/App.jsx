@@ -533,6 +533,9 @@ function ServiceSelect({ services, value, onChange, disabled, highlight = false,
               ))}
             </ul>
           ))}
+          <button type="button" className="service-picker__cancel" onClick={() => setOpen(false)}>
+            Отмена
+          </button>
         </div>
       )}
       {card && (
