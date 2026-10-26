@@ -462,6 +462,8 @@ class Service(db.Model):
     # Отсек в списке категорий: "main" — Основные, "extra" — Дополнительные.
     # Не зависит от названия: переименование категории не переносит её в другой отсек.
     section = db.Column(db.String(16), nullable=False, default="main", server_default="main")
+    # Категория, которая подставляется при заказе по ссылке (только одна на клуб).
+    link_default = db.Column(db.Boolean, nullable=False, default=False, server_default=db.text("false"))
 
     club = db.relationship("Club")
 
@@ -477,6 +479,7 @@ class Service(db.Model):
             "temp_hidden": self.temp_hidden,
             "color": self.color,
             "section": self.section,
+            "link_default": self.link_default,
             "display_color": self.display_color(),
         }
 
