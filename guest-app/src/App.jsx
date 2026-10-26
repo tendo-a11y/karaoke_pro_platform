@@ -4278,7 +4278,19 @@ export default function App() {
                 <ServiceSelect
                   services={services}
                   value={serviceId}
-                  onChange={setServiceId}
+                  onChange={(v) => {
+                    setServiceId(v);
+                    // Выбор категории и есть заказ (запрос 2026-10): если вход и стол уже есть, заказ уходит сразу.
+                    // Ссылочный заказ и первое предупреждение об заказе не трогаем — у них свой путь.
+                    if (
+                      v && canOrder && !songUrl && !submitting &&
+                      !(toneOn && tone == null) &&
+                      songTitle.trim() && artist.trim() &&
+                      !(meInfo?.first_order_banner?.enabled && !isFirstOrderNoticeSeen())
+                    ) {
+                      submitOrderWithToken(session.token, v);
+                    }
+                  }}
                   highlight={Boolean(songTitle.trim() && artist.trim())}
                   onOpenChange={setCategoryPicking}
                 />
