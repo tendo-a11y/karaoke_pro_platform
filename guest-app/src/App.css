@@ -680,7 +680,6 @@ select {
 /* Пока открыт список категорий, скрыто всё на странице, кроме списка категорий. */
 .app-shell--picking > :not(.order-form-panel):not(.msg-popup-overlay) { display: none !important; }
 .app-shell--picking .order-form-panel > :not(.order-form) { display: none !important; }
-.app-shell--picking .order-form-panel { background: none; border: none; box-shadow: none; padding: 0; }
 .service-picker__row { display: flex; align-items: stretch; }
 .service-picker__option {
   flex: 1; min-width: 0; text-align: left;
