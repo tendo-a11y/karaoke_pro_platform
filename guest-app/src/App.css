@@ -674,7 +674,12 @@ select {
   list-style: none; margin: 0; padding: 0;
   display: flex; flex-direction: column; gap: 8px;
 }
-.service-picker__list li { border: 2px solid #6b7388; border-radius: 10px; overflow: hidden; background: var(--panel-alt); }
+.service-picker__group {
+  list-style: none; margin: 0; padding: 0;
+  display: flex; flex-direction: column;
+  border: 2px solid #6b7388; border-radius: 12px; overflow: hidden; background: var(--panel-alt);
+}
+.service-picker__group li + li { border-top: 1px solid var(--border); }
 /* Пока открыт список категорий, остальные поля формы заказа скрыты. */
 .order-form--picking > :not(.service-picker) { display: none; }
 /* Пока открыт список категорий, скрыто всё на странице, кроме списка категорий. */
