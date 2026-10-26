@@ -1145,3 +1145,18 @@ button.step-blink-fill { animation: button-fill-blink 1s ease-in-out infinite; }
 /* ДОБАВЛЕНО (2026-10): треугольники закрытия блоков (Финансы, Групповой стол, Профиль, Избранное, Активная очередь) отделены вертикальной чертой, как у кнопки "Списки песен". */
 .collapsible-header > .collapsible-caret { border-left: 1px solid rgba(255, 176, 32, 0.45); padding-left: 6px; margin-left: 6px; }
 .song-lists .finder-group .song-lists__collapse { margin-left: auto; flex: 0 0 auto; padding: 4px 12px; font-size: 14px; border-left: 1px solid rgba(255, 176, 32, 0.45); border-radius: 0; }
+
+/* Подтверждение заказа по ссылке: гость подтверждает цену категории или отменяет. */
+.link-confirm-overlay {
+  position: fixed; inset: 0; z-index: 1000; background: rgba(0,0,0,0.7);
+  display: flex; align-items: center; justify-content: center; padding: 16px;
+}
+.link-confirm-plate {
+  width: 100%; max-width: 420px; background: var(--panel); border: 2px solid var(--accent);
+  border-radius: 14px; padding: 20px; text-align: center; color: var(--text);
+}
+.link-confirm-plate p { margin: 0 0 12px; font-size: 16px; }
+.link-confirm-buttons { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+.link-confirm-buttons button { width: 100%; padding: 14px; font-size: 16px; font-weight: 700; border-radius: 12px; border: none; cursor: pointer; }
+.link-confirm-yes { background: var(--ok); color: #ffffff; }
+.link-confirm-cancel { background: var(--danger); color: #ffffff; }
