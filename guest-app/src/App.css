@@ -680,6 +680,10 @@ select {
   border: 2px solid #6b7388; border-radius: 12px; overflow: hidden; background: var(--panel-alt);
 }
 .service-picker__group li + li { border-top: 1px solid var(--border); }
+.service-picker__section { display: flex; flex-direction: column; gap: 6px; }
+.service-picker__section-title {
+  font-size: 13px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em;
+}
 .service-picker__cancel {
   width: 100%; padding: 12px 14px; font-size: 15px; font-weight: 600;
   background: var(--panel-alt); color: var(--text);
