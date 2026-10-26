@@ -3948,7 +3948,7 @@ export default function App() {
   }
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell${categoryPicking ? " app-shell--picking" : ""}`}>
       {chatPopupEl}
 {categoryPopupEl}
       {showFirstOrderNotice && (
