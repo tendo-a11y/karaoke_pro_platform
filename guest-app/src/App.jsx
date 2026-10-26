@@ -518,6 +518,7 @@ function ServiceSelect({ services, value, onChange, disabled, highlight = false,
                   <div className="service-picker__row">
                     <button type="button" className="service-picker__option" style={s.display_color ? { color: s.display_color } : undefined} onClick={() => choose(s)}>
                       {labelOf(s)}
+                      {s.description ? ` (${s.description})` : ""}
                     </button>
                     <button
                       type="button"
