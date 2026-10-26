@@ -1603,7 +1603,7 @@ function useTypingPlaceholder(phrases, enabled) {
   return hint;
 }
 
-function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSuggestOther, onSearchStart, onAiStatus, active = false, showProfileTabs = true }) {
+function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSuggestOther, onSearchStart, onAiStatus, onConfirmChange, active = false, showProfileTabs = true }) {
   // "Не эта" под найденной песней: подсказываем другие способы — моргают "Ссылка" и "Скриншот".
   const [suggestOther, setSuggestOther] = useState(false);
   // Неудачный поиск — пусть ещё моргает поле "Название песни" (запрос пользователя 2026-10).
@@ -1617,6 +1617,10 @@ function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSu
   const [searched, setSearched] = useState(false);
   const [error, setError] = useState(null);
   const screenshotInputRef = useRef(null);
+  // Пока гость подтверждает найденную песню ("Эта? / Не эта"), на экране только она.
+  useEffect(() => {
+    if (onConfirmChange) onConfirmChange(results.length > 0);
+  }, [results.length, onConfirmChange]);
 
   function switchMode(nextMode) {
     setMode(nextMode);
@@ -3419,6 +3423,7 @@ export default function App() {
   const [songListsTab, setSongListsTab] = useState(null);
   const [titleHint, setTitleHint] = useState(false);
   const [categoryPicking, setCategoryPicking] = useState(false);
+  const [songConfirming, setSongConfirming] = useState(false);
   // Ссылка, по которой гость нашёл песню ("🔗 Ссылка") — уходит с заказом.
   const [songUrl, setSongUrl] = useState(null);
   const songListsOpen = songListsTab != null;
@@ -4019,7 +4024,7 @@ export default function App() {
   }
 
   return (
-    <div className={`app-shell${categoryPicking ? " app-shell--picking" : ""}`}>
+    <div className={`app-shell${categoryPicking ? " app-shell--picking" : ""}${songConfirming || showActivation ? " app-shell--focus" : ""}`}>
       {chatPopupEl}
 {categoryPopupEl}
       {showFirstOrderNotice && (
@@ -4063,7 +4068,7 @@ export default function App() {
         <ProfileNamePanel token={session.token} meInfo={meInfo} onNameChanged={refreshMe} />
       )}
 
-      <section className="panel order-form-panel">
+      <section className={`panel order-form-panel${songConfirming ? " order-form-panel--confirm" : ""}${showActivation ? " order-form-panel--activation" : ""}`}>
         <h2>Заказать песню</h2>
         {/* ИЗМЕНЕНО (жалоба пользователя 2026-09-22: "возможность выбрать
         песню была у всех независимо от стола — а вот заказать только после
@@ -4078,6 +4083,7 @@ export default function App() {
         "Заказать". */}
         <AiSearch
           token={session.token}
+          onConfirmChange={setSongConfirming}
           active={aiSearchStarted}
           onSearchStart={() => setAiSearchStarted(true)}
           onAiStatus={(ok) => setAiSearchFailed(!ok)}
