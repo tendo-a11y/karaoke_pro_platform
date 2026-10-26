@@ -21,14 +21,22 @@ RECENT_MINUTES = 60
 NEW_SONGS_LIMIT = 30
 
 
-def norm_key(song_title, artist) -> str:
+def _norm_text(value) -> str:
     # Знаки препинания, регистр и ё/е не учитываются, чтобы одна и та же песня
     # не делилась на несколько строк (счётчик "Популярных" считался бы неверно).
-    def norm(value):
-        text = str(value or "").lower().replace("ё", "е")
-        text = re.sub(r"[^\w\s]", "", text)
-        return " ".join(text.split())
-    return f"{norm(artist)}|{norm(song_title)}"
+    text = str(value or "").lower().replace("ё", "е")
+    text = re.sub(r"[^\w\s]", "", text)
+    return " ".join(text.split())
+
+
+def norm_key(song_title, artist) -> str:
+    return f"{_norm_text(artist)}|{_norm_text(song_title)}"
+
+
+def _renorm_stored_key(stored: str) -> str:
+    # Ключи, сохранённые до смены правила (с знаками препинания), приводим к новому виду на лету.
+    artist, _, title = (stored or "").partition("|")
+    return f"{_norm_text(artist)}|{_norm_text(title)}"
 
 
 def _hidden_history_ids(club_id: int) -> set:
@@ -40,7 +48,7 @@ def _hidden_history_ids(club_id: int) -> set:
 
 
 def _hidden_popular_keys(club_id: int) -> set:
-    return {r.norm_key for r in SongListHidden.query.filter(SongListHidden.club_id == club_id, SongListHidden.kind.in_(["popular", "popular_archived"])).all()}
+    return {_renorm_stored_key(r.norm_key) for r in SongListHidden.query.filter(SongListHidden.club_id == club_id, SongListHidden.kind.in_(["popular", "popular_archived"])).all()}
 
 
 def recent_hour(club_id: int, now=None) -> list[dict]:
