@@ -152,6 +152,14 @@ def update_category(club_id: int, category_id: int, **fields) -> Service:
         category.is_free = bool(fields["is_free"])
     if "section" in fields:
         category.section = _parse_section(fields["section"])
+    if "link_default" in fields:
+        flag = bool(fields["link_default"])
+        if flag:
+            # Только одна категория может подставляться при заказе по ссылке.
+            Service.query.filter(Service.club_id == club_id, Service.id != category_id).update(
+                {Service.link_default: False}, synchronize_session=False
+            )
+        category.link_default = flag
     if "temp_hidden" in fields:
         category.temp_hidden = bool(fields["temp_hidden"])
     if "color" in fields:
