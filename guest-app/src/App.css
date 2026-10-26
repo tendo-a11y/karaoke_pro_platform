@@ -1164,3 +1164,9 @@ button.step-blink-fill { animation: button-fill-blink 1s ease-in-out infinite; }
 /* Кнопка звука/вибрации в шапке чата: зелёный овал, как у "Избранного"; выключено — приглушённо. */
 .chat-alert-toggle { padding: 4px 10px; font-size: 13px; border-radius: 999px; border: 1px solid var(--ok); color: var(--ok); background: rgba(47, 191, 113, 0.12); white-space: nowrap; }
 .chat-alert-toggle--off { border-color: var(--border); color: var(--muted); background: transparent; }
+
+/* Один шаг заказа на экране (запрос пользователя 2026-10): пока гость подтверждает
+   найденную песню ("Эта? / Не эта") или выбирает стол и входит — скрыто всё остальное. */
+.app-shell--focus > :not(.order-form-panel):not(.msg-popup-overlay) { display: none !important; }
+.order-form-panel--confirm > :not(.ai-search) { display: none !important; }
+.order-form-panel--activation > :not(.activation-panel) { display: none !important; }
