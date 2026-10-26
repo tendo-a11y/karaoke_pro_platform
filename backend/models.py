@@ -459,6 +459,9 @@ class Service(db.Model):
     temp_hidden = db.Column(db.Boolean, nullable=False, default=False)
     # Цвет текста категории в очереди и у гостя (например, "#2563eb"); пусто — цвет по умолчанию.
     color = db.Column(db.String(16), nullable=True)
+    # Отсек в списке категорий: "main" — Основные, "extra" — Дополнительные.
+    # Не зависит от названия: переименование категории не переносит её в другой отсек.
+    section = db.Column(db.String(16), nullable=False, default="main", server_default="main")
 
     club = db.relationship("Club")
 
@@ -473,6 +476,7 @@ class Service(db.Model):
             "kj_only": self.kj_only,
             "temp_hidden": self.temp_hidden,
             "color": self.color,
+            "section": self.section,
             "display_color": self.display_color(),
         }
 
