@@ -1193,7 +1193,7 @@ def update_category(club_id, category_id):
     if denied:
         return denied
     payload = request.get_json(silent=True) or {}
-    fields = {k: payload[k] for k in ("name", "description", "price", "is_free", "temp_hidden", "color", "section") if k in payload}
+    fields = {k: payload[k] for k in ("name", "description", "price", "is_free", "temp_hidden", "color", "section", "link_default") if k in payload}
     try:
         category = category_service.update_category(club_id, category_id, **fields)
     except CategoryServiceError as exc:
