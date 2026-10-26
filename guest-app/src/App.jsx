@@ -878,7 +878,7 @@ function OrderRow({
   // не плодить разные фразы для одного и того же по смыслу состояния.
   const pendingRequest = order.pending_change_request;
   return (
-    <li className={`order-row status-${order.status}`}>
+    <li className={`order-row status-${order.status}${reorder && reorderPickedId === order.id ? " row-pick-keep" : ""}`}>
       <div className="order-row__song">🎵 {order.song_title}</div>
       {order.artist && <div className="order-row__artist">🎤 {order.artist}</div>}
       {order.tone ? (
@@ -955,6 +955,7 @@ function OrderRow({
             disabled={reorderBusy}
             highlight={!reorderPickedId || reorderPickedId === order.id}
             onOpen={() => onReorderPick?.(order.id)}
+            onOpenChange={(o) => { if (!o) onReorderPick?.(null); }}
           />
           <div className="favorite-actions">
             <button
@@ -1225,7 +1226,7 @@ function VipHistoryPanel({ token, embedded = false }) {
   );
 }
 
-function FavoritesPanel({ token, services, onOrdered, orderingDisabled, embedded = false }) {
+function FavoritesPanel({ token, services, onOrdered, orderingDisabled, embedded = false, onPickingChange }) {
   const [favorites, setFavorites] = useState([]);
   const [error, setError] = useState(null);
   const [orderMessage, setOrderMessage] = useState(null);
@@ -1237,6 +1238,10 @@ function FavoritesPanel({ token, services, onOrdered, orderingDisabled, embedded
   const [pickedFavoriteId, setPickedFavoriteId] = useState(null);
   // Строка избранного, у которой сейчас открыт выбор категории (на экране остаётся только она).
   const [pickingFavId, setPickingFavId] = useState(null);
+  useEffect(() => {
+    onPickingChange?.(pickingFavId != null);
+  }, [pickingFavId]);
+  useEffect(() => () => onPickingChange?.(false), []);
   // ДОБАВЛЕНО (2026-10, запрос пользователя "раздел избранное должен
   // открываться, там может быть много песен") — раздел свёрнут по
   // умолчанию и раскрывается по нажатию на заголовок (тот же приём, что и
@@ -1312,7 +1317,7 @@ function FavoritesPanel({ token, services, onOrdered, orderingDisabled, embedded
   }
 
   return (
-    <section className={`${embedded ? "profile-finance" : "panel"}${pickingFavId != null ? " favorites-panel--picking" : ""}`}>
+    <section className={`favorites-panel pick-scope ${embedded ? "profile-finance" : "panel"}${pickingFavId != null ? " favorites-panel--picking" : ""}`}>
       {embedded ? (
         <h2>Избранное ({favorites.length})</h2>
       ) : (
@@ -3424,6 +3429,8 @@ export default function App() {
   // вкладке от "текущего").
   const [orderHistoryDays, setOrderHistoryDays] = useState(1);
   const [orderExtra, setOrderExtra] = useState(null);
+  // Выбор категории у строки избранного / истории открыт: на экране только она (без :has).
+  const [favPicking, setFavPicking] = useState(false);
   // ДОБАВЛЕНО (2026-10, запрос пользователя): выбор тональности при заказе.
   const [toneOn, setToneOn] = useState(false);
   const [tone, setTone] = useState(null);
@@ -4046,7 +4053,7 @@ export default function App() {
   }
 
   return (
-    <div className={`app-shell${categoryPicking ? " app-shell--picking" : ""}${songConfirming || showActivation || categoryStep ? " app-shell--focus" : ""}${songListsOpen ? " app-shell--lists" : ""}`}>
+    <div className={`app-shell${favPicking || reorderPickedId != null ? " app-shell--fav-pick" : ""}${categoryPicking ? " app-shell--picking" : ""}${songConfirming || showActivation || categoryStep ? " app-shell--focus" : ""}${songListsOpen ? " app-shell--lists" : ""}`}>
       {chatPopupEl}
 {categoryPopupEl}
       {showFirstOrderNotice && (
@@ -4099,7 +4106,7 @@ export default function App() {
         <ProfileNamePanel token={session.token} meInfo={meInfo} onNameChanged={refreshMe} />
       )}
 
-      <section className={`panel order-form-panel${songConfirming ? " order-form-panel--confirm" : ""}${showActivation ? " order-form-panel--activation" : ""}${categoryStep ? " order-form-panel--category" : ""}`}>
+      <section className={`panel order-form-panel${favPicking || reorderPickedId != null ? " order-form-panel--fav-pick" : ""}${songConfirming ? " order-form-panel--confirm" : ""}${showActivation ? " order-form-panel--activation" : ""}${categoryStep ? " order-form-panel--category" : ""}`}>
         <h2>Заказать песню</h2>
         {/* ИЗМЕНЕНО (жалоба пользователя 2026-09-22: "возможность выбрать
         песню была у всех независимо от стола — а вот заказать только после
@@ -4185,11 +4192,12 @@ export default function App() {
             services={services}
             onOrdered={refreshOrders}
             orderingDisabled={!canOrder}
+            onPickingChange={setFavPicking}
             embedded
           />
         ) : null}
         {orderExtra === "orders" || orderExtra === "history" ? (
-          <div className="profile-finance">
+          <div className={`profile-finance pick-scope${reorderPickedId != null ? " orders-block--pick" : ""}`}>
           <h2>{ordersTab === "history" ? "История" : "Мои заказы"}</h2> {ordersTab !== "history" && <GuestPrecheck token={session?.token} />}
         {ordersTab !== "history" && orders.some((o) => o.status === "pending" || o.status === "queued") && (
           <button
