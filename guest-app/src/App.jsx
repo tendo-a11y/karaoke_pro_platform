@@ -648,7 +648,7 @@ function SongListRow({ song, onPick }) {
   return (
     <li className="song-lists__row">
       <div className="song-lists__line">
-        <span className="song-lists__title">
+        <span className="song-lists__title" role="button" tabIndex={0} onClick={() => onPick(song)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onPick(song); } }}>
           {song.artist ? `${song.artist} — ` : ""}
           {song.song_title}
         </span>
@@ -848,12 +848,14 @@ function OrderRow({
   const [reorderError, setReorderError] = useState(null);
   const [reorderDone, setReorderDone] = useState(false);
   const [reorderQueuePos, setReorderQueuePos] = useState(0);
-  async function handleReorderFromHistory() {
+  // Выбор категории и есть заказ (запрос 2026-10): можно передать категорию явно.
+  async function handleReorderFromHistory(overrideServiceId) {
+    const sid = overrideServiceId !== undefined ? overrideServiceId : reorderServiceId;
     setReorderBusy(true);
     setReorderError(null);
     setReorderDone(false);
     try {
-      const created = await createOrderMarked(token, order.song_title, order.artist || null, Number(reorderServiceId));
+      const created = await createOrderMarked(token, order.song_title, order.artist || null, Number(sid));
       setReorderServiceId("");
       setReorderQueuePos(created?.queue_position ?? 0);
       setReorderDone(true);
@@ -947,6 +949,8 @@ function OrderRow({
               setReorderDone(false);
               // Выбрали песню — остальные строки перестают моргать (2026-10-14).
               onReorderPick?.(order.id);
+              // Выбор категории сразу отправляет заказ (запрос 2026-10).
+              if (v && reorder && !reorderBusy) handleReorderFromHistory(v);
             }}
             disabled={reorderBusy}
             highlight={!reorderPickedId || reorderPickedId === order.id}
@@ -1258,8 +1262,8 @@ function FavoritesPanel({ token, services, onOrdered, orderingDisabled, embedded
     return () => clearInterval(id);
   }, [refresh]);
 
-  async function handleReorder(favoriteId) {
-    const serviceId = serviceSelections[favoriteId];
+  async function handleReorder(favoriteId, overrideServiceId) {
+    const serviceId = overrideServiceId !== undefined ? overrideServiceId : serviceSelections[favoriteId];
     if (!serviceId) return;
     setBusyId(favoriteId);
     setError(null);
@@ -1341,7 +1345,14 @@ function FavoritesPanel({ token, services, onOrdered, orderingDisabled, embedded
                 <ServiceSelect
                   services={services}
                   value={serviceSelections[f.id] || ""}
-                  onChange={(v) => setServiceSelections((prev) => ({ ...prev, [f.id]: v }))}
+                  onChange={(v) => {
+                    setServiceSelections((prev) => ({ ...prev, [f.id]: v }));
+                    // Выбор категории сразу отправляет заказ (запрос 2026-10).
+                    const tsel = toneSelections[f.id];
+                    if (v && !orderingDisabled && busyId !== f.id && !(tsel && tsel.on && tsel.tone == null)) {
+                      handleReorder(f.id, v);
+                    }
+                  }}
                   disabled={busyId === f.id || orderingDisabled}
                   highlight={!orderingDisabled && (!pickedFavoriteId || pickedFavoriteId === f.id)}
                   onOpen={() => setPickedFavoriteId(f.id)}
