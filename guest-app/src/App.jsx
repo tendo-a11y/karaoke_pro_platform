@@ -436,7 +436,7 @@ function LegalPageScreen({ page }) {
 // категории) и подтверждением цены для Crazy — то же, что уже есть в
 // главной форме заказа, теперь и в "Заказать снова", "Заменить песню" и
 // "Заказ через скриншот", чтобы предупреждение о цене нельзя было обойти.
-function ServiceSelect({ services, value, onChange, disabled, highlight = false, onOpen }) {
+function ServiceSelect({ services, value, onChange, disabled, highlight = false, onOpen, onOpenChange }) {
   // Свой список выбора категории вместо системного (запрос пользователя
   // 2026-10): в раскрытом списке у каждой категории кнопка "❓", которая
   // открывает карточку категории поверх экрана (название, цена, описание,
@@ -444,6 +444,9 @@ function ServiceSelect({ services, value, onChange, disabled, highlight = false,
   // на её название тоже открывает карточку, и подтверждение цены находится
   // внутри неё, рядом с описанием ("выбор должен быть осознанным").
   const [open, setOpen] = useState(false);
+  useEffect(() => {
+    onOpenChange?.(open);
+  }, [open]);
   const [cardId, setCardId] = useState(null);
   const selected = services.find((s) => String(s.id) === String(value));
   const card = services.find((s) => String(s.id) === String(cardId));
@@ -3344,6 +3347,7 @@ export default function App() {
   const [turnToast, setTurnToast] = useState(null);
   const [songListsTab, setSongListsTab] = useState(null);
   const [titleHint, setTitleHint] = useState(false);
+  const [categoryPicking, setCategoryPicking] = useState(false);
   // Ссылка, по которой гость нашёл песню ("🔗 Ссылка") — уходит с заказом.
   const [songUrl, setSongUrl] = useState(null);
   const songListsOpen = songListsTab != null;
@@ -4145,7 +4149,7 @@ export default function App() {
           </p>
         ) : (
           <>
-            <form className="order-form" onSubmit={handleSubmitOrder}>
+            <form className={`order-form${categoryPicking ? " order-form--picking" : ""}`} onSubmit={handleSubmitOrder}>
               <input
                 type="text"
                 value={songTitle}
@@ -4176,6 +4180,7 @@ export default function App() {
                   value={serviceId}
                   onChange={setServiceId}
                   highlight={Boolean(songTitle.trim() && artist.trim())}
+                  onOpenChange={setCategoryPicking}
                 />
               )}
               <div className="tone-picker">
