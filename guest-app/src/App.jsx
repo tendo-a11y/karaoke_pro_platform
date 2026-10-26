@@ -4042,7 +4042,7 @@ export default function App() {
             // Заказ по ссылке — сразу категория "Интернет", если она есть в списке гостя
             // (скрытые "Временно убрать" в /services не приходят).
             if (song.link) {
-              const internet = services.find((s) => (s.name || "").trim().toUpperCase() === "INTERNET");
+              const internet = services.find((s) => s.link_default);
               if (internet) {
                 setServiceId(String(internet.id));
                 if (!internetHintOff) {
