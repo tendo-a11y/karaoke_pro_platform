@@ -1,3 +1,10 @@
+
+/* Выбор категории у строки избранного: на экране только эта песня и её категории (тон остаётся). */
+.app-shell:has(.favorites-panel--picking) > :not(.order-form-panel):not(.msg-popup-overlay) { display: none !important; }
+.order-form-panel:has(> .favorites-panel--picking) > :not(.favorites-panel--picking) { display: none !important; }
+.favorites-panel--picking > :not(.order-list) { display: none !important; }
+.favorites-panel--picking .order-list > li:not(.row-pick-keep) { display: none !important; }
+.favorites-panel--picking li.row-pick-keep > :not(.order-row__song):not(.order-row__artist):not(.service-picker):not(.tone-picker) { display: none !important; }
 :root {
   --bg: #14161c;
   --panel: #1d2029;
