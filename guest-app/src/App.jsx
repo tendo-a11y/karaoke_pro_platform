@@ -3728,6 +3728,8 @@ export default function App() {
       // случай (не должен происходить в штатной работе), если сервер по
       // какой-то причине его не прислал, тогда просто "Заказ отправлен!".
       setSubmitOk(created.queue_position ?? 0);
+      // Чтобы уведомление было видно сразу, прокручиваем экран к началу (запрос 2026-10).
+      window.scrollTo({ top: 0, behavior: "smooth" });
       await refreshOrders();
     } catch (err) {
       setSubmitError(err instanceof ApiError ? err.message : String(err));
@@ -4030,7 +4032,7 @@ export default function App() {
   }
 
   return (
-    <div className={`app-shell${categoryPicking ? " app-shell--picking" : ""}${songConfirming || showActivation || categoryStep ? " app-shell--focus" : ""}`}>
+    <div className={`app-shell${categoryPicking ? " app-shell--picking" : ""}${songConfirming || showActivation || categoryStep ? " app-shell--focus" : ""}${songListsOpen ? " app-shell--lists" : ""}`}>
       {chatPopupEl}
 {categoryPopupEl}
       {showFirstOrderNotice && (
@@ -4058,6 +4060,15 @@ export default function App() {
       </header>
 
       <AddToHomeScreenHint /><OfflineBanner />
+      {submitOk != null && (
+        // Уведомление о принятом заказе — сразу под шапкой, а не внизу формы (запрос 2026-10).
+        <div className="banner banner--ok submit-ok-top">
+          {submitOk > 0
+            ? `Заказ отправлен! Ваш номер в очереди: ${submitOk}.`
+            : "Заказ отправлен!"}
+          <button type="button" className="link-btn" onClick={() => setSubmitOk(null)} aria-label="Закрыть">✕</button>
+        </div>
+      )}
       <TableJoinBanner token={session?.token} status={meInfo.table_group_status} hasTable={meInfo.table_no != null} tableNo={meInfo.table_no} onGoOrders={() => { setOrdersTab("current"); setOrderExtra("orders"); }} />
       <TableClosedBanner tableNo={meInfo?.table_no} enabled={Boolean(session)} signal={closedSignal} />
 
@@ -4355,13 +4366,6 @@ export default function App() {
               </button>
             </form>
             {submitError && <div className="banner banner--error">{submitError}</div>}
-            {submitOk != null && (
-              <div className="banner banner--ok">
-                {submitOk > 0
-                  ? `Заказ отправлен! Ваш номер в очереди: ${submitOk}.`
-                  : "Заказ отправлен!"}
-              </div>
-            )}
             {/* ТЗ п.45: единственный способ стать Role 4 — эта попытка
             заказать (будучи ещё Role 5) и открывает данный экран, см.
             handleSubmitOrder/handleActivated выше. */}
@@ -4385,7 +4389,7 @@ export default function App() {
         onGroupChanged={refreshMe}
       />
 
-      <section className="panel">
+      <section className={`panel${songListsOpen ? " panel--lists-focus" : ""}`}>
         {turnToast ? (
           <button type="button" className="turn-toast" onClick={() => setTurnToast(null)}>
             {turnToast}
@@ -4401,6 +4405,8 @@ export default function App() {
             setArtist(song.artist || "");
             setSongUrl(null);
             setOrderExtra(null);
+            // Выбрали песню из списка — списки закрываем, чтобы открылся шаг заказа (запрос 2026-10).
+            setSongListsTab(null);
             const panel = document.querySelector(".order-form-panel");
             if (panel) panel.scrollIntoView({ behavior: "smooth", block: "start" });
           }}
