@@ -3455,6 +3455,9 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [turnToast]);
   const [services, setServices] = useState([]);
+  // Шаг "категория" (запрос пользователя 2026-10): песня и исполнитель введены, категории ещё нет —
+  // на экране только кнопка категории.
+  const categoryStep = Boolean(songTitle.trim() && artist.trim() && !serviceId && !categoryPicking) && services.length > 0;
   const [favoriteBusyOrderId, setFavoriteBusyOrderId] = useState(null);
   const [favoriteMessage, setFavoriteMessage] = useState(null);
   const [replacingOrderId, setReplacingOrderId] = useState(null);
@@ -3699,14 +3702,17 @@ export default function App() {
   // handleActivated выше — после единственного экрана "стол + Google"
   // нужно закончить то же самое действие уже настоящим (новым) токеном, а
   // не токеном, который был в session на момент нажатия "Заказать".
-  async function submitOrderWithToken(token) {
+  async function submitOrderWithToken(token, overrideServiceId) {
+    // Выбор категории сразу отправляет заказ (запрос 2026-10): категория передаётся явно,
+    // потому что состояние serviceId в этот момент ещё старое.
+    const sid = overrideServiceId !== undefined ? overrideServiceId : serviceId;
     setSubmitting(true);
     setSubmitError(null);
     setSubmitOk(null);
     try {
       const created = await createOrderMarked(
         token, songTitle.trim(), artist.trim() || null,
-        serviceId ? Number(serviceId) : null,
+        sid ? Number(sid) : null,
         toneOn && tone != null ? tone : null,
         songUrl,
       );
@@ -4024,7 +4030,7 @@ export default function App() {
   }
 
   return (
-    <div className={`app-shell${categoryPicking ? " app-shell--picking" : ""}${songConfirming || showActivation ? " app-shell--focus" : ""}`}>
+    <div className={`app-shell${categoryPicking ? " app-shell--picking" : ""}${songConfirming || showActivation || categoryStep ? " app-shell--focus" : ""}`}>
       {chatPopupEl}
 {categoryPopupEl}
       {showFirstOrderNotice && (
@@ -4068,7 +4074,7 @@ export default function App() {
         <ProfileNamePanel token={session.token} meInfo={meInfo} onNameChanged={refreshMe} />
       )}
 
-      <section className={`panel order-form-panel${songConfirming ? " order-form-panel--confirm" : ""}${showActivation ? " order-form-panel--activation" : ""}`}>
+      <section className={`panel order-form-panel${songConfirming ? " order-form-panel--confirm" : ""}${showActivation ? " order-form-panel--activation" : ""}${categoryStep ? " order-form-panel--category" : ""}`}>
         <h2>Заказать песню</h2>
         {/* ИЗМЕНЕНО (жалоба пользователя 2026-09-22: "возможность выбрать
         песню была у всех независимо от стола — а вот заказать только после
@@ -4243,7 +4249,7 @@ export default function App() {
           </p>
         ) : (
           <>
-            <form className={`order-form${categoryPicking ? " order-form--picking" : ""}`} onSubmit={handleSubmitOrder}>
+            <form className={`order-form${categoryPicking ? " order-form--picking" : ""}${categoryStep ? " order-form--category-step" : ""}`} onSubmit={handleSubmitOrder}>
               <input
                 type="text"
                 value={songTitle}
