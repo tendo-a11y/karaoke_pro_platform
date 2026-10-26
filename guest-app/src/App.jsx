@@ -436,8 +436,9 @@ function LegalPageScreen({ page }) {
 // категории) и подтверждением цены для Crazy — то же, что уже есть в
 // главной форме заказа, теперь и в "Заказать снова", "Заменить песню" и
 // "Заказ через скриншот", чтобы предупреждение о цене нельзя было обойти.
-// Категории первой рамки в списке выбора; остальные идут во вторую рамку.
-const TOP_SERVICE_NAMES = ["KARAOKE", "INTERNET"];
+// Отсеки списка категорий: основные и дополнительные (поле section у категории).
+const SECTION_KEYS = ["main", "extra"];
+const SECTION_TITLES = { main: "Основные", extra: "Дополнительные" };
 
 function ServiceSelect({ services, value, onChange, disabled, highlight = false, onOpen, onOpenChange }) {
   // Свой список выбора категории вместо системного (запрос пользователя
@@ -498,11 +499,15 @@ function ServiceSelect({ services, value, onChange, disabled, highlight = false,
       </button>
       {open && (
         <div className="service-picker__list">
-          {[
-            services.map((s, index) => ({ s, index })).filter(({ s }) => TOP_SERVICE_NAMES.includes((s.name || "").trim().toUpperCase())),
-            services.map((s, index) => ({ s, index })).filter(({ s }) => !TOP_SERVICE_NAMES.includes((s.name || "").trim().toUpperCase())),
-          ].filter((group) => group.length > 0).map((group, gi) => (
-            <ul className="service-picker__group" key={gi}>
+          {SECTION_KEYS.map((sectionKey) => {
+            const group = services
+              .map((s, index) => ({ s, index }))
+              .filter(({ s }) => (s.section || "main") === sectionKey);
+            if (group.length === 0) return null;
+            return (
+            <div className="service-picker__section" key={sectionKey}>
+            <div className="service-picker__section-title">{SECTION_TITLES[sectionKey]}</div>
+            <ul className="service-picker__group">
               {group.map(({ s, index }) => (
                 <li
                   key={s.id}
@@ -532,7 +537,9 @@ function ServiceSelect({ services, value, onChange, disabled, highlight = false,
                 </li>
               ))}
             </ul>
-          ))}
+            </div>
+            );
+          })}
           <button type="button" className="service-picker__cancel" onClick={() => setOpen(false)}>
             Отмена
           </button>
