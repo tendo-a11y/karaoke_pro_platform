@@ -436,6 +436,52 @@ function LegalPageScreen({ page }) {
 // категории) и подтверждением цены для Crazy — то же, что уже есть в
 // главной форме заказа, теперь и в "Заказать снова", "Заменить песню" и
 // "Заказ через скриншот", чтобы предупреждение о цене нельзя было обойти.
+// Звук и вибрация при новом сообщении от KJ. Гость может отключить в шапке чата;
+// настройка хранится в браузере (localStorage), по умолчанию включено.
+const CHAT_ALERT_KEY = "kp_chat_alert_on";
+function isChatAlertOn() {
+  try { return window.localStorage.getItem(CHAT_ALERT_KEY) !== "0"; } catch { return true; }
+}
+function setChatAlertOn(on) {
+  try { window.localStorage.setItem(CHAT_ALERT_KEY, on ? "1" : "0"); } catch {}
+}
+function playChatAlert() {
+  if (!isChatAlertOn()) return;
+  try { if (navigator.vibrate) navigator.vibrate([200, 100, 200]); } catch {}
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+    const ctx = new Ctx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.value = 880;
+    gain.gain.value = 0.2;
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.4);
+    osc.onended = () => { ctx.close().catch(() => {}); };
+  } catch {}
+}
+
+function ChatAlertToggle() {
+  const [on, setOn] = useState(isChatAlertOn);
+  return (
+    <button
+      type="button"
+      className="link-btn"
+      onClick={() => {
+        const next = !on;
+        setChatAlertOn(next);
+        setOn(next);
+      }}
+    >
+      {on ? "🔔 Звук и вибрация: вкл" : "🔕 Звук и вибрация: выкл"}
+    </button>
+  );
+}
+
 // Отсеки списка категорий: основные и дополнительные (поле section у категории).
 const SECTION_KEYS = ["main", "extra"];
 const SECTION_TITLES = { main: "Основные", extra: "Дополнительные" };
@@ -2385,6 +2431,7 @@ function ChatPanel({ token }) {
     <section className="panel chat-panel">
       <div className="chat-panel__header">
         <h2>💬 Чат с ведущим</h2>
+        <ChatAlertToggle />
         {messages.length > 0 && (
           <button type="button" className="link-btn link-btn--danger" disabled={clearing} onClick={handleClearChat}>
             {clearing ? "Очищаем…" : "🗑 Очистить чат"}
@@ -3257,7 +3304,10 @@ export default function App() {
         const autoQueue = /^🎤 (Вы следующий|Приготовьтесь)/.test(latest.message_text || "");
         if (latest.id > Number(seen)) {
           if (autoQueue) markChatSeen(latest.id);
-          else setChatPopup(latest);
+          else {
+            playChatAlert();
+            setChatPopup(latest);
+          }
         }
       } catch {
         // молча — следующий опрос попробует снова
