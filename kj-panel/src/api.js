@@ -252,9 +252,9 @@ export const api = {
   removeVipClient: (token, vipClientId) =>
     request(`/api/kj/vip-clients/${vipClientId}`, { method: "DELETE", token }),
   listCategories: (token, clubId) => request(`/api/kj/categories/${clubId}`, { token }),
-  createCategory: (token, clubId, { name, description, price, isFree }) =>
+  createCategory: (token, clubId, { name, description, price, isFree, section = "main" }) =>
     request(`/api/kj/categories/${clubId}`, {
-      method: "POST", token, body: { name, description: description || null, price, is_free: isFree },
+      method: "POST", token, body: { name, description: description || null, price, is_free: isFree, section },
     }),
   updateCategory: (token, clubId, categoryId, fields) =>
     request(`/api/kj/categories/${clubId}/${categoryId}`, { method: "PUT", token, body: fields }),
