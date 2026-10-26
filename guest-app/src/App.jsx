@@ -4064,7 +4064,15 @@ export default function App() {
               <p>Заказ по ссылке. Категория: <b>{internetHint.name}</b></p>
               <p>Цена {Number(internetHint.price)} лей. Подтвердите заказ или отмените его.</p>
               <div className="link-confirm-buttons">
-                <button type="button" className="link-confirm-yes" onClick={() => setInternetHint(null)}>
+                <button
+                  type="button"
+                  className="link-confirm-yes"
+                  onClick={() => {
+                    // Подтверждение цены и есть заказ: отправляем сразу, без второго "Заказать".
+                    setInternetHint(null);
+                    proceedSubmitOrder();
+                  }}
+                >
                   ✅ Подтвердить {Number(internetHint.price)} лей
                 </button>
                 <button
