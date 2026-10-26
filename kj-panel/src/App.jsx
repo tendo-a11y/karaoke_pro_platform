@@ -4542,7 +4542,8 @@ function OrdersBoardSlot({ slot, categories, busy, onAccept, onReject, onComplet
   // освобождается только явной кнопкой "Готово" (см. mark_played() в
   // backend/services/vdj_service.py), а не само по себе.
   const isQueued = slot.status === "queued";
-  const categoryName = categories.find((c) => c.id === slot.service_id)?.name;
+  const category = categories.find((c) => c.id === slot.service_id);
+  const categoryName = category?.name;
   // ИСПРАВЛЕНО (2026-09-19, жалоба пользователя "не сделано изменение
   // категории песни"): смена категории у уже принятого заказа была только
   // в QueueTable (строки живой очереди VirtualDJ) — но после отвязки
@@ -4603,7 +4604,9 @@ function OrdersBoardSlot({ slot, categories, busy, onAccept, onReject, onComplet
             ▶ ссылка YouTube
           </span>
         ) : null}
-        {!canEditCategory && categoryName && <div className="table-slot__category">{categoryName}</div>}
+        {!canEditCategory && categoryName && (
+          <div className="table-slot__category" style={{ color: defaultCategoryColor(category) }}>{categoryName}</div>
+        )}
         {slot.status === "error" && slot.error_message && (
           <div className="table-slot__error">{slot.error_message}</div>
         )}
