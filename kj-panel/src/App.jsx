@@ -4581,7 +4581,28 @@ function OrdersBoardSlot({ slot, categories, busy, onAccept, onReject, onComplet
         {slot.tone ? (
           <div className="tone-badge">🎚 Тон {slot.tone > 0 ? `+${slot.tone}` : slot.tone}</div>
         ) : null}
-        {slot.song_url ? <div className="table-slot__youtube">▶ ссылка YouTube</div> : null}
+        {slot.song_url ? (
+          <span
+            className="table-slot__youtube"
+            role="link"
+            tabIndex={0}
+            title="Открыть ссылку YouTube"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              window.open(slot.song_url, "_blank", "noopener");
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                e.stopPropagation();
+                window.open(slot.song_url, "_blank", "noopener");
+              }
+            }}
+          >
+            ▶ ссылка YouTube
+          </span>
+        ) : null}
         {!canEditCategory && categoryName && <div className="table-slot__category">{categoryName}</div>}
         {slot.status === "error" && slot.error_message && (
           <div className="table-slot__error">{slot.error_message}</div>
