@@ -486,7 +486,7 @@ function ChatAlertToggle() {
 const SECTION_KEYS = ["main", "extra"];
 const SECTION_TITLES = { main: "Основные", extra: "Дополнительные" };
 
-function ServiceSelect({ services, value, onChange, disabled, highlight = false, onOpen, onOpenChange }) {
+function ServiceSelect({ services, value, onChange, disabled, highlight = false, onOpen, onOpenChange, onCancel }) {
   // Свой список выбора категории вместо системного (запрос пользователя
   // 2026-10): в раскрытом списке у каждой категории кнопка "❓", которая
   // открывает карточку категории поверх экрана (название, цена, описание,
@@ -586,7 +586,7 @@ function ServiceSelect({ services, value, onChange, disabled, highlight = false,
             </div>
             );
           })}
-          <button type="button" className="service-picker__cancel" onClick={() => setOpen(false)}>
+          <button type="button" className="service-picker__cancel" onClick={() => { setOpen(false); onCancel?.(); }}>
             Отмена
           </button>
         </div>
@@ -1364,6 +1364,7 @@ function FavoritesPanel({ token, services, onOrdered, orderingDisabled, embedded
                   highlight={!orderingDisabled && (!pickedFavoriteId || pickedFavoriteId === f.id)}
                   onOpen={() => setPickedFavoriteId(f.id)}
                   onOpenChange={(o) => setPickingFavId(o ? f.id : null)}
+                  onCancel={() => setPickedFavoriteId(null)}
                 />
               )}
               <div className="tone-picker">
@@ -3384,6 +3385,8 @@ export default function App() {
   const [songTitle, setSongTitle] = useState("");
   // Поиск песни начат — панель "Заказать песню" перестаёт мигать до отправки заказа.
   const [aiSearchStarted, setAiSearchStarted] = useState(false);
+  // Отмена в списке категорий возвращает к началу поиска (запрос 2026-10-27): поиск ИИ пересоздаётся.
+  const [searchKey, setSearchKey] = useState(0);
   const [aiSearchFailed, setAiSearchFailed] = useState(false);
   // Предупреждение "Вы заказываете через Интернет" — показываем один раз, при первом
   // автовыборе категории по ссылке. Флаг запоминаем в браузере гостя (localStorage, с try/catch).
@@ -4120,6 +4123,7 @@ export default function App() {
         ограничивается (веткой ниже) только форма ввода со кнопкой
         "Заказать". */}
         <AiSearch
+          key={searchKey}
           token={session.token}
           onConfirmChange={setSongConfirming}
           active={aiSearchStarted}
@@ -4326,6 +4330,14 @@ export default function App() {
                   }}
                   highlight={Boolean(songTitle.trim() && artist.trim())}
                   onOpenChange={setCategoryPicking}
+                  onCancel={() => {
+                    setSongTitle("");
+                    setArtist("");
+                    setServiceId("");
+                    setSongUrl(null);
+                    setAiSearchStarted(false);
+                    setSearchKey((k) => k + 1);
+                  }}
                 />
               )}
               <div className="tone-picker">
