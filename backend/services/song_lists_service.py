@@ -8,6 +8,7 @@
 "Готово" вручную или автоматически по истории VirtualDJ). Заказы, которые
 только засчитаны при закрытии стола, сюда не попадают.
 """
+import re
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 
@@ -21,8 +22,12 @@ NEW_SONGS_LIMIT = 30
 
 
 def norm_key(song_title, artist) -> str:
+    # Знаки препинания, регистр и ё/е не учитываются, чтобы одна и та же песня
+    # не делилась на несколько строк (счётчик "Популярных" считался бы неверно).
     def norm(value):
-        return " ".join(str(value or "").lower().split())
+        text = str(value or "").lower().replace("ё", "е")
+        text = re.sub(r"[^\w\s]", "", text)
+        return " ".join(text.split())
     return f"{norm(artist)}|{norm(song_title)}"
 
 
