@@ -30,10 +30,11 @@ from extensions import db
 from models import Order, Service
 
 DEFAULT_CATEGORIES = [
-    {"name": "KARAOKE", "description": "Обычное караоке", "price": Decimal("35"), "is_free": False},
-    {"name": "KARAOKE BACK", "description": "Караоке с бэквокалом", "price": Decimal("35"), "is_free": False},
+    {"name": "KARAOKE", "section": "main", "description": "Обычное караоке", "price": Decimal("35"), "is_free": False},
+    {"name": "KARAOKE BACK", "section": "extra", "description": "Караоке с бэквокалом", "price": Decimal("35"), "is_free": False},
     {
         "name": "INTERNET",
+        "section": "main",
         "description": (
             "Любой заказ послушать или спеть из интернета. Послушать — можно вне очереди. "
             "Спеть — строго по очереди."
@@ -47,7 +48,7 @@ DEFAULT_CATEGORIES = [
         "price": Decimal("200"),
         "is_free": False,
     },
-    {"name": "CRAZY", "description": "Песня вне очереди", "price": Decimal("1000"), "is_free": False},
+    {"name": "CRAZY", "section": "extra", "description": "Песня вне очереди", "price": Decimal("1000"), "is_free": False},
     # kj_only=True (добавлено 2026-09-29, решение пользователя) — эта
     # категория с самого начала задумывалась как "ставит только KJ" (см.
     # текст description ниже, он так и был написан с самого начала), но
@@ -60,7 +61,7 @@ DEFAULT_CATEGORIES = [
     # миграцией (a47725a2b8ae_add_services_kj_only.py) — здесь он влияет
     # только на новые клубы, у которых список категорий ещё не заводился.
     {
-        "name": "BONUS", "description": "Бесплатный бонус — ставит только KJ", "price": Decimal("0"),
+        "name": "BONUS", "section": "extra", "description": "Бесплатный бонус — ставит только KJ", "price": Decimal("0"),
         "is_free": True, "kj_only": True,
     },
 ]
@@ -108,7 +109,16 @@ def _parse_price(raw) -> Decimal:
     return price
 
 
-def create_category(club_id: int, name, description, price, is_free) -> Service:
+SECTIONS = ("main", "extra")
+
+
+def _parse_section(raw) -> str:
+    if raw not in SECTIONS:
+        raise CategoryServiceError("VALIDATION_ERROR", "Отсек должен быть основной или дополнительный")
+    return raw
+
+
+def create_category(club_id: int, name, description, price, is_free, section="main") -> Service:
     name = (name or "").strip()
     if not name:
         raise CategoryServiceError("VALIDATION_ERROR", "Название категории обязательно")
@@ -118,6 +128,7 @@ def create_category(club_id: int, name, description, price, is_free) -> Service:
         description=(description or None),
         price=_parse_price(price),
         is_free=bool(is_free),
+        section=_parse_section(section),
     )
     db.session.add(category)
     db.session.commit()
@@ -139,6 +150,8 @@ def update_category(club_id: int, category_id: int, **fields) -> Service:
         category.price = _parse_price(fields["price"])
     if "is_free" in fields:
         category.is_free = bool(fields["is_free"])
+    if "section" in fields:
+        category.section = _parse_section(fields["section"])
     if "temp_hidden" in fields:
         category.temp_hidden = bool(fields["temp_hidden"])
     if "color" in fields:
