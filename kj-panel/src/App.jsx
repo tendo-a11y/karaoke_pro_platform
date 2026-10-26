@@ -2730,6 +2730,19 @@ function CategoriesPanel({ token, clubId }) {
     }
   }
 
+  async function handleChangeLinkDefault(category) {
+    setBusyKey("link-" + category.id);
+    setActionError(null);
+    try {
+      await api.updateCategory(token, clubId, category.id, { link_default: true });
+      await reload();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
   async function handleChangeSection(category, section) {
     setBusyKey("section-" + category.id);
     setActionError(null);
@@ -2874,6 +2887,16 @@ function CategoriesPanel({ token, clubId }) {
                     disabled={saving || deleting || busyKey === "color-" + category.id}
                   />
                   Цвет
+                </label>
+                <label className="category-row__free" title="Эта категория подставляется, когда гость заказывает песню по ссылке. Только одна на клуб.">
+                  <input
+                    type="radio"
+                    name="link-default-category"
+                    checked={!!category.link_default}
+                    onChange={() => handleChangeLinkDefault(category)}
+                    disabled={saving || deleting || busyKey === "link-" + category.id}
+                  />
+                  Для заказов по ссылке
                 </label>
                 <label className="category-row__free" title="Отсек, в котором категория показывается гостю">
                   <select
