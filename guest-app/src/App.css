@@ -672,10 +672,9 @@ select {
 }
 .service-picker__list {
   list-style: none; margin: 0; padding: 0;
-  border: 1px solid var(--border); border-radius: 10px; overflow: hidden;
+  display: flex; flex-direction: column; gap: 8px;
 }
-.service-picker__list li { border-bottom: 1px solid var(--border); }
-.service-picker__list li:last-child { border-bottom: none; }
+.service-picker__list li { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
 .service-picker__row { display: flex; align-items: stretch; }
 .service-picker__option {
   flex: 1; min-width: 0; text-align: left;
