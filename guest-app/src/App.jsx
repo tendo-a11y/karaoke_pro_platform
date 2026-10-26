@@ -117,7 +117,7 @@ const POLL_ORDERS_MS = 4000;
 const POLL_QUEUE_MS = 10000;
 const POLL_CHAT_MS = 4000;
 // Опрос новых сообщений ведущего для всплывающего уведомления (2026-10-13).
-const POLL_CHAT_POPUP_MS = 8000;
+const POLL_CHAT_POPUP_MS = 2000;
 const POLL_ME_MS = 5000;
 const POLL_FAVORITES_MS = 5000;
 const POLL_TABLE_GROUP_MS = 5000;
