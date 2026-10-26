@@ -1235,6 +1235,8 @@ function FavoritesPanel({ token, services, onOrdered, orderingDisabled, embedded
   const [toneSelections, setToneSelections] = useState({});
   // Избранное, где уже начали выбирать категорию — у остальных строк подсказка-мигание гаснет (2026-10-14).
   const [pickedFavoriteId, setPickedFavoriteId] = useState(null);
+  // Строка избранного, у которой сейчас открыт выбор категории (на экране остаётся только она).
+  const [pickingFavId, setPickingFavId] = useState(null);
   // ДОБАВЛЕНО (2026-10, запрос пользователя "раздел избранное должен
   // открываться, там может быть много песен") — раздел свёрнут по
   // умолчанию и раскрывается по нажатию на заголовок (тот же приём, что и
@@ -1310,7 +1312,7 @@ function FavoritesPanel({ token, services, onOrdered, orderingDisabled, embedded
   }
 
   return (
-    <section className={embedded ? "profile-finance" : "panel"}>
+    <section className={`${embedded ? "profile-finance" : "panel"}${pickingFavId != null ? " favorites-panel--picking" : ""}`}>
       {embedded ? (
         <h2>Избранное ({favorites.length})</h2>
       ) : (
@@ -1338,7 +1340,7 @@ function FavoritesPanel({ token, services, onOrdered, orderingDisabled, embedded
       ) : (
         <ul className="order-list">
           {favorites.map((f) => (
-            <li key={f.id} className="order-row">
+            <li key={f.id} className={`order-row${pickingFavId === f.id ? " row-pick-keep" : ""}`}>
               <div className="order-row__song">🎵 {f.song_title}</div>
               {f.artist && <div className="order-row__artist">🎤 {f.artist}</div>}
               {services.length > 0 && (
@@ -1356,6 +1358,7 @@ function FavoritesPanel({ token, services, onOrdered, orderingDisabled, embedded
                   disabled={busyId === f.id || orderingDisabled}
                   highlight={!orderingDisabled && (!pickedFavoriteId || pickedFavoriteId === f.id)}
                   onOpen={() => setPickedFavoriteId(f.id)}
+                  onOpenChange={(o) => setPickingFavId(o ? f.id : null)}
                 />
               )}
               <div className="tone-picker">
