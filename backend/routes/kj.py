@@ -1179,6 +1179,7 @@ def create_category(club_id):
             payload.get("description"),
             payload.get("price", 0),
             payload.get("is_free", False),
+            payload.get("section", "main"),
         )
     except CategoryServiceError as exc:
         return api_error(400, exc.code, exc.message)
@@ -1192,7 +1193,7 @@ def update_category(club_id, category_id):
     if denied:
         return denied
     payload = request.get_json(silent=True) or {}
-    fields = {k: payload[k] for k in ("name", "description", "price", "is_free", "temp_hidden", "color") if k in payload}
+    fields = {k: payload[k] for k in ("name", "description", "price", "is_free", "temp_hidden", "color", "section") if k in payload}
     try:
         category = category_service.update_category(club_id, category_id, **fields)
     except CategoryServiceError as exc:
