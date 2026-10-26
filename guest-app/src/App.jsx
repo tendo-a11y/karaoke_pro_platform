@@ -3387,6 +3387,8 @@ export default function App() {
   const [aiSearchStarted, setAiSearchStarted] = useState(false);
   // Отмена в списке категорий возвращает к началу поиска (запрос 2026-10-27): поиск ИИ пересоздаётся.
   const [searchKey, setSearchKey] = useState(0);
+  // Пока печатают название или исполнителя, список категорий не открывается (запрос 2026-10-27).
+  const [typingField, setTypingField] = useState(false);
   const [aiSearchFailed, setAiSearchFailed] = useState(false);
   // Предупреждение "Вы заказываете через Интернет" — показываем один раз, при первом
   // автовыборе категории по ссылке. Флаг запоминаем в браузере гостя (localStorage, с try/catch).
@@ -3481,7 +3483,7 @@ export default function App() {
   const [services, setServices] = useState([]);
   // Шаг "категория" (запрос пользователя 2026-10): песня и исполнитель введены, категории ещё нет —
   // на экране только кнопка категории.
-  const categoryStep = Boolean(songTitle.trim() && artist.trim() && !serviceId && !categoryPicking) && services.length > 0;
+  const categoryStep = Boolean(songTitle.trim() && artist.trim() && !serviceId && !categoryPicking && !typingField) && services.length > 0;
   const [favoriteBusyOrderId, setFavoriteBusyOrderId] = useState(null);
   const [favoriteMessage, setFavoriteMessage] = useState(null);
   const [replacingOrderId, setReplacingOrderId] = useState(null);
@@ -4290,7 +4292,7 @@ export default function App() {
               <input
                 type="text"
                 value={songTitle}
-                onChange={(e) => setSongTitle(e.target.value)}
+                onChange={(e) => setSongTitle(e.target.value)} onFocus={() => setTypingField(true)} onBlur={() => setTimeout(() => setTypingField(false), 400)}
                 placeholder="Название песни"
                 className={titleHint && !songTitle.trim() ? "step-blink" : undefined}
                 maxLength={200}
@@ -4299,7 +4301,7 @@ export default function App() {
               <input
                 type="text"
                 value={artist}
-                onChange={(e) => setArtist(e.target.value)}
+                onChange={(e) => setArtist(e.target.value)} onFocus={() => setTypingField(true)} onBlur={() => setTimeout(() => setTypingField(false), 400)}
                 placeholder="Исполнитель (обязательно)"
                 maxLength={200}
                 required
