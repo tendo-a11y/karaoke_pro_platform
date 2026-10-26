@@ -4292,7 +4292,7 @@ export default function App() {
               <input
                 type="text"
                 value={songTitle}
-                onChange={(e) => setSongTitle(e.target.value)} onFocus={() => setTypingField(true)} onBlur={() => setTimeout(() => setTypingField(false), 400)}
+                onChange={(e) => setSongTitle(e.target.value)} onFocus={() => setTypingField(true)} onBlur={() => setTimeout(() => { const a = document.activeElement; if (!(a && a.tagName === "INPUT" && a.closest(".order-form"))) setTypingField(false); }, 400)}
                 placeholder="Название песни"
                 className={titleHint && !songTitle.trim() ? "step-blink" : undefined}
                 maxLength={200}
@@ -4301,7 +4301,7 @@ export default function App() {
               <input
                 type="text"
                 value={artist}
-                onChange={(e) => setArtist(e.target.value)} onFocus={() => setTypingField(true)} onBlur={() => setTimeout(() => setTypingField(false), 400)}
+                onChange={(e) => setArtist(e.target.value)} onFocus={() => setTypingField(true)} onBlur={() => setTimeout(() => { const a = document.activeElement; if (!(a && a.tagName === "INPUT" && a.closest(".order-form"))) setTypingField(false); }, 400)}
                 placeholder="Исполнитель (обязательно)"
                 maxLength={200}
                 required
