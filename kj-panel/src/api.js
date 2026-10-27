@@ -218,6 +218,9 @@ export const api = {
     request("/api/kj/auto-close", {
       method: "PUT", token, body: { enabled, time, tz_offset: -new Date().getTimezoneOffset() },
     }),
+  getEntryNotice: (token) => request("/api/kj/entry-notice", { token }),
+  setEntryNotice: (token, text) =>
+    request("/api/kj/entry-notice", { method: "PUT", token, body: { text } }),
   getGeneralChat: (token) => request("/api/kj/general-chat", { token }),
   setGeneralChat: (token, enabled) =>
     request("/api/kj/general-chat", { method: "PUT", token, body: { enabled } }),
