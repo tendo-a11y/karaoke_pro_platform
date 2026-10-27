@@ -2988,7 +2988,7 @@ function ProfileNamePanel({ token, meInfo, onNameChanged }) {
 // при этом должен быть уже введён — колбэк проверяет актуальное значение
 // через ref (см. stateRef ниже), чтобы не захватить устаревшее замыкание
 // от момента регистрации колбэка (она происходит один раз при монтировании).
-function ActivationPanel({ token, onActivated, onCancel }) {
+function ActivationPanel({ token, onActivated, onCancel, firstStep = false }) {
   const [tableNo, setTableNo] = useState("");
   // Доп. столы клуба ("7/1 (Vip)", 2026-10-13) — гость выбирает их кнопкой.
   const [extraTables, setExtraTables] = useState([]);
@@ -3109,14 +3109,25 @@ function ActivationPanel({ token, onActivated, onCancel }) {
 
   return (
     <section ref={panelRef} className="panel activation-panel">
-      <h2>Выберите стол и войдите через Google</h2>
-      <p className="empty-hint">
-        Укажите номер своего стола и войдите через Google одним действием — это нужно один раз,
-        дальше ваш стол, история заказов и избранное сохранятся.
-      </p>
-      <p className="empty-hint">
-        Или нажмите «Заказать без входа» — тогда доступны только заказы песен, без избранного, кэшбэка и VIP.
-      </p>
+      {firstStep ? (
+        <>
+          <p className="empty-hint">
+            Далее, войдите через Google <b>(Рекомендуем)</b> одним действием. Доступны: Функции Vip. Бонусы и прочие преимущества.
+          </p>
+          <p className="empty-hint">Без входа в Google всё ограничено.</p>
+        </>
+      ) : (
+        <>
+          <h2>Выберите стол и войдите через Google</h2>
+          <p className="empty-hint">
+            Укажите номер своего стола и войдите через Google одним действием — это нужно один раз,
+            дальше ваш стол, история заказов и избранное сохранятся.
+          </p>
+          <p className="empty-hint">
+            Или нажмите «Заказать без входа» — тогда доступны только заказы песен, без избранного, кэшбэка и VIP.
+          </p>
+        </>
+      )}
       {error && <div className="banner banner--error">{error}</div>}
       <div className="order-form">
         <input
@@ -4061,7 +4072,7 @@ export default function App() {
           <p className="table-first-hint">
             Введите номер стола. Он написан на бумажке на столе, либо спросите у диджея.
           </p>
-          <ActivationPanel token={session.token} onActivated={handleActivated} onCancel={() => {}} />
+          <ActivationPanel token={session.token} onActivated={handleActivated} onCancel={() => {}} firstStep />
         </div>
       </div>
     );
