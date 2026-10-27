@@ -4146,7 +4146,7 @@ export default function App() {
               if (linkCategory) {
                 setServiceId(String(linkCategory.id));
                 // Каждый заказ по ссылке: гость обязан подтвердить или отменить цену.
-                setInternetHint({ name: linkCategory.name, price: linkCategory.price });
+                setInternetHint({ name: linkCategory.name, price: linkCategory.price, fromLink: true });
               }
             }
           }}
@@ -4161,7 +4161,7 @@ export default function App() {
         {internetHint ? (
           <div className="link-confirm-overlay" role="alertdialog" aria-modal="true">
             <div className="link-confirm-plate">
-              <p>Заказ по ссылке. Категория: <b>{internetHint.name}</b></p>
+              <p>{internetHint.fromLink !== false ? "Заказ по ссылке. " : ""}Категория: <b>{internetHint.name}</b></p>
               <p>Цена {Number(internetHint.price)} лей. Подтвердите заказ или отмените его.</p>
               <div className="link-confirm-buttons">
                 <button
@@ -4318,6 +4318,13 @@ export default function App() {
                   services={services}
                   value={serviceId}
                   onChange={(v) => {
+                    // EXCLUSIVE в обычном заказе: то же подтверждение цены, что и по ссылке (запрос 2026-10-27).
+                    const picked = services.find((s) => String(s.id) === String(v));
+                    if (v && picked && (picked.name || "").trim().toUpperCase() === "EXCLUSIVE" && !songUrl) {
+                      setServiceId(v);
+                      setInternetHint({ name: picked.name, price: picked.price, fromLink: false });
+                      return;
+                    }
                     setServiceId(v);
                     // Выбор категории и есть заказ (запрос 2026-10): если вход и стол уже есть, заказ уходит сразу.
                     // Ссылочный заказ и первое предупреждение об заказе не трогаем — у них свой путь.
