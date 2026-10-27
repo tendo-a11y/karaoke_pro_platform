@@ -374,6 +374,10 @@ export const api = {
     request(`/api/kj/table-groups/${clubId}/${tableNo}/move`, {
       method: "PUT", token, body: { new_table_no: newTableNo },
     }),
+  moveTableMember: (token, clubId, tableNo, guestId, newTableNo) =>
+    request(`/api/kj/table-groups/${clubId}/${tableNo}/members/${guestId}/move`, {
+      method: "PUT", token, body: { new_table_no: newTableNo },
+    }),
   // ДОБАВЛЕНО (запрос пользователя 2026-09-29, "кнопка. Закрыть все столы.
   // просто закрывает вечер когда все ушли с караоке.") — то же самое
   // закрытие, что и closeTableGroup выше, но сразу для всех занятых столов
