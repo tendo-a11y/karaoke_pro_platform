@@ -1548,6 +1548,11 @@ const FINDER_MODES = [
   { key: "screenshot", label: "📷 Скриншот" },
 ];
 
+// Категория EXCLUSIVE: в названии бывает русская С вместо латинской, поэтому проверка по маске.
+function isExclusiveCategory(s) {
+  return /^EX.LUSIVE$/i.test((s?.name || "").trim());
+}
+
 // Значок YouTube рядом с кнопкой "Ссылка" (запрос 2026-10-27): красная плашка с белым треугольником.
 function YoutubeBadge() {
   return (
@@ -3804,8 +3809,8 @@ export default function App() {
     if (!session || !songTitle.trim()) return;
     // EXCLUSIVE без ссылки не отправляем: открываем поле для ссылки (запрос 2026-10-27).
     const chosenCat = services.find((s) => String(s.id) === String(serviceId));
-    // Категорию определяем по флагу link_default: в названии у EXCLUSIVE бывает русская С, и сравнение по имени не срабатывает.
-    if (chosenCat && chosenCat.link_default && !songUrl) {
+    // EXCLUSIVE узнаём по названию; в нём бывает русская С вместо латинской, поэтому маска.
+    if (chosenCat && isExclusiveCategory(chosenCat) && !songUrl) {
       setFinderInit("link");
       setSearchKey((k) => k + 1);
       return;
@@ -4342,7 +4347,7 @@ export default function App() {
                   onChange={(v) => {
                     // EXCLUSIVE в обычном заказе: то же подтверждение цены, что и по ссылке (запрос 2026-10-27).
                     const picked = services.find((s) => String(s.id) === String(v));
-                    if (v && picked && picked.link_default && !songUrl) {
+                    if (v && picked && isExclusiveCategory(picked) && !songUrl) {
                       setServiceId(v);
                       setFinderInit("link");
                       setSearchKey((k) => k + 1);
