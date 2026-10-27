@@ -3804,7 +3804,8 @@ export default function App() {
     if (!session || !songTitle.trim()) return;
     // EXCLUSIVE без ссылки не отправляем: открываем поле для ссылки (запрос 2026-10-27).
     const chosenCat = services.find((s) => String(s.id) === String(serviceId));
-    if (chosenCat && (chosenCat.name || "").trim().toUpperCase() === "EXCLUSIVE" && !songUrl) {
+    // Категорию определяем по флагу link_default: в названии у EXCLUSIVE бывает русская С, и сравнение по имени не срабатывает.
+    if (chosenCat && chosenCat.link_default && !songUrl) {
       setFinderInit("link");
       setSearchKey((k) => k + 1);
       return;
@@ -4341,7 +4342,7 @@ export default function App() {
                   onChange={(v) => {
                     // EXCLUSIVE в обычном заказе: то же подтверждение цены, что и по ссылке (запрос 2026-10-27).
                     const picked = services.find((s) => String(s.id) === String(v));
-                    if (v && picked && (picked.name || "").trim().toUpperCase() === "EXCLUSIVE" && !songUrl) {
+                    if (v && picked && picked.link_default && !songUrl) {
                       setServiceId(v);
                       setFinderInit("link");
                       setSearchKey((k) => k + 1);
