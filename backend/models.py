@@ -1258,6 +1258,10 @@ class GuestStatus(db.Model):
     trusted = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
     blocked_at = db.Column(db.DateTime(timezone=True), nullable=True)
     blocked_by = db.Column(db.Integer, db.ForeignKey("kj_operators.id"), nullable=True)
+    # Когда админ стола снял гостя со стола (кнопка "Снять со стола"). Нужно,
+    # чтобы при следующем входе гость увидел плашку "Вы сняты со стола".
+    # Сбрасывается, как только гость снова выбрал стол.
+    table_removed_at = db.Column(db.DateTime(timezone=True), nullable=True)
     updated_at = db.Column(db.DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
 
     club = db.relationship("Club")
