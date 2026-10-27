@@ -4012,6 +4012,31 @@ function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged, auto
       setPriorityError(err instanceof ApiError ? err.message : String(err));
     }
   }
+  // Перемещение одного гостя за другой стол (запрос 2026-10-28): гость
+  // ошибся столом. Его неигранные песни уезжают вместе с ним.
+  const [memberMoveId, setMemberMoveId] = useState(null);
+  const [memberMoveNo, setMemberMoveNo] = useState("");
+  const [memberMoveBusy, setMemberMoveBusy] = useState(false);
+  const [memberMoveError, setMemberMoveError] = useState(null);
+  async function moveMemberToTable(guestId) {
+    const newNo = parseTableInput(memberMoveNo);
+    if (!Number.isInteger(newNo) || newNo < 1) {
+      setMemberMoveError("Укажите номер стола");
+      return;
+    }
+    setMemberMoveBusy(true);
+    setMemberMoveError(null);
+    try {
+      await api.moveTableMember(token, clubId, tableNo, guestId, newNo);
+      setMemberMoveId(null);
+      setMemberMoveNo("");
+      await reload();
+    } catch (err) {
+      setMemberMoveError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setMemberMoveBusy(false);
+    }
+  }
   // Оператор сам убирает песню из очереди стола (запрос 2026-10-27):
   // тот же PUT /order/<id>/reject, что и "🗑 Убрать" на доске заказов.
   async function removeFromTableQueue(orderId) {
@@ -4297,6 +4322,28 @@ function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged, auto
                   </span>
                 </div>
                 <div className="vip-row__actions">
+                  {memberMoveId === member.guest_id ? (
+                    <div>
+                      <input
+                        type="number"
+                        min="1"
+                        placeholder="Новый стол"
+                        value={memberMoveNo}
+                        onChange={(e) => setMemberMoveNo(e.target.value)}
+                      />{" "}
+                      <button type="button" className="btn-link" disabled={memberMoveBusy} onClick={() => moveMemberToTable(member.guest_id)}>
+                        Переместить
+                      </button>{" "}
+                      <button type="button" className="btn-link" onClick={() => { setMemberMoveId(null); setMemberMoveError(null); }}>
+                        Отмена
+                      </button>
+                      {memberMoveError && <div className="banner banner--error">{memberMoveError}</div>}
+                    </div>
+                  ) : (
+                    <button type="button" className="btn-link" onClick={() => { setMemberMoveId(member.guest_id); setMemberMoveNo(""); setMemberMoveError(null); }}>
+                      ⇄ На другой стол
+                    </button>
+                  )}{" "}
                   <button type="button" className="btn-link" onClick={() => setSelectedGuestId(member.guest_id)}>
                     Открыть карточку →
                   </button>
