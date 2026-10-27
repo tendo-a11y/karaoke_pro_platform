@@ -2995,6 +2995,11 @@ const REMOVED_NOTICE_BOX = { position: "fixed", top: "50%", left: "50%", transfo
 const REMOVED_NOTICE_BTN = { display: "block", width: "100%", padding: "16px", borderRadius: 12, border: "none", fontWeight: 800, fontSize: 20, marginTop: 12, color: "#fff", background: "#422006", cursor: "pointer" };
 const REMOVED_NOTICE_OVERLAY = { position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.6)", zIndex: 1000 };
 
+// Карточка "Заказ отправлен" — как "Вы приняты на стол", зелёный цвет "Успешное действие" (#4ADE80).
+const ORDER_OK_BOX = { position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)", zIndex: 1001, width: "calc(100% - 32px)", maxWidth: 460, boxSizing: "border-box", padding: "22px 18px", borderRadius: 16, textAlign: "center", fontSize: 22, fontWeight: 800, lineHeight: 1.3, boxShadow: "0 12px 40px rgba(0,0,0,0.5)", margin: 0, background: "#4ADE80", color: "#052e16" };
+const ORDER_OK_BTN = { display: "block", width: "100%", padding: "16px", borderRadius: 12, border: "none", fontWeight: 800, fontSize: 20, marginTop: 12, color: "#fff", background: "#052e16", cursor: "pointer" };
+const ORDER_OK_OVERLAY = { position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.6)", zIndex: 1000 };
+
 const DEFAULT_ENTRY_NOTICE = "Введите номер стола. Он написан на бумажке на столе, либо спросите у диджея.\nДалее, войдите через Google (Рекомендуем) одним действием. Доступны: Функции Vip. Бонусы и прочие преимущества.\nБез входа в Google всё ограничено.";
 
 function ActivationPanel({ token, onActivated, onCancel, firstStep = false }) {
@@ -4209,13 +4214,15 @@ export default function App() {
 
       <AddToHomeScreenHint /><OfflineBanner />
       {submitOk != null && (
-        // Уведомление о принятом заказе — сразу под шапкой, а не внизу формы (запрос 2026-10).
-        <div className="banner banner--ok submit-ok-top">
-          {submitOk > 0
-            ? `Заказ отправлен! Ваш номер в очереди: ${submitOk}.`
-            : "Заказ отправлен!"}
-          <button type="button" className="link-btn" onClick={() => setSubmitOk(null)} aria-label="Закрыть">✕</button>
-        </div>
+        <>
+          <div style={ORDER_OK_OVERLAY} />
+          <section role="alert" style={ORDER_OK_BOX}>
+            <p style={{ margin: 0 }}>
+              ✅ {submitOk > 0 ? `Заказ отправлен! Ваш номер в очереди: ${submitOk}.` : "Заказ отправлен!"}
+            </p>
+            <button type="button" style={ORDER_OK_BTN} onClick={() => setSubmitOk(null)}>ОК</button>
+          </section>
+        </>
       )}
       <TableJoinBanner token={session?.token} status={meInfo.table_group_status} hasTable={meInfo.table_no != null} tableNo={meInfo.table_no} onGoOrders={() => { setView("home"); setOrderExtra(null); setFinderInit("text"); setSearchKey((k) => k + 1); const panel = document.querySelector(".order-form-panel"); if (panel) panel.scrollIntoView({ behavior: "smooth", block: "start" }); }} />
       <TableClosedBanner tableNo={meInfo?.table_no} enabled={Boolean(session)} signal={closedSignal} />
