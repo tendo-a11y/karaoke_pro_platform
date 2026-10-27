@@ -93,6 +93,14 @@ def _guest_type_and_vip(club_id: int, guest_id: int):
 FIRST_ORDER_BANNER_DEFAULT = "Запрещено для заказа: Теремная Романтика, Блатная лирика.\n\nС уважением,\nАдминистрация"
 
 
+def _table_removed_flag(club_id, guest_id, table_no):
+    """True, если гостя сняли со стола и он ещё не выбрал стол заново."""
+    if table_no is not None:
+        return False
+    row = guest_status_service.get_status(club_id, guest_id)
+    return bool(row and row.table_removed_at)
+
+
 @bp.get("/me")
 @require_guest
 def me():
@@ -153,6 +161,7 @@ def me():
         "table_close_receipt": table_close_receipt,
         "club_name": club.name if club else None,
         "entry_notice": club.entry_notice if club else None,
+        "table_removed": _table_removed_flag(g.club_id, g.guest_id, g.table_no),
         # ИЗМЕНЕНО (запрос пользователя 2026-10-01): чат гостя с ведущим
         # теперь работает всегда и больше не завязан на этот флаг (см.
         # send_chat_message ниже). Поле оставлено для будущего отдельного
@@ -1430,6 +1439,7 @@ def kick_table_group_member(target_guest_id):
         return api_error(404, "NOT_A_MEMBER", "Этот гость не состоит в группе")
     # ДОБАВЛЕНО (2026-10): сняли со стола — его неспетые песни убираются.
     vdj_service.close_guest_orders(g.club_id, target_guest_id)
+    guest_status_service.mark_removed_from_table(g.club_id, target_guest_id)
     return api_ok({"kicked": True})
 
 
