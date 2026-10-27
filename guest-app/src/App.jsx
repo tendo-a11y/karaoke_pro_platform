@@ -2989,6 +2989,12 @@ function ProfileNamePanel({ token, meInfo, onNameChanged }) {
 // через ref (см. stateRef ниже), чтобы не захватить устаревшее замыкание
 // от момента регистрации колбэка (она происходит один раз при монтировании).
 // Текст плашки на экране входа по умолчанию (дословно, запрос 2026-10-27). KJ может заменить его.
+// Плашка "Вы сняты со стола" — как у "Вы приняты на стол": крупная карточка по центру,
+// без моргания, кнопка ОК. Цвет — "Предупреждение" из палитры уведомлений (#FBBF24).
+const REMOVED_NOTICE_BOX = { position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)", zIndex: 1001, width: "calc(100% - 32px)", maxWidth: 460, boxSizing: "border-box", padding: "22px 18px", borderRadius: 16, textAlign: "center", fontSize: 22, fontWeight: 800, lineHeight: 1.3, boxShadow: "0 12px 40px rgba(0,0,0,0.5)", margin: 0, background: "#FBBF24", color: "#422006" };
+const REMOVED_NOTICE_BTN = { display: "block", width: "100%", padding: "16px", borderRadius: 12, border: "none", fontWeight: 800, fontSize: 20, marginTop: 12, color: "#fff", background: "#422006", cursor: "pointer" };
+const REMOVED_NOTICE_OVERLAY = { position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.6)", zIndex: 1000 };
+
 const DEFAULT_ENTRY_NOTICE = "Введите номер стола. Он написан на бумажке на столе, либо спросите у диджея.\nДалее, войдите через Google (Рекомендуем) одним действием. Доступны: Функции Vip. Бонусы и прочие преимущества.\nБез входа в Google всё ограничено.";
 
 function ActivationPanel({ token, onActivated, onCancel, firstStep = false }) {
@@ -4058,6 +4064,7 @@ export default function App() {
   // а не отдельное правило.
   // Вход без Google (2026-10): стол выбран — заказ открыт (решает сервер,
   // см. create_order); постоянный профиль нужен только для избранного и VIP.
+  const [removedNoticeClosed, setRemovedNoticeClosed] = useState(false);
   // Гость принят на стол (admin/member) — поиск по умолчанию снова ИИ-поиск,
   // даже если до этого был выбран "Эксклюзив" (ссылка) или скриншот.
   useEffect(() => {
@@ -4077,8 +4084,14 @@ export default function App() {
       <div className="app-shell centered">
         <h1>🎤 {meInfo.club_name || "Karaoke"}</h1>
         <div className="table-first-screen">
-          {meInfo.table_removed && (
-            <div className="entry-notice entry-notice--removed">Вы сняты со стола. Войдите заново.</div>
+          {meInfo.table_removed && !removedNoticeClosed && (
+            <>
+              <div style={REMOVED_NOTICE_OVERLAY} />
+              <section role="alert" style={REMOVED_NOTICE_BOX}>
+                <p style={{ margin: 0 }}>🚪 Вы сняты со стола. Войдите заново.</p>
+                <button type="button" style={REMOVED_NOTICE_BTN} onClick={() => setRemovedNoticeClosed(true)}>ОК</button>
+              </section>
+            </>
           )}
           <div className="entry-notice">{meInfo.entry_notice || DEFAULT_ENTRY_NOTICE}</div>
           <ActivationPanel token={session.token} onActivated={handleActivated} onCancel={() => {}} firstStep />
