@@ -119,6 +119,8 @@ class Club(db.Model):
     # Вкл/Выкл): False — гости не видят живую очередь клуба (отдаётся пустой
     # список). Переключается KJ справа от "Активная очередь VirtualDJ".
     guest_queue_visible = db.Column(db.Boolean, nullable=False, default=True, server_default=db.true())
+    # Плашка на экране входа (стол + Google), меняется в KJ (запрос 2026-10-27). None — текст по умолчанию.
+    entry_notice = db.Column(db.Text, nullable=True)
 
     # ДОБАВЛЕНО (2026-10-04, запрос пользователя "бот и приложение — два
     # отдельных инструмента, что в боте то и в приложении"): перенос
