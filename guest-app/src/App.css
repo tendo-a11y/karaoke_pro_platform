@@ -1187,3 +1187,12 @@ button.step-blink-fill { animation: button-fill-blink 1s ease-in-out infinite; }
 .favorites-panel--picking .order-list > li:not(.row-pick-keep),
 .orders-block--pick .order-list > li:not(.row-pick-keep) { display: none !important; }
 .row-pick-keep > :not(.order-row__song):not(.order-row__artist):not(.service-picker):not(.tone-picker) { display: none !important; }
+
+/* Поле ссылки внутри меню категорий, после выбора EXCLUSIVE (запрос 2026-10-27). */
+.service-picker__linkbox { display: flex; flex-direction: column; gap: 8px; padding: 12px; border-top: 1px solid var(--border); }
+.service-picker__linkhint { font-size: 13px; color: var(--muted); }
+.service-picker__linkinput { width: 100%; box-sizing: border-box; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface, #1b1f2a); color: inherit; font-size: 16px; }
+.service-picker__linkerror { font-size: 13px; color: #f87171; }
+.service-picker__linkbuttons { display: flex; gap: 8px; }
+.service-picker__linkbuttons button { flex: 1; padding: 10px; border-radius: 10px; border: 1px solid var(--border); background: transparent; color: inherit; font-weight: 600; }
+.service-picker__linkok { background: #16a34a !important; border-color: #16a34a !important; color: #fff !important; }
