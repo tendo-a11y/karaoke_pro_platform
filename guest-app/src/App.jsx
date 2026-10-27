@@ -574,7 +574,8 @@ function ServiceSelect({ services, value, onChange, disabled, highlight = false,
       </button>
       {open && (
         <div className="service-picker__list">
-          {SECTION_KEYS.map((sectionKey) => {
+          {/* Пока открыто поле ссылки (EXCLUSIVE), список категорий скрыт; "Назад" возвращает его. */}
+          {!linkService && SECTION_KEYS.map((sectionKey) => {
             const group = services
               .map((s, index) => ({ s, index }))
               .filter(({ s }) => (s.section || "main") === sectionKey);
@@ -4794,11 +4795,14 @@ function TableJoinBanner({ token, status, hasTable, tableNo, onGoOrders }) {
     );
   }
   if (status === "pending") {
+    // Без мигания; серый непрозрачный фон скрывает всё остальное на экране.
     return (
-      <section role="status" style={{ ...bigBox, background: "#bfdbfe", color: "#1e3a8a", animation: "kpPendingBlink 1s ease-in-out infinite" }}>
-        <style>{"@keyframes kpPendingBlink{0%,100%{opacity:1}50%{opacity:0.35}}"}</style>
-        <p style={{ margin: 0 }}>⏳ Запрос отправлен админу стола. Админ стола — тот, кто первым сел за стол. Ждите подтверждения.</p>
-      </section>
+      <>
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "#374151", zIndex: 1000 }} />
+        <section role="status" style={{ ...bigBox, background: "#bfdbfe", color: "#1e3a8a" }}>
+          <p style={{ margin: 0 }}>⏳ Запрос отправлен админу стола. Админ стола — тот, кто первым сел за стол. Ждите подтверждения.</p>
+        </section>
+      </>
     );
   }
   if (first) {
