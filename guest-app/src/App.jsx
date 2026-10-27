@@ -1633,24 +1633,16 @@ function useTypingPlaceholder(phrases, enabled) {
   return hint;
 }
 
-function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSuggestOther, onSearchStart, onAiStatus, onConfirmChange, active = false, showProfileTabs = true, linkOpenKey = 0 }) {
+function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSuggestOther, onSearchStart, onAiStatus, onConfirmChange, active = false, showProfileTabs = true, initialMode = "text" }) {
   // "Не эта" под найденной песней: подсказываем другие способы — моргают "Ссылка" и "Скриншот".
   const [suggestOther, setSuggestOther] = useState(false);
   // Неудачный поиск — пусть ещё моргает поле "Название песни" (запрос пользователя 2026-10).
   useEffect(() => {
     if (onSuggestOther) onSuggestOther(suggestOther);
   }, [suggestOther, onSuggestOther]);
-  const [mode, setMode] = useState("text");
+  // initialMode: EXCLUSIVE выбран вручную — поле для ссылки открывается сразу (запрос 2026-10-27).
+  const [mode, setMode] = useState(initialMode);
   const [text, setText] = useState("");
-  // EXCLUSIVE выбран вручную: открываем поле для ссылки (запрос 2026-10-27).
-  useEffect(() => {
-    if (!linkOpenKey) return;
-    setMode("link");
-    setText("");
-    setResults([]);
-    setSearched(false);
-    setError(null);
-  }, [linkOpenKey]);
   const [results, setResults] = useState([]);
   const [searching, setSearching] = useState(false);
   const [searched, setSearched] = useState(false);
@@ -3407,7 +3399,7 @@ export default function App() {
   const [aiSearchStarted, setAiSearchStarted] = useState(false);
   // Отмена в списке категорий возвращает к началу поиска (запрос 2026-10-27): поиск ИИ пересоздаётся.
   const [searchKey, setSearchKey] = useState(0);
-  const [linkOpenKey, setLinkOpenKey] = useState(0);
+  const [finderInit, setFinderInit] = useState("text");
   // Пока печатают название или исполнителя, список категорий не открывается (запрос 2026-10-27).
   const [typingField, setTypingField] = useState(false);
   const [aiSearchFailed, setAiSearchFailed] = useState(false);
@@ -3813,7 +3805,8 @@ export default function App() {
     // EXCLUSIVE без ссылки не отправляем: открываем поле для ссылки (запрос 2026-10-27).
     const chosenCat = services.find((s) => String(s.id) === String(serviceId));
     if (chosenCat && (chosenCat.name || "").trim().toUpperCase() === "EXCLUSIVE" && !songUrl) {
-      setLinkOpenKey((k) => k + 1);
+      setFinderInit("link");
+      setSearchKey((k) => k + 1);
       return;
     }
 
@@ -4153,7 +4146,7 @@ export default function App() {
         "Заказать". */}
         <AiSearch
           key={searchKey}
-          linkOpenKey={linkOpenKey}
+          initialMode={finderInit}
           token={session.token}
           onConfirmChange={setSongConfirming}
           active={aiSearchStarted}
@@ -4350,7 +4343,8 @@ export default function App() {
                     const picked = services.find((s) => String(s.id) === String(v));
                     if (v && picked && (picked.name || "").trim().toUpperCase() === "EXCLUSIVE" && !songUrl) {
                       setServiceId(v);
-                      setLinkOpenKey((k) => k + 1);
+                      setFinderInit("link");
+                      setSearchKey((k) => k + 1);
                       return;
                     }
                     setServiceId(v);
@@ -4373,6 +4367,7 @@ export default function App() {
                     setServiceId("");
                     setSongUrl(null);
                     setAiSearchStarted(false);
+                    setFinderInit("text");
                     setSearchKey((k) => k + 1);
                   }}
                 />
