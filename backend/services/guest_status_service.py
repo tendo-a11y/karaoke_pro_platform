@@ -38,6 +38,17 @@ def set_table(club_id: int, guest_id: int, table_no: int | None) -> GuestStatus:
     """
     status = _get_or_create(club_id, guest_id)
     status.table_no = table_no
+    if table_no is not None:
+        status.table_removed_at = None
+    db.session.commit()
+    return status
+
+
+def mark_removed_from_table(club_id: int, guest_id: int) -> GuestStatus:
+    """Снят админом стола: стола нет и гость увидит плашку при входе."""
+    status = _get_or_create(club_id, guest_id)
+    status.table_no = None
+    status.table_removed_at = _utcnow()
     db.session.commit()
     return status
 
