@@ -486,7 +486,7 @@ function ChatAlertToggle() {
 const SECTION_KEYS = ["main", "extra"];
 const SECTION_TITLES = { main: "Основные", extra: "Дополнительные" };
 
-function ServiceSelect({ services, value, onChange, disabled, highlight = false, onOpen, onOpenChange, onCancel, onLinkSubmit }) {
+function ServiceSelect({ services, value, onChange, disabled, highlight = false, onOpen, onOpenChange, onCancel, onLinkSubmit, gate }) {
   // Свой список выбора категории вместо системного (запрос пользователя
   // 2026-10): в раскрытом списке у каждой категории кнопка "❓", которая
   // открывает карточку категории поверх экрана (название, цена, описание,
@@ -562,6 +562,9 @@ function ServiceSelect({ services, value, onChange, disabled, highlight = false,
         disabled={disabled}
         aria-expanded={open}
         onClick={() => {
+          // Категории открываются только после входа за стол (запрос 2026-10-27):
+          // если гость ещё не вошёл, gate открывает экран входа вместо списка.
+          if (!open && gate?.()) return;
           if (!open) onOpen?.();
           setOpen(!open);
         }}
@@ -4048,6 +4051,20 @@ export default function App() {
   // см. create_order); постоянный профиль нужен только для избранного и VIP.
   const activated = meInfo.table_no != null;
 
+  // Вход первым шагом (решение 2026-10-27): гость сначала вводит номер стола
+  // и входит через Google, и только потом видит поиск песен и категории.
+  if (!activated && !getLegalPage()) {
+    return (
+      <div className="app-shell centered">
+        <h1>🎤 Karaoke</h1>
+        <p className="table-first-hint">
+          Введите номер стола. Он написан на бумажке на столе, либо спросите у диджея.
+        </p>
+        <ActivationPanel token={session.token} onActivated={handleActivated} onCancel={() => {}} />
+      </div>
+    );
+  }
+
   // Групповой стол (утверждённая спецификация, вариант А — полноценный
   // шлюз): без стола эта механика не действует вообще; со столом —
   // заказывать можно, только пока сервер считает гостя admin/member
@@ -4388,6 +4405,11 @@ export default function App() {
                 <ServiceSelect
                   services={services}
                   value={serviceId}
+                  gate={() => {
+                    if (activated) return false;
+                    setShowActivation(true);
+                    return true;
+                  }}
                   onLinkSubmit={(url, linkCat) => {
                     // EXCLUSIVE вручную: ссылка введена в меню категории — тот же путь, что и заказ по ссылке.
                     setSongUrl(url);
