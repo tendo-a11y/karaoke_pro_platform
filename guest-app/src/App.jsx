@@ -4219,7 +4219,7 @@ export default function App() {
         ограничивается (веткой ниже) только форма ввода со кнопкой
         "Заказать". */}
         <AiSearch
-          key={searchKey}
+          key={`${searchKey}-${canOrder ? "ok" : "wait"}`}
           initialMode={finderInit}
           token={session.token}
           onConfirmChange={setSongConfirming}
