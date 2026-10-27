@@ -4065,6 +4065,9 @@ export default function App() {
       <div className="app-shell centered">
         <h1>🎤 {meInfo.club_name || "Karaoke"}</h1>
         <div className="table-first-screen">
+          {meInfo.table_removed && (
+            <div className="entry-notice entry-notice--removed">Вы сняты со стола. Войдите заново.</div>
+          )}
           <div className="entry-notice">{meInfo.entry_notice || DEFAULT_ENTRY_NOTICE}</div>
           <ActivationPanel token={session.token} onActivated={handleActivated} onCancel={() => {}} firstStep />
         </div>
