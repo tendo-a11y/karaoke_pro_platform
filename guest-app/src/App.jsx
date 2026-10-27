@@ -486,7 +486,7 @@ function ChatAlertToggle() {
 const SECTION_KEYS = ["main", "extra"];
 const SECTION_TITLES = { main: "Основные", extra: "Дополнительные" };
 
-function ServiceSelect({ services, value, onChange, disabled, highlight = false, onOpen, onOpenChange, onCancel }) {
+function ServiceSelect({ services, value, onChange, disabled, highlight = false, onOpen, onOpenChange, onCancel, onLinkSubmit }) {
   // Свой список выбора категории вместо системного (запрос пользователя
   // 2026-10): в раскрытом списке у каждой категории кнопка "❓", которая
   // открывает карточку категории поверх экрана (название, цена, описание,
@@ -503,13 +503,39 @@ function ServiceSelect({ services, value, onChange, disabled, highlight = false,
   const isCrazy = (s) => (s.name || "").trim().toUpperCase() === "CRAZY";
   const labelOf = (s) => `${s.name}${s.is_free ? " (бесплатно)" : ` — ${s.price}`}`;
 
+  // EXCLUSIVE (категория для заказов по ссылке): после нажатия не закрываем меню,
+  // а открываем поле для ссылки прямо внутри него (запрос 2026-10-27).
+  const [linkId, setLinkId] = useState(null);
+  const [linkText, setLinkText] = useState("");
+  const [linkError, setLinkError] = useState(null);
+  const linkService = services.find((s) => String(s.id) === String(linkId));
+
   function choose(service) {
     if (isCrazy(service)) {
       setCardId(service.id);
       return;
     }
+    if (service.link_default && onLinkSubmit) {
+      setLinkId(service.id);
+      setLinkText("");
+      setLinkError(null);
+      return;
+    }
     setOpen(false);
     onChange(String(service.id));
+  }
+
+  function submitLink(event) {
+    event.preventDefault();
+    const url = linkText.trim();
+    if (!/^https?:\/\/(www\.|m\.|music\.)?(youtube\.com|youtu\.be)\//i.test(url)) {
+      setLinkError("Нужна ссылка с YouTube — откройте песню в YouTube, нажмите «Поделиться» и вставьте ссылку сюда.");
+      return;
+    }
+    const service = linkService;
+    setLinkId(null);
+    setOpen(false);
+    onLinkSubmit?.(url, service);
   }
 
   function confirmCard() {
@@ -586,7 +612,25 @@ function ServiceSelect({ services, value, onChange, disabled, highlight = false,
             </div>
             );
           })}
-          <button type="button" className="service-picker__cancel" onClick={() => { setOpen(false); onCancel?.(); }}>
+          {linkService && (
+            <form className="service-picker__linkbox" onSubmit={submitLink}>
+              <div className="service-picker__linkhint">{linkService.name}: вставьте ссылку на песню с YouTube</div>
+              <input
+                type="url"
+                className="service-picker__linkinput"
+                placeholder="Вставьте ссылку на песню с YouTube"
+                value={linkText}
+                onChange={(e) => { setLinkText(e.target.value); setLinkError(null); }}
+                autoFocus
+              />
+              {linkError ? <div className="service-picker__linkerror">{linkError}</div> : null}
+              <div className="service-picker__linkbuttons">
+                <button type="submit" className="service-picker__linkok">Далее</button>
+                <button type="button" className="service-picker__linkback" onClick={() => { setLinkId(null); setLinkError(null); }}>Назад</button>
+              </div>
+            </form>
+          )}
+          <button type="button" className="service-picker__cancel" onClick={() => { setOpen(false); setLinkId(null); onCancel?.(); }}>
             Отмена
           </button>
         </div>
@@ -4344,15 +4388,13 @@ export default function App() {
                 <ServiceSelect
                   services={services}
                   value={serviceId}
+                  onLinkSubmit={(url, linkCat) => {
+                    // EXCLUSIVE вручную: ссылка введена в меню категории — тот же путь, что и заказ по ссылке.
+                    setSongUrl(url);
+                    setServiceId(String(linkCat.id));
+                    setInternetHint({ name: linkCat.name, price: linkCat.price, fromLink: true });
+                  }}
                   onChange={(v) => {
-                    // EXCLUSIVE в обычном заказе: то же подтверждение цены, что и по ссылке (запрос 2026-10-27).
-                    const picked = services.find((s) => String(s.id) === String(v));
-                    if (v && picked && isExclusiveCategory(picked) && !songUrl) {
-                      setServiceId(v);
-                      setFinderInit("link");
-                      setSearchKey((k) => k + 1);
-                      return;
-                    }
                     setServiceId(v);
                     // Выбор категории и есть заказ (запрос 2026-10): если вход и стол уже есть, заказ уходит сразу.
                     // Ссылочный заказ и первое предупреждение об заказе не трогаем — у них свой путь.
