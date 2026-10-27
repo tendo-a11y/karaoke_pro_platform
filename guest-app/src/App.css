@@ -1173,7 +1173,8 @@ button.step-blink-fill { animation: button-fill-blink 2s ease-in-out infinite; }
 /* Шаг "категория": пока выбирается категория, в форме видна только её кнопка. */
 .order-form-panel--category > :not(.order-form) { display: none !important; }
 /* Шаг "категория": тон остаётся видимым (да/нет) до выбора категории, всё остальное скрыто. */
-.order-form--category-step > :not(.service-picker):not(.tone-picker) { display: none !important; }
+/* Песня выбрана, категория ещё нет: моргает только кнопка категории, всё остальное скрыто */
+.order-form--category-step > :not(.service-picker) { display: none !important; }
 /* Уведомление о принятом заказе держится вверху экрана, пока его не закроют. */
 .submit-ok-top { position: sticky; top: 8px; z-index: 20; }
 /* Списки песен (избранное, новинки и т.д.) открыты: на экране только они и заголовок очереди для закрытия. */
