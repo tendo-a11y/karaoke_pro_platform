@@ -1548,9 +1548,9 @@ const FINDER_MODES = [
   { key: "screenshot", label: "📷 Скриншот" },
 ];
 
-// Категория EXCLUSIVE: в названии бывает русская С вместо латинской, поэтому проверка по маске.
+// Категория для заказов вручную по ссылке (EXCLUSIVE): та же, что у заказа по ссылке — признак link_default в панели KJ.
 function isExclusiveCategory(s) {
-  return /^EX.LUSIVE$/i.test((s?.name || "").trim());
+  return !!s?.link_default;
 }
 
 // Значок YouTube рядом с кнопкой "Ссылка" (запрос 2026-10-27): красная плашка с белым треугольником.
