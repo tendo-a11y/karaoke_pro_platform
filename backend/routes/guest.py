@@ -152,6 +152,7 @@ def me():
         "table_group_status": table_group_status,
         "table_close_receipt": table_close_receipt,
         "club_name": club.name if club else None,
+        "entry_notice": club.entry_notice if club else None,
         # ИЗМЕНЕНО (запрос пользователя 2026-10-01): чат гостя с ведущим
         # теперь работает всегда и больше не завязан на этот флаг (см.
         # send_chat_message ниже). Поле оставлено для будущего отдельного
