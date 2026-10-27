@@ -1383,6 +1383,28 @@ def update_table_settings(club_id):
     })
 
 
+# Плашка на экране входа гостя (запрос 2026-10-27): текст меняет KJ.
+@bp.get("/entry-notice")
+@require_kj
+def get_entry_notice():
+    club = db.session.get(Club, g.club_id)
+    return api_ok({"text": club.entry_notice if club else None})
+
+
+@bp.put("/entry-notice")
+@require_kj
+def set_entry_notice():
+    club = db.session.get(Club, g.club_id)
+    if club is None:
+        return api_error(404, "NOT_FOUND", "Клуб не найден")
+    payload = request.get_json(silent=True) or {}
+    text = payload.get("text")
+    text = text.strip()[:1000] if isinstance(text, str) else ""
+    club.entry_notice = text or None
+    db.session.commit()
+    return api_ok({"text": club.entry_notice})
+
+
 # ДОБАВЛЕНО (2026-10, запрос пользователя): переключатель "Общий чат"
 # (ссылка на группу в Telegram у гостя) — Вкл/Откл из KJ Panel.
 @bp.get("/general-chat")
