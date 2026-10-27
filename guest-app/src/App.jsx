@@ -1633,7 +1633,7 @@ function useTypingPlaceholder(phrases, enabled) {
   return hint;
 }
 
-function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSuggestOther, onSearchStart, onAiStatus, onConfirmChange, active = false, showProfileTabs = true }) {
+function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSuggestOther, onSearchStart, onAiStatus, onConfirmChange, active = false, showProfileTabs = true, linkOpenKey = 0 }) {
   // "Не эта" под найденной песней: подсказываем другие способы — моргают "Ссылка" и "Скриншот".
   const [suggestOther, setSuggestOther] = useState(false);
   // Неудачный поиск — пусть ещё моргает поле "Название песни" (запрос пользователя 2026-10).
@@ -1642,6 +1642,15 @@ function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSu
   }, [suggestOther, onSuggestOther]);
   const [mode, setMode] = useState("text");
   const [text, setText] = useState("");
+  // EXCLUSIVE выбран вручную: открываем поле для ссылки (запрос 2026-10-27).
+  useEffect(() => {
+    if (!linkOpenKey) return;
+    setMode("link");
+    setText("");
+    setResults([]);
+    setSearched(false);
+    setError(null);
+  }, [linkOpenKey]);
   const [results, setResults] = useState([]);
   const [searching, setSearching] = useState(false);
   const [searched, setSearched] = useState(false);
@@ -3398,6 +3407,7 @@ export default function App() {
   const [aiSearchStarted, setAiSearchStarted] = useState(false);
   // Отмена в списке категорий возвращает к началу поиска (запрос 2026-10-27): поиск ИИ пересоздаётся.
   const [searchKey, setSearchKey] = useState(0);
+  const [linkOpenKey, setLinkOpenKey] = useState(0);
   // Пока печатают название или исполнителя, список категорий не открывается (запрос 2026-10-27).
   const [typingField, setTypingField] = useState(false);
   const [aiSearchFailed, setAiSearchFailed] = useState(false);
@@ -3800,6 +3810,12 @@ export default function App() {
   async function handleSubmitOrder(event) {
     event.preventDefault();
     if (!session || !songTitle.trim()) return;
+    // EXCLUSIVE без ссылки не отправляем: открываем поле для ссылки (запрос 2026-10-27).
+    const chosenCat = services.find((s) => String(s.id) === String(serviceId));
+    if (chosenCat && (chosenCat.name || "").trim().toUpperCase() === "EXCLUSIVE" && !songUrl) {
+      setLinkOpenKey((k) => k + 1);
+      return;
+    }
 
     // Ознакомительная плашка перед первым заказом (один раз в этом браузере).
     if (meInfo?.first_order_banner?.enabled && !isFirstOrderNoticeSeen()) {
@@ -4137,6 +4153,7 @@ export default function App() {
         "Заказать". */}
         <AiSearch
           key={searchKey}
+          linkOpenKey={linkOpenKey}
           token={session.token}
           onConfirmChange={setSongConfirming}
           active={aiSearchStarted}
@@ -4333,7 +4350,7 @@ export default function App() {
                     const picked = services.find((s) => String(s.id) === String(v));
                     if (v && picked && (picked.name || "").trim().toUpperCase() === "EXCLUSIVE" && !songUrl) {
                       setServiceId(v);
-                      setInternetHint({ name: picked.name, price: picked.price, fromLink: false });
+                      setLinkOpenKey((k) => k + 1);
                       return;
                     }
                     setServiceId(v);
