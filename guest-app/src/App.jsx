@@ -4056,11 +4056,13 @@ export default function App() {
   if (!activated && !getLegalPage()) {
     return (
       <div className="app-shell centered">
-        <h1>🎤 Karaoke</h1>
-        <p className="table-first-hint">
-          Введите номер стола. Он написан на бумажке на столе, либо спросите у диджея.
-        </p>
-        <ActivationPanel token={session.token} onActivated={handleActivated} onCancel={() => {}} />
+        <h1>🎤 {meInfo.club_name || "Karaoke"}</h1>
+        <div className="table-first-screen">
+          <p className="table-first-hint">
+            Введите номер стола. Он написан на бумажке на столе, либо спросите у диджея.
+          </p>
+          <ActivationPanel token={session.token} onActivated={handleActivated} onCancel={() => {}} />
+        </div>
       </div>
     );
   }
