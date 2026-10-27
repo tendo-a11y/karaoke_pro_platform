@@ -39,6 +39,7 @@ from models import (
     TableGroupMember,
     TableJoinRequest,
 )
+from models import STATUS_PENDING, STATUS_PROCESSING, STATUS_QUEUED
 from services import guest_status_service
 from services.table_board_service import ACTIVE_TABLE_STATUSES
 
@@ -499,3 +500,67 @@ def move_table(club_id: int, old_table_no: int, new_table_no: int) -> MoveResult
         guest_status_service.set_table(club_id, guest_id, new_table_no)
 
     return MoveResult(outcome="ok", group=group, member_guest_ids=member_guest_ids)
+
+
+class MemberMoveResult:
+    def __init__(self, outcome=None, moved_order_ids=None):
+        self.outcome = outcome
+        # not_a_member | same_table | destination_not_found | destination_full | ok
+        self.moved_order_ids = moved_order_ids or []
+
+
+# Заказы, которые ещё не сыграны, переезжают вместе с гостем (запрос
+# пользователя 2026-10-28: ошибся столом, KJ переводит гостя на стол, где
+# уже есть админ — песни и чек должны уехать с ним). Уже играющие и
+# сыгранные остаются в чеке старого стола.
+MOVABLE_ORDER_STATUSES = (STATUS_PENDING, STATUS_PROCESSING, STATUS_QUEUED)
+
+
+def move_member(club_id: int, from_table_no: int, to_table_no: int, guest_id: int,
+                max_group_size: int) -> MemberMoveResult:
+    """
+    Присоединение гостя к уже существующему столу (админ стола назначения
+    уже есть). В отличие от move_table переносится только один гость:
+      - его членство уходит со стола from_table_no (с переназначением админа,
+        если уходящий был админом — та же логика, что у кика/выхода);
+      - он становится обычным членом стола to_table_no;
+      - его ещё не сыгранные заказы получают новый table_no (в конец очереди
+        по времени создания, позицию не сохраняем);
+      - его живой стол в GuestStatus меняется, чтобы он мог заказывать.
+    """
+    if from_table_no == to_table_no:
+        return MemberMoveResult(outcome="same_table")
+
+    if get_membership(club_id, from_table_no, guest_id) is None:
+        return MemberMoveResult(outcome="not_a_member")
+
+    if get_group(club_id, to_table_no) is None:
+        return MemberMoveResult(outcome="destination_not_found")
+
+    current_count = TableGroupMember.query.filter_by(club_id=club_id, table_no=to_table_no).count()
+    if current_count >= max_group_size:
+        return MemberMoveResult(outcome="destination_full")
+
+    moved = (
+        Order.query
+        .filter(
+            Order.club_id == club_id,
+            Order.table_no == from_table_no,
+            Order.telegram_user_id == guest_id,
+            Order.status.in_(MOVABLE_ORDER_STATUSES),
+        )
+        .all()
+    )
+    moved_ids = [o.id for o in moved]
+    for order in moved:
+        order.table_no = to_table_no
+
+    db.session.add(TableGroupMember(club_id=club_id, table_no=to_table_no, guest_id=guest_id))
+    db.session.flush()
+    guest_status_service.set_table(club_id, guest_id, to_table_no)
+
+    # Снимаем со старого стола ПОСЛЕ добавления в новый: если гость был
+    # админом старого стола, переназначение выберет оставшихся участников,
+    # а не его самого. _remove_member_and_reassign коммитит сессию сам.
+    _remove_member_and_reassign(club_id, from_table_no, guest_id)
+    return MemberMoveResult(outcome="ok", moved_order_ids=moved_ids)
