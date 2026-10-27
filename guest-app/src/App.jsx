@@ -4217,7 +4217,7 @@ export default function App() {
           <button type="button" className="link-btn" onClick={() => setSubmitOk(null)} aria-label="Закрыть">✕</button>
         </div>
       )}
-      <TableJoinBanner token={session?.token} status={meInfo.table_group_status} hasTable={meInfo.table_no != null} tableNo={meInfo.table_no} onGoOrders={() => { setOrdersTab("current"); setOrderExtra("orders"); }} />
+      <TableJoinBanner token={session?.token} status={meInfo.table_group_status} hasTable={meInfo.table_no != null} tableNo={meInfo.table_no} onGoOrders={() => { setView("home"); setOrderExtra(null); setFinderInit("text"); setSearchKey((k) => k + 1); const panel = document.querySelector(".order-form-panel"); if (panel) panel.scrollIntoView({ behavior: "smooth", block: "start" }); }} />
       <TableClosedBanner tableNo={meInfo?.table_no} enabled={Boolean(session)} signal={closedSignal} />
 
       {meInfo.table_close_receipt && !dismissedCloseRequestIds.has(meInfo.table_close_receipt.id) && (
