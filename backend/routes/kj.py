@@ -2264,6 +2264,47 @@ def move_table_group_route(club_id, table_no):
     })
 
 
+@bp.put("/table-groups/<int:club_id>/<int:table_no>/members/<int:guest_id>/move")
+@require_kj
+def move_table_member_route(club_id, table_no, guest_id):
+    """
+    Переместить одного гостя за другой стол (запрос 2026-10-28: ошибся столом,
+    сел за 5-й, а записан за 2-й). Тело: {"new_table_no": int}. Стол назначения
+    должен уже существовать (с админом). Песни гостя, ещё не сыгранные,
+    переезжают вместе с ним — см. table_group_service.move_member.
+    """
+    denied = _ensure_own_club(club_id)
+    if denied:
+        return denied
+    payload = request.get_json(silent=True) or {}
+    new_table_no = payload.get("new_table_no")
+    if not isinstance(new_table_no, int) or isinstance(new_table_no, bool) or new_table_no < 1:
+        return api_error(400, "VALIDATION_ERROR", "new_table_no должен быть положительным числом")
+
+    club = db.session.get(Club, club_id)
+    if club and not extra_table_service.is_valid_table(club, new_table_no):
+        return api_error(400, "VALIDATION_ERROR", extra_table_service.out_of_range_message(club))
+
+    result = table_group_service.move_member(
+        club_id, table_no, new_table_no, guest_id, current_app.config["MAX_GROUP_SIZE"],
+    )
+    if result.outcome == "not_a_member":
+        return api_error(404, "NOT_A_MEMBER", "Этот гость не сидит за данным столом")
+    if result.outcome == "same_table":
+        return api_error(400, "VALIDATION_ERROR", "Новый номер совпадает с текущим")
+    if result.outcome == "destination_not_found":
+        return api_error(404, "TABLE_EMPTY", "За столом назначения сейчас никого нет")
+    if result.outcome == "destination_full":
+        return api_error(409, "TABLE_FULL", "За столом назначения уже максимум гостей")
+
+    emit_table_group_moved(club_id, table_no, new_table_no)
+    return api_ok({
+        "table_no": new_table_no,
+        "guest_id": str(guest_id),
+        "moved_order_ids": result.moved_order_ids,
+    })
+
+
 # --- Статус моста VirtualDJ (запрос пользователя 2026-09: "переключатель"
 # для контроля — светофор в KJ Panel, подключён ли сейчас мост). Живое
 # состояние, не БД — см. докстринг vdj/bridge_status.py. Здесь REST-эндпоинт
