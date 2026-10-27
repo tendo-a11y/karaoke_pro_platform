@@ -1599,6 +1599,51 @@ function GeneralChatToggle({ token }) {
   );
 }
 
+// Плашка на экране входа гостя (запрос 2026-10-27): текст меняется здесь.
+// Пустое поле — гость видит текст по умолчанию.
+function EntryNoticeEditor({ token }) {
+  const [text, setText] = useState("");
+  const [saved, setSaved] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  useEffect(() => {
+    api.getEntryNotice(token)
+      .then((data) => { const t = data?.text || ""; setText(t); setSaved(t); })
+      .catch((err) => setError(err.message));
+  }, [token]);
+  async function save() {
+    setBusy(true);
+    setError(null);
+    try {
+      const data = await api.setEntryNotice(token, text);
+      const t = data?.text || "";
+      setText(t);
+      setSaved(t);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <section className="order-change-requests-panel">
+      <h2>Плашка на экране входа гостя</h2>
+      <textarea
+        rows={5}
+        value={text}
+        maxLength={1000}
+        onChange={(e) => setText(e.target.value)}
+        placeholder="Пусто — покажется текст по умолчанию"
+        style={{ width: "100%", boxSizing: "border-box" }}
+      />
+      {error && <div className="banner banner--error">{error}</div>}
+      <button type="button" className="btn-link" disabled={busy || text === saved} onClick={save}>
+        Сохранить плашку
+      </button>
+    </section>
+  );
+}
+
 function AdminMessagesPanel({ token, clubId, socket }) {
   // ДОБАВЛЕНО (2026-10-03, запрос пользователя "в админке есть панель
   // управления KJ... сообщения приходят KJ в его панель сообщения. Но
@@ -5610,6 +5655,7 @@ export default function App() {
           <AdminMessagesPanel token={token} clubId={me.club_id} socket={socketInstance} />
           <SuggestionPanel token={token} clubId={me.club_id} />
           <GeneralChatToggle token={token} />
+          <EntryNoticeEditor token={token} />
           <OrderChangeRequestsPanel token={token} clubId={me.club_id} socket={socketInstance} />
           <TableCloseRequestsPanel token={token} clubId={me.club_id} socket={socketInstance} />
           <VipRequestsPanel token={token} clubId={me.club_id} socket={socketInstance} />
