@@ -3818,6 +3818,8 @@ export default function App() {
       setArtist("");
       setSongUrl(null);
       setAiSearchStarted(false);
+      setFinderInit("text");
+      setSearchKey((k) => k + 1);
       setServiceId("");
       setToneOn(false);
       setTone(null);
@@ -4056,6 +4058,16 @@ export default function App() {
   // а не отдельное правило.
   // Вход без Google (2026-10): стол выбран — заказ открыт (решает сервер,
   // см. create_order); постоянный профиль нужен только для избранного и VIP.
+  // Гость принят на стол (admin/member) — поиск по умолчанию снова ИИ-поиск,
+  // даже если до этого был выбран "Эксклюзив" (ссылка) или скриншот.
+  useEffect(() => {
+    const accepted = meInfo.table_no != null && (meInfo.table_group_status === "admin" || meInfo.table_group_status === "member");
+    if (accepted) {
+      setFinderInit("text");
+      setSearchKey((k) => k + 1);
+    }
+  }, [meInfo.table_group_status, meInfo.table_no]);
+
   const activated = meInfo.table_no != null;
 
   // Вход первым шагом (решение 2026-10-27): гость сначала вводит номер стола
