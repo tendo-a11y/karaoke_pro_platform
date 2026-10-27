@@ -2988,6 +2988,9 @@ function ProfileNamePanel({ token, meInfo, onNameChanged }) {
 // при этом должен быть уже введён — колбэк проверяет актуальное значение
 // через ref (см. stateRef ниже), чтобы не захватить устаревшее замыкание
 // от момента регистрации колбэка (она происходит один раз при монтировании).
+// Текст плашки на экране входа по умолчанию (дословно, запрос 2026-10-27). KJ может заменить его.
+const DEFAULT_ENTRY_NOTICE = "Введите номер стола. Он написан на бумажке на столе, либо спросите у диджея.\nДалее, войдите через Google (Рекомендуем) одним действием. Доступны: Функции Vip. Бонусы и прочие преимущества.\nБез входа в Google всё ограничено.";
+
 function ActivationPanel({ token, onActivated, onCancel, firstStep = false }) {
   const [tableNo, setTableNo] = useState("");
   // Доп. столы клуба ("7/1 (Vip)", 2026-10-13) — гость выбирает их кнопкой.
@@ -3109,14 +3112,7 @@ function ActivationPanel({ token, onActivated, onCancel, firstStep = false }) {
 
   return (
     <section ref={panelRef} className="panel activation-panel">
-      {firstStep ? (
-        <>
-          <p className="empty-hint">
-            Далее, войдите через Google <b>(Рекомендуем)</b> одним действием. Доступны: Функции Vip. Бонусы и прочие преимущества.
-          </p>
-          <p className="empty-hint">Без входа в Google всё ограничено.</p>
-        </>
-      ) : (
+      {firstStep ? null : (
         <>
           <h2>Выберите стол и войдите через Google</h2>
           <p className="empty-hint">
@@ -4069,9 +4065,7 @@ export default function App() {
       <div className="app-shell centered">
         <h1>🎤 {meInfo.club_name || "Karaoke"}</h1>
         <div className="table-first-screen">
-          <p className="table-first-hint">
-            Введите номер стола. Он написан на бумажке на столе, либо спросите у диджея.
-          </p>
+          <div className="entry-notice">{meInfo.entry_notice || DEFAULT_ENTRY_NOTICE}</div>
           <ActivationPanel token={session.token} onActivated={handleActivated} onCancel={() => {}} firstStep />
         </div>
       </div>
