@@ -4002,6 +4002,7 @@ function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged, auto
   }
 
   const [priorityError, setPriorityError] = useState(null);
+  const [queueBusyId, setQueueBusyId] = useState(null);
   async function togglePriority(order, flag) {
     setPriorityError(null);
     try {
@@ -4009,6 +4010,20 @@ function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged, auto
       await reload();
     } catch (err) {
       setPriorityError(err instanceof ApiError ? err.message : String(err));
+    }
+  }
+  // Оператор сам убирает песню из очереди стола (запрос 2026-10-27):
+  // тот же PUT /order/<id>/reject, что и "🗑 Убрать" на доске заказов.
+  async function removeFromTableQueue(orderId) {
+    setQueueBusyId(orderId);
+    setPriorityError(null);
+    try {
+      await api.rejectOrder(token, orderId);
+      await reload();
+    } catch (err) {
+      setPriorityError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setQueueBusyId(null);
     }
   }
   const [moveOpen, setMoveOpen] = useState(false);
@@ -4253,6 +4268,15 @@ function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged, auto
                         <button type="button" className="link-btn" onClick={() => togglePriority(o, false)}>Отклонить</button>
                       </>
                     )}
+                    {" "}
+                    <button
+                      type="button"
+                      className="link-btn"
+                      disabled={queueBusyId === o.id}
+                      onClick={() => removeFromTableQueue(o.id)}
+                    >
+                      🗑 Убрать из очереди
+                    </button>
                   </li>
                 ))}
               </ol>
