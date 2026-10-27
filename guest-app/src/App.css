@@ -1199,3 +1199,9 @@ button.step-blink-fill { animation: button-fill-blink 1s ease-in-out infinite; }
 
 /* Вход первым шагом: подсказка про номер стола (решение 2026-10-27). */
 .table-first-hint { text-align: center; font-size: 16px; margin: 8px 0 16px; }
+
+/* Экран входа первым шагом: ширина как у кнопки Google, без лишнего места (2026-10-27). */
+.table-first-screen { width: 280px; max-width: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: 10px; }
+.table-first-screen .activation-panel { padding: 14px; }
+.table-first-screen .order-form { gap: 8px; }
+.table-first-screen .table-first-hint { margin: 0; font-size: 14px; }
