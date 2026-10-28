@@ -3505,7 +3505,13 @@ export default function App() {
   // Выбор способа поиска (запрос 2026-10-28): "Простой поиск" — только ручной ввод
   // названия и исполнителя; "Интеллектуальный поиск" — ИИ-поиск как и раньше
   // (текст, ссылка, скриншот). Остальное в экране не меняется.
-  const [searchStyle, setSearchStyle] = useState("smart");
+  const [searchStyle, setSearchStyleRaw] = useState("smart");
+  // Пока гость сам не выбрал способ поиска, кнопка "Простой поиск" медленно моргает (запрос 2026-10-28).
+  const [searchStyleTouched, setSearchStyleTouched] = useState(false);
+  function setSearchStyle(next) {
+    setSearchStyleTouched(true);
+    setSearchStyleRaw(next);
+  }
   // Предупреждение "Вы заказываете через Интернет" — показываем один раз, при первом
   // автовыборе категории по ссылке. Флаг запоминаем в браузере гостя (localStorage, с try/catch).
   const [internetHint, setInternetHint] = useState(null);
@@ -4283,7 +4289,7 @@ export default function App() {
         <div className="search-style-choice" role="group" aria-label="Способ поиска">
           <button
             type="button"
-            className={`link-btn${searchStyle === "simple" ? " finder-modes__active" : ""}`}
+            className={`link-btn${searchStyle === "simple" ? " finder-modes__active" : ""}${!searchStyleTouched ? " search-style-blink" : ""}`}
             onClick={() => setSearchStyle("simple")}
           >
             Простой поиск
