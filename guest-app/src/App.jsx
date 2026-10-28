@@ -3607,6 +3607,8 @@ export default function App() {
   const [queueOpen, setQueueOpen] = useState(false);
   // Активная очередь закрывается, если нажали на что-то вне её раздела (запрос 2026-10-28).
   const queueSectionRef = useRef(null);
+  // Пока гость не сделал первый заказ, видна только форма "Заказать песню" (запрос 2026-10-28).
+  const showFullUi = guestHasOrdered();
   useEffect(() => {
     if (!queueOpen) return undefined;
     function onOutside(e) {
@@ -4345,6 +4347,7 @@ export default function App() {
         </div>
       )}
       
+      {showFullUi && (
       <header className="app-header">
         <h1>🎤 {meInfo.club_name || "Karaoke"}</h1><span className="app-header__table" style={{ display: guestHasOrdered() ? undefined : "none" }}>
           {meInfo.table_no != null ? `Стол ${tableLabel(meInfo.table_no)}` : "Без стола"}
@@ -4365,8 +4368,9 @@ export default function App() {
           ✏️
         </button>
       </header>
+      )}
 
-      {activated && profileTopOpen && (
+      {showFullUi && activated && profileTopOpen && (
         <>
           <ProfileNamePanel token={session.token} meInfo={meInfo} onNameChanged={refreshMe} />
           {/* Групповой стол внутри профиля (запрос 2026-10-28). */}
@@ -4381,7 +4385,7 @@ export default function App() {
         </>
       )}
 
-      <AddToHomeScreenHint /><OfflineBanner />
+      {showFullUi && <AddToHomeScreenHint />}<OfflineBanner />
       {submitOk != null && (
         <>
           <div style={ORDER_OK_OVERLAY} />
@@ -4393,10 +4397,10 @@ export default function App() {
           </section>
         </>
       )}
-      <TableJoinBanner token={session?.token} status={meInfo.table_group_status} hasTable={meInfo.table_no != null} tableNo={meInfo.table_no} onGoOrders={() => { setView("home"); setOrderExtra(null); setFinderInit("text"); setSearchKey((k) => k + 1); const panel = document.querySelector(".order-form-panel"); if (panel) panel.scrollIntoView({ behavior: "smooth", block: "start" }); }} />
+      {showFullUi && <TableJoinBanner token={session?.token} status={meInfo.table_group_status} hasTable={meInfo.table_no != null} tableNo={meInfo.table_no} onGoOrders={() => { setView("home"); setOrderExtra(null); setFinderInit("text"); setSearchKey((k) => k + 1); const panel = document.querySelector(".order-form-panel"); if (panel) panel.scrollIntoView({ behavior: "smooth", block: "start" }); }} />}
       <TableClosedBanner tableNo={meInfo?.table_no} enabled={Boolean(session)} signal={closedSignal} />
 
-      {meInfo.table_close_receipt && !dismissedCloseRequestIds.has(meInfo.table_close_receipt.id) && (
+      {showFullUi && meInfo.table_close_receipt && !dismissedCloseRequestIds.has(meInfo.table_close_receipt.id) && (
         <TableCloseReceiptBanner
           closeRequest={meInfo.table_close_receipt}
           onDismiss={() =>
@@ -4507,7 +4511,7 @@ export default function App() {
             </div>
           </div>
         ) : null}
-        {orderExtra === "fav" ? (
+        {showFullUi && orderExtra === "fav" ? (
           <FavoritesPanel
             token={session.token}
             services={services}
@@ -4517,7 +4521,7 @@ export default function App() {
             embedded
           />
         ) : null}
-        {orderExtra === "orders" || orderExtra === "history" ? (
+        {showFullUi && (orderExtra === "orders" || orderExtra === "history") ? (
           <div className={`profile-finance pick-scope${reorderPickedId != null ? " orders-block--pick" : ""}`}>
           <h2>{ordersTab === "history" ? "История" : "Мои заказы"}</h2> {ordersTab !== "history" && <GuestPrecheck token={session?.token} />}
         {ordersTab !== "history" && orders.some((o) => o.status === "pending" || o.status === "queued") && (
@@ -4748,6 +4752,7 @@ export default function App() {
       </section>
 
       {/* "Мои заказы / Избранное / История" (запрос 2026-10-28): над "Групповой стол". */}
+      {showFullUi && (
       <div className="finder-modes">
         <div className="finder-group finder-group--extra">
           {[
@@ -4771,6 +4776,8 @@ export default function App() {
         </div>
       </div>
 
+      )}
+      {showFullUi && (
       <section ref={queueSectionRef} className={`panel${songListsOpen ? " panel--lists-focus" : ""}`}>
         {turnToast ? (
           <button type="button" className="turn-toast" onClick={() => setTurnToast(null)}>
@@ -4853,7 +4860,8 @@ export default function App() {
         </>
         )}
       </section>
-    </div>
+
+      )}    </div>
   );
 }
 
