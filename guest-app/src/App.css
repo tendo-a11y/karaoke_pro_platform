@@ -1292,3 +1292,10 @@ button.step-blink-fill { animation: button-fill-blink 2s ease-in-out infinite; }
   color: inherit;
   cursor: pointer;
 }
+
+/* Подсказка, если категорию открывают без песни и исполнителя. */
+.service-notice {
+  margin: 4px 0 8px;
+  font-size: 13px;
+  color: var(--accent);
+}
