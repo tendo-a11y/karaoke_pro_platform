@@ -1244,3 +1244,22 @@ button.step-blink-fill { animation: button-fill-blink 2s ease-in-out infinite; }
 .search-style-choice .search-style-blink {
   animation: step-blink 2.4s ease-in-out infinite;
 }
+
+/* Палец-подсказка при первом заходе: указывает, куда нажать (запрос 2026-10-28). */
+.guide-finger {
+  position: fixed;
+  z-index: 900;
+  pointer-events: none;
+  font-size: 34px;
+  line-height: 1;
+  transform: translate(-50%, -100%);
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
+  animation: guide-bob 1s ease-in-out infinite;
+}
+@keyframes guide-bob {
+  0%, 100% { transform: translate(-50%, -100%); }
+  50% { transform: translate(-50%, calc(-100% + 10px)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .guide-finger { animation: none; }
+}
