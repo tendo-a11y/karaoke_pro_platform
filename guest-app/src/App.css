@@ -1321,3 +1321,14 @@ button.step-blink-fill { animation: button-fill-blink 2s ease-in-out infinite; }
 .song-lists__sort-btn--active { color: var(--accent); }
 .song-lists__body { margin-top: 4px; }
 .song-lists__list { padding-left: 20px; }
+
+/* Шапка на телефоне: название клуба на всю ширину в одну строку, ниже стол и кнопки в ряд без наложений. */
+@media (max-width: 520px) {
+  .app-header { flex-wrap: wrap; justify-content: flex-start; row-gap: 8px; column-gap: 6px; }
+  .app-header h1 { flex: 1 1 100%; font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .app-header__table { order: 1; font-size: 12px; margin-right: auto; }
+  .app-header .profile-top-btn { order: 2; padding: 4px 8px; font-size: 12px; }
+  .app-header > div { order: 3; }
+  .app-header > div .btn-link { padding: 4px 8px; font-size: 12px; }
+  .app-header > .btn-link { order: 4; padding: 4px 8px; font-size: 12px; }
+}
