@@ -518,13 +518,7 @@ function ServiceSelect({ services, value, onChange, disabled, highlight = false,
       setCardId(service.id);
       return;
     }
-    if (service.link_default && onLinkSubmit) {
-      setLinkId(service.id);
-      setLinkMode("choose");
-      setLinkText("");
-      setLinkError(null);
-      return;
-    }
+    // Категория "Эксклюзив" (link_default) выбирается как обычная: дальше гость видит плашку с ценой (запрос 2026-10-29).
     setOpen(false);
     onChange(String(service.id));
   }
@@ -4736,6 +4730,11 @@ export default function App() {
                     }
                     if (meInfo?.first_order_banner?.enabled && !isFirstOrderNoticeSeen()) {
                       setShowFirstOrderNotice(true);
+                      return;
+                    }
+                    const picked = services.find((s) => String(s.id) === String(v));
+                    if (picked?.link_default) {
+                      setInternetHint({ name: picked.name, price: picked.price, fromLink: false });
                       return;
                     }
                     submitOrderWithToken(session.token, v);
