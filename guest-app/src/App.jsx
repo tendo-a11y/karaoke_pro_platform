@@ -1778,14 +1778,46 @@ function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSu
     }
   }
 
+  // Ссылка YouTube уходит прямо в карточку заказа: без кнопки "Найти" и без списка (запрос 2026-10-28).
+  const linkTimer = useRef(null);
+  async function sendLinkToCard(url) {
+    setSearching(true);
+    setError(null);
+    try {
+      const data = await api.aiSearchSongs(token, url);
+      if (data && data.length > 0) {
+        setText("");
+        onPick({ ...data[0], link: url });
+      } else {
+        setError("По этой ссылке не удалось определить песню — проверьте, что это ссылка на конкретный трек.");
+      }
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setSearching(false);
+    }
+  }
+  function onInputTyped(value) {
+    setText(value);
+    clearTimeout(linkTimer.current);
+    if (mode === "link" && /^https?:\/\/(www\.|m\.|music\.)?(youtube\.com|youtu\.be)\/\S+/i.test(value.trim())) {
+      linkTimer.current = setTimeout(() => sendLinkToCard(value.trim()), 500);
+    }
+  }
+
   async function handleSearch(event) {
     event.preventDefault();
     if (!text.trim()) return;
     // Режим "Ссылка": принимаем только ссылку с YouTube (запрос пользователя 2026-10-09).
-    if (mode === "link" && !/^https?:\/\/(www\.|m\.|music\.)?(youtube\.com|youtu\.be)\//i.test(text.trim())) {
-      setError("Нужна ссылка с YouTube — откройте песню в YouTube, нажмите «Поделиться» и вставьте ссылку сюда.");
-      setResults([]);
-      setSearched(false);
+    if (mode === "link") {
+      if (!/^https?:\/\/(www\.|m\.|music\.)?(youtube\.com|youtu\.be)\//i.test(text.trim())) {
+        setError("Нужна ссылка с YouTube — откройте песню в YouTube, нажмите «Поделиться» и вставьте ссылку сюда.");
+        setResults([]);
+        setSearched(false);
+        return;
+      }
+      clearTimeout(linkTimer.current);
+      await sendLinkToCard(text.trim());
       return;
     }
     if (onSearchStart) onSearchStart();
@@ -1937,13 +1969,15 @@ function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSu
             <input
               type="text"
               value={text}
-              onChange={(e) => setText(e.target.value)}
+              onChange={(e) => onInputTyped(e.target.value)}
               placeholder={placeholder}
               maxLength={300}
             />
+            {mode !== "link" && (
             <button type="submit" className={searching ? "is-searching" : undefined} disabled={searching || !text.trim()}>
               {searching ? "Ищем песню. Ждите..." : "Найти"}
             </button>
+            )}
           </form>
           {error && <div className="banner banner--error">{error}</div>}
           {searched && !searching && results.length === 0 && (
