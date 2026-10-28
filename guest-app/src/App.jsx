@@ -3716,6 +3716,8 @@ export default function App() {
   // (см. handleSubmitOrder), закрывается после успешной активации (см.
   // handleActivated) или если гость сам передумал.
   const [showActivation, setShowActivation] = useState(false);
+  // Категорию без песни и исполнителя не открываем: показываем короткую подсказку (запрос 2026-10-28).
+  const [categoryNotice, setCategoryNotice] = useState(false);
 
   // Шаг 1: получить/создать гостевую сессию для этого клуба (ТЗ: аналог
   // старого deep-link venue{id}_table{n} — сама возможность открыть
@@ -4618,6 +4620,9 @@ export default function App() {
                 required
                 className={guideRunning ? (guideStep === "artist" && !artist.trim() ? "step-blink" : undefined) : (songTitle.trim() && !artist.trim() ? "step-blink" : undefined)}
               />
+              {categoryNotice && (
+                <p className="service-notice">Сначала выберите песню и исполнителя</p>
+              )}
               {services.length > 0 && (
                 // "Без тарифа" убран из списка (запрос пользователя
                 // 2026-09-14 — тариф в клубе есть всегда). Значение всегда
@@ -4629,6 +4634,11 @@ export default function App() {
                   services={services}
                   value={serviceId}
                   gate={() => {
+                    if (!songUrl && (!songTitle.trim() || !artist.trim())) {
+                      setCategoryNotice(true);
+                      setTimeout(() => setCategoryNotice(false), 3000);
+                      return true;
+                    }
                     if (activated) return false;
                     setShowActivation(true);
                     return true;
