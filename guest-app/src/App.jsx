@@ -486,7 +486,7 @@ function ChatAlertToggle() {
 const SECTION_KEYS = ["main", "extra"];
 const SECTION_TITLES = { main: "Основные", extra: "Дополнительные" };
 
-function ServiceSelect({ services, value, onChange, disabled, highlight = false, onOpen, onOpenChange, onCancel, onLinkSubmit, gate }) {
+function ServiceSelect({ services, value, onChange, disabled, highlight = false, onOpen, onOpenChange, onCancel, onLinkSubmit, onManualPick, gate }) {
   // Свой список выбора категории вместо системного (запрос пользователя
   // 2026-10): в раскрытом списке у каждой категории кнопка "❓", которая
   // открывает карточку категории поверх экрана (название, цена, описание,
@@ -508,6 +508,9 @@ function ServiceSelect({ services, value, onChange, disabled, highlight = false,
   const [linkId, setLinkId] = useState(null);
   const [linkText, setLinkText] = useState("");
   const [linkError, setLinkError] = useState(null);
+  // EXCLUSIVE (запрос 2026-10-28): сначала выбор "по ссылке" или "по названию и
+  // исполнителю"; "choose" — экран выбора, "link" — поле для ссылки.
+  const [linkMode, setLinkMode] = useState("choose");
   const linkService = services.find((s) => String(s.id) === String(linkId));
 
   function choose(service) {
@@ -517,6 +520,7 @@ function ServiceSelect({ services, value, onChange, disabled, highlight = false,
     }
     if (service.link_default && onLinkSubmit) {
       setLinkId(service.id);
+      setLinkMode("choose");
       setLinkText("");
       setLinkError(null);
       return;
@@ -616,7 +620,31 @@ function ServiceSelect({ services, value, onChange, disabled, highlight = false,
             </div>
             );
           })}
-          {linkService && (
+          {linkService && linkMode === "choose" && (
+            <div className="service-picker__linkbox">
+              <div className="service-picker__linkhint">{linkService.name}: как хотите заказать?</div>
+              <div className="service-picker__linkbuttons">
+                <button type="button" className="service-picker__linkok" onClick={() => { setLinkMode("link"); setLinkError(null); }}>
+                  🔗 По ссылке
+                </button>
+                <button
+                  type="button"
+                  className="service-picker__linkok"
+                  onClick={() => {
+                    const service = linkService;
+                    setLinkId(null);
+                    setOpen(false);
+                    onManualPick?.();
+                    onChange(String(service.id));
+                  }}
+                >
+                  ✍ По названию и исполнителю
+                </button>
+              </div>
+              <button type="button" className="service-picker__linkback" onClick={() => setLinkId(null)}>Назад</button>
+            </div>
+          )}
+          {linkService && linkMode === "link" && (
             <form className="service-picker__linkbox" onSubmit={submitLink}>
               <div className="service-picker__linkhint">{linkService.name}: вставьте ссылку на песню с YouTube</div>
               <input
@@ -630,7 +658,7 @@ function ServiceSelect({ services, value, onChange, disabled, highlight = false,
               {linkError ? <div className="service-picker__linkerror">{linkError}</div> : null}
               <div className="service-picker__linkbuttons">
                 <button type="submit" className="service-picker__linkok">Далее</button>
-                <button type="button" className="service-picker__linkback" onClick={() => { setLinkId(null); setLinkError(null); }}>Назад</button>
+                <button type="button" className="service-picker__linkback" onClick={() => { setLinkMode("choose"); setLinkError(null); }}>Назад</button>
               </div>
             </form>
           )}
@@ -3474,6 +3502,10 @@ export default function App() {
   // Пока печатают название или исполнителя, список категорий не открывается (запрос 2026-10-27).
   const [typingField, setTypingField] = useState(false);
   const [aiSearchFailed, setAiSearchFailed] = useState(false);
+  // Выбор способа поиска (запрос 2026-10-28): "Простой поиск" — только ручной ввод
+  // названия и исполнителя; "Интеллектуальный поиск" — ИИ-поиск как и раньше
+  // (текст, ссылка, скриншот). Остальное в экране не меняется.
+  const [searchStyle, setSearchStyle] = useState("smart");
   // Предупреждение "Вы заказываете через Интернет" — показываем один раз, при первом
   // автовыборе категории по ссылке. Флаг запоминаем в браузере гостя (localStorage, с try/catch).
   const [internetHint, setInternetHint] = useState(null);
@@ -3875,14 +3907,8 @@ export default function App() {
   async function handleSubmitOrder(event) {
     event.preventDefault();
     if (!session || !songTitle.trim()) return;
-    // EXCLUSIVE без ссылки не отправляем: открываем поле для ссылки (запрос 2026-10-27).
-    const chosenCat = services.find((s) => String(s.id) === String(serviceId));
-    // EXCLUSIVE узнаём по названию; в нём бывает русская С вместо латинской, поэтому маска.
-    if (chosenCat && isExclusiveCategory(chosenCat) && !songUrl) {
-      setFinderInit("link");
-      setSearchKey((k) => k + 1);
-      return;
-    }
+    // EXCLUSIVE теперь может быть и по ссылке, и по названию/исполнителю (запрос 2026-10-28):
+    // выбор делается в меню категории, поэтому здесь ссылку больше не требуем.
 
     // Ознакомительная плашка перед первым заказом (один раз в этом браузере).
     if (meInfo?.first_order_banner?.enabled && !isFirstOrderNoticeSeen()) {
@@ -4254,6 +4280,23 @@ export default function App() {
         ветки и виден всегда, независимо ни от activated, ни от groupOk —
         ограничивается (веткой ниже) только форма ввода со кнопкой
         "Заказать". */}
+        <div className="search-style-choice" role="group" aria-label="Способ поиска">
+          <button
+            type="button"
+            className={`link-btn${searchStyle === "simple" ? " finder-modes__active" : ""}`}
+            onClick={() => setSearchStyle("simple")}
+          >
+            Простой поиск
+          </button>
+          <button
+            type="button"
+            className={`link-btn${searchStyle === "smart" ? " finder-modes__active" : ""}`}
+            onClick={() => setSearchStyle("smart")}
+          >
+            Интеллектуальный поиск
+          </button>
+        </div>
+        <div style={searchStyle === "simple" ? { display: "none" } : undefined}>
         <AiSearch
           key={`${searchKey}-${canOrder ? "ok" : "wait"}`}
           initialMode={finderInit}
@@ -4289,6 +4332,7 @@ export default function App() {
             setOrderExtra((prev) => (prev === key ? null : key));
           }}
         />
+        </div>
         {internetHint ? (
           <div className="link-confirm-overlay" role="alertdialog" aria-modal="true">
             <div className="link-confirm-plate">
@@ -4453,6 +4497,7 @@ export default function App() {
                     setShowActivation(true);
                     return true;
                   }}
+                  onManualPick={() => setSongUrl(null)}
                   onLinkSubmit={(url, linkCat) => {
                     // EXCLUSIVE вручную: ссылка введена в меню категории — тот же путь, что и заказ по ссылке.
                     setSongUrl(url);
