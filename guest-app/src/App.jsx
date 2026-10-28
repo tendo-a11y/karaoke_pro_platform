@@ -3604,7 +3604,7 @@ export default function App() {
     if (!el) { setGuideBox(null); return; }
     const place = () => {
       const r = el.getBoundingClientRect();
-      setGuideBox({ left: r.left + r.width / 2, top: r.top });
+      setGuideBox({ left: r.left + 10, top: r.bottom - 6 });
     };
     el.scrollIntoView({ block: "center", behavior: "smooth" });
     const t = setTimeout(place, 400);
