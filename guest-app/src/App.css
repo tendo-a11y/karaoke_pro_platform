@@ -741,7 +741,7 @@ select {
   border-radius: 12px;
   padding: 12px;
   margin-bottom: 14px;
-  animation: ai-search-pulse 2s ease-in-out infinite;
+  animation: none;
 }
 .order-form-panel .ai-search .order-form button[type="submit"] {
   background: var(--ok);
@@ -1242,5 +1242,5 @@ button.step-blink-fill { animation: button-fill-blink 2s ease-in-out infinite; }
   50% { opacity: 0.35; }
 }
 .search-style-choice .search-style-blink {
-  animation: search-style-blink 2.4s ease-in-out infinite;
+  animation: step-blink 2.4s ease-in-out infinite;
 }
