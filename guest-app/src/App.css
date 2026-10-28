@@ -1264,3 +1264,11 @@ button.step-blink-fill { animation: button-fill-blink 2s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) {
   .guide-finger { animation: none; }
 }
+
+/* Профиль в шапке (запрос 2026-10-28): маленький квадратик с иконкой и подпись «Профиль» слева от «Язык». */
+.app-header .profile-top-btn { display: inline-flex; align-items: center; gap: 6px; }
+.profile-top-btn__icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; border: 1px solid var(--accent); border-radius: 4px;
+  font-size: 12px; line-height: 1;
+}
