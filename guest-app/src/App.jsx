@@ -4651,10 +4651,6 @@ export default function App() {
                   services={services}
                   value={serviceId}
                   gate={() => {
-                    if (!songUrl && (!songTitle.trim() || !artist.trim())) {
-                      flashCategoryNotice("Сначала выберите песню и исполнителя");
-                      return true;
-                    }
                     if (activated) return false;
                     setShowActivation(true);
                     return true;
@@ -4662,6 +4658,10 @@ export default function App() {
                   onManualPick={() => setSongUrl(null)}
                   onLinkSubmit={(url, linkCat) => {
                     // EXCLUSIVE вручную: ссылка введена в меню категории — тот же путь, что и заказ по ссылке.
+                    if (!songTitle.trim() || !artist.trim()) {
+                      flashCategoryNotice("Сначала выберите песню и исполнителя");
+                      return;
+                    }
                     setSongUrl(url);
                     setServiceId(String(linkCat.id));
                     setInternetHint({ name: linkCat.name, price: linkCat.price, fromLink: true });
@@ -4671,7 +4671,11 @@ export default function App() {
                     // Выбор категории и есть заказ (запрос 2026-10): если вход и стол уже есть, заказ уходит сразу.
                     // Ссылочный заказ и первое предупреждение об заказе не трогаем — у них свой путь.
                     // Раньше здесь при любой блокировке заказ молча не уходил. Теперь гость видит, что мешает.
-                    if (!v || songUrl || submitting || !songTitle.trim() || !artist.trim()) return;
+                    if (!v || songUrl || submitting) return;
+                    if (!songTitle.trim() || !artist.trim()) {
+                      flashCategoryNotice("Сначала выберите песню и исполнителя");
+                      return;
+                    }
                     if (!activated) {
                       setShowActivation(true);
                       return;
