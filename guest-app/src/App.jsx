@@ -4332,7 +4332,9 @@ export default function App() {
       )}
       
       <header className="app-header">
-        <h1>🎤 {meInfo.club_name || "Karaoke"}</h1>
+        <h1>🎤 {meInfo.club_name || "Karaoke"}</h1><span className="app-header__table" style={{ display: guestHasOrdered() ? undefined : "none" }}>
+          {meInfo.table_no != null ? `Стол ${tableLabel(meInfo.table_no)}` : "Без стола"}
+        </span>
         {activated && (
           <button
             type="button"
@@ -4344,9 +4346,7 @@ export default function App() {
             Профиль
           </button>
         )}
-        <LanguageButton /><span className="app-header__table" style={{ display: guestHasOrdered() ? undefined : "none" }}>
-          {meInfo.table_no != null ? `Стол ${tableLabel(meInfo.table_no)}` : "Без стола"}
-        </span>
+        <LanguageButton />
         <button type="button" className="btn-link" style={{ display: guestHasOrdered() ? undefined : "none" }} onClick={() => setView("messages")}>
           ✏️
         </button>
