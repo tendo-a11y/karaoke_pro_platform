@@ -1211,3 +1211,27 @@ button.step-blink-fill { animation: button-fill-blink 2s ease-in-out infinite; }
 .entry-notice { border: 1px solid var(--accent); border-radius: 12px; padding: 12px 14px; background: var(--panel-alt); white-space: pre-line; font-size: 14px; }
 /* Номер стола ниже плашки, чтобы не сливался с текстом (2026-10-27). */
 .table-first-screen .activation-panel { margin-top: 18px; }
+
+/* Выбор способа поиска (запрос 2026-10-28): два заметных варианта рядом. */
+.search-style-choice {
+  display: flex;
+  gap: 8px;
+  margin: 4px 0 12px;
+}
+.search-style-choice .link-btn {
+  flex: 1 1 0;
+  padding: 12px 8px;
+  border: 2px solid #94a3b8;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+.search-style-choice .finder-modes__active {
+  border-color: #60a5fa;
+  background: rgba(96, 165, 250, 0.18);
+}
