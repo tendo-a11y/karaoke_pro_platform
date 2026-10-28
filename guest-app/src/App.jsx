@@ -3729,7 +3729,12 @@ export default function App() {
   // handleActivated) или если гость сам передумал.
   const [showActivation, setShowActivation] = useState(false);
   // Категорию без песни и исполнителя не открываем: показываем короткую подсказку (запрос 2026-10-28).
-  const [categoryNotice, setCategoryNotice] = useState(false);
+  const [categoryNotice, setCategoryNotice] = useState(null);
+  // Короткая подсказка рядом с категориями; пропадает сама через 3 секунды.
+  function flashCategoryNotice(text) {
+    setCategoryNotice(text);
+    setTimeout(() => setCategoryNotice((cur) => (cur === text ? null : cur)), 3000);
+  }
 
   // Шаг 1: получить/создать гостевую сессию для этого клуба (ТЗ: аналог
   // старого deep-link venue{id}_table{n} — сама возможность открыть
@@ -4634,9 +4639,7 @@ export default function App() {
                 required
                 className={guideRunning ? (guideStep === "artist" && !artist.trim() ? "step-blink" : undefined) : (songTitle.trim() && !artist.trim() ? "step-blink" : undefined)}
               />
-              {categoryNotice && (
-                <p className="service-notice">Сначала выберите песню и исполнителя</p>
-              )}
+              {categoryNotice && <p className="service-notice">{categoryNotice}</p>}
               {services.length > 0 && (
                 // "Без тарифа" убран из списка (запрос пользователя
                 // 2026-09-14 — тариф в клубе есть всегда). Значение всегда
@@ -4649,8 +4652,7 @@ export default function App() {
                   value={serviceId}
                   gate={() => {
                     if (!songUrl && (!songTitle.trim() || !artist.trim())) {
-                      setCategoryNotice(true);
-                      setTimeout(() => setCategoryNotice(false), 3000);
+                      flashCategoryNotice("Сначала выберите песню и исполнителя");
                       return true;
                     }
                     if (activated) return false;
@@ -4668,14 +4670,25 @@ export default function App() {
                     setServiceId(v);
                     // Выбор категории и есть заказ (запрос 2026-10): если вход и стол уже есть, заказ уходит сразу.
                     // Ссылочный заказ и первое предупреждение об заказе не трогаем — у них свой путь.
-                    if (
-                      v && canOrder && !songUrl && !submitting &&
-                      !(toneOn && tone == null) &&
-                      songTitle.trim() && artist.trim() &&
-                      !(meInfo?.first_order_banner?.enabled && !isFirstOrderNoticeSeen())
-                    ) {
-                      submitOrderWithToken(session.token, v);
+                    // Раньше здесь при любой блокировке заказ молча не уходил. Теперь гость видит, что мешает.
+                    if (!v || songUrl || submitting || !songTitle.trim() || !artist.trim()) return;
+                    if (!activated) {
+                      setShowActivation(true);
+                      return;
                     }
+                    if (!canOrder) {
+                      flashCategoryNotice("Заказ пока недоступен: ждите одобрения в групповом столе");
+                      return;
+                    }
+                    if (toneOn && tone == null) {
+                      flashCategoryNotice("Выберите тон, затем категорию");
+                      return;
+                    }
+                    if (meInfo?.first_order_banner?.enabled && !isFirstOrderNoticeSeen()) {
+                      setShowFirstOrderNotice(true);
+                      return;
+                    }
+                    submitOrderWithToken(session.token, v);
                   }}
                   highlight={guideRunning ? guideStep === "category" : Boolean(songTitle.trim() && artist.trim())}
                   onOpenChange={setCategoryPicking}
