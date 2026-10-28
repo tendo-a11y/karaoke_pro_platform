@@ -3579,6 +3579,44 @@ export default function App() {
   const [songUrl, setSongUrl] = useState(null);
   const nameTypingHint = useTypingPlaceholder(SIMPLE_NAME_PHRASES, !songTitle);
   const artistTypingHint = useTypingPlaceholder(SIMPLE_ARTIST_PHRASES, !artist);
+  // Палец 👆 показывает, куда нажать, при первом заходе (запрос 2026-10-28). Без подписи.
+  const [guideDone, setGuideDone] = useState(() => {
+    try { return localStorage.getItem("guideDone") === "1"; } catch { return false; }
+  });
+  const guideActive = !guideDone && view === "home" && meInfo?.table_no != null;
+  let guideTarget = null;
+  if (guideActive && !serviceId) {
+    if (!searchStyleTouched) guideTarget = ".search-style-choice button:first-child";
+    else if (!songTitle.trim()) guideTarget = searchStyle === "simple" ? "form.order-form input:nth-of-type(1)" : ".ai-search input";
+    else if (!artist.trim()) guideTarget = "form.order-form input:nth-of-type(2)";
+    else guideTarget = ".service-picker__toggle";
+  }
+  const [guideBox, setGuideBox] = useState(null);
+  useEffect(() => {
+    if (serviceId && !guideDone) {
+      setGuideDone(true);
+      try { localStorage.setItem("guideDone", "1"); } catch { /* браузер не даёт сохранить — ничего страшного */ }
+    }
+  }, [serviceId, guideDone]);
+  useEffect(() => {
+    if (!guideTarget) { setGuideBox(null); return; }
+    const el = document.querySelector(guideTarget);
+    if (!el) { setGuideBox(null); return; }
+    const place = () => {
+      const r = el.getBoundingClientRect();
+      setGuideBox({ left: r.left + r.width / 2, top: r.top });
+    };
+    el.scrollIntoView({ block: "center", behavior: "smooth" });
+    const t = setTimeout(place, 400);
+    place();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [guideTarget]);
   const songListsOpen = songListsTab != null;
   const turnToastShownRef = useRef(new Set());
   useEffect(() => {
@@ -4226,6 +4264,9 @@ export default function App() {
     <div className={`app-shell${favPicking || reorderPickedId != null ? " app-shell--fav-pick" : ""}${categoryPicking ? " app-shell--picking" : ""}${songConfirming || showActivation || categoryStep ? " app-shell--focus" : ""}${songListsOpen ? " app-shell--lists" : ""}`}>
       {chatPopupEl}
 {categoryPopupEl}
+      {guideBox && guideTarget ? (
+        <div className="guide-finger" style={{ left: guideBox.left, top: guideBox.top }} aria-hidden="true">👆</div>
+      ) : null}
       {showFirstOrderNotice && (
         <div className="msg-popup-overlay" role="alertdialog" aria-modal="true">
           <div className="msg-popup">
