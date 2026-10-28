@@ -607,6 +607,14 @@ function ServiceSelect({ services, value, onChange, disabled, highlight = false,
                     </button>
                     <button
                       type="button"
+                      className="service-picker__order"
+                      title="Заказать эту категорию"
+                      onClick={() => choose(s)}
+                    >
+                      Заказ
+                    </button>
+                    <button
+                      type="button"
                       className="service-picker__info"
                       title="Описание категории"
                       onClick={() => setCardId(s.id)}
@@ -2259,7 +2267,7 @@ function TableGroupPanel({ token, guestId, hasTable, status, onGroupChanged, tab
         👥 Групповой стол{tableNo != null ? ` · ${tableLabel(tableNo)}` : ""}
         <span className={`collapsible-caret${open ? " collapsible-caret--blink" : ""}`}>{open ? "▲" : "▼"}</span>
       </h2>
-      {adminLine && <p className="table-admin-line">{adminLine}</p>} {tableNo != null && <GuestPrecheck token={token} />}
+      {adminLine && <p className="table-admin-line">{adminLine}</p>}
       {open && (
       <>
       {error && <div className="banner banner--error">{error}</div>}
@@ -4345,7 +4353,18 @@ export default function App() {
       </header>
 
       {activated && profileTopOpen && (
-        <ProfileNamePanel token={session.token} meInfo={meInfo} onNameChanged={refreshMe} />
+        <>
+          <ProfileNamePanel token={session.token} meInfo={meInfo} onNameChanged={refreshMe} />
+          {/* Групповой стол внутри профиля (запрос 2026-10-28). */}
+          <TableGroupPanel
+            token={session.token}
+            guestId={session.guest_id}
+            hasTable={hasTable}
+            status={meInfo.table_group_status}
+            tableNo={meInfo.table_no}
+            onGroupChanged={refreshMe}
+          />
+        </>
       )}
 
       <AddToHomeScreenHint /><OfflineBanner />
@@ -4742,15 +4761,6 @@ export default function App() {
           ))}
         </div>
       </div>
-
-      <TableGroupPanel
-        token={session.token}
-        guestId={session.guest_id}
-        hasTable={hasTable}
-        status={meInfo.table_group_status}
-        tableNo={meInfo.table_no}
-        onGroupChanged={refreshMe}
-      />
 
       <section className={`panel${songListsOpen ? " panel--lists-focus" : ""}`}>
         {turnToast ? (
