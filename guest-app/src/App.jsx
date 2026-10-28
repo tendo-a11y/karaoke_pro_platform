@@ -3044,6 +3044,44 @@ function ActivationPanel({ token, onActivated, onCancel, firstStep = false }) {
   const tableNoValid =
     selectedExtra != null || (tableNo.trim() !== "" && Number.isInteger(parsedTableNo) && parsedTableNo > 0);
 
+  // Палец на первом экране входа (запрос 2026-10-28): сначала номер стола; после выбора стола
+  // через 2 секунды палец идёт на «Вход через Google», потом через 2 секунды на «Без входа»,
+  // и так по кругу, пока гость не выберет вход.
+  const [firstTarget, setFirstTarget] = useState("table");
+  const [fingerBox, setFingerBox] = useState(null);
+  useEffect(() => {
+    if (!firstStep || busy) return;
+    if (!tableNoValid) {
+      setFirstTarget("table");
+      return;
+    }
+    const next = firstTarget === "table" ? "google" : firstTarget === "google" ? "nologin" : "google";
+    const t = setTimeout(() => setFirstTarget(next), 2000);
+    return () => clearTimeout(t);
+  }, [firstStep, busy, tableNoValid, firstTarget]);
+  useEffect(() => {
+    if (!firstStep || busy) {
+      setFingerBox(null);
+      return;
+    }
+    const sel = firstTarget === "table" ? '[data-guide="table"]' : firstTarget === "google" ? ".activation-google" : ".activation-nologin";
+    const place = () => {
+      const el = panelRef.current && panelRef.current.querySelector(sel);
+      if (!el) { setFingerBox(null); return; }
+      const r = el.getBoundingClientRect();
+      setFingerBox({ left: r.left + 10, top: r.bottom - 6 });
+    };
+    const t = setTimeout(place, 300);
+    place();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [firstStep, busy, firstTarget, tableNoValid]);
+
   const stateRef = useRef({ tableNoValid, parsedTableNo, busy });
   useEffect(() => {
     stateRef.current = { tableNoValid, parsedTableNo, busy };
@@ -3136,6 +3174,9 @@ function ActivationPanel({ token, onActivated, onCancel, firstStep = false }) {
 
   return (
     <section ref={panelRef} className="panel activation-panel">
+      {firstStep && fingerBox ? (
+        <div className="guide-finger" style={{ left: fingerBox.left, top: fingerBox.top }} aria-hidden="true">👆</div>
+      ) : null}
       {firstStep ? null : (
         <>
           <h2>Выберите стол и войдите через Google</h2>
@@ -3153,7 +3194,8 @@ function ActivationPanel({ token, onActivated, onCancel, firstStep = false }) {
         <input
           type="number"
           min="1"
-          className={!tableNoValid ? "step-blink" : "step-dim"}
+          data-guide="table"
+          className={firstStep ? (firstTarget === "table" ? "step-blink" : undefined) : (!tableNoValid ? "step-blink" : "step-dim")}
           value={tableNo}
           onChange={(e) => {
             setTableNo(e.target.value);
@@ -3183,11 +3225,11 @@ function ActivationPanel({ token, onActivated, onCancel, firstStep = false }) {
           </details>
         )}
         <div className="activation-zone">
-          <button type="button" className={`activation-nologin ${tableNoValid ? "step-blink-alt" : "step-dim"}`} onClick={handleNoLogin} disabled={busy || !tableNoValid}>
+          <button type="button" className={`activation-nologin ${firstStep ? (tableNoValid && firstTarget === "nologin" ? "step-blink-alt" : "") : (tableNoValid ? "step-blink-alt" : "step-dim")}`} onClick={handleNoLogin} disabled={busy || !tableNoValid}>
             Заказать без входа
           </button>
           {/* Шаг 2: моргает, когда стол уже выбран (первый шаг — номер стола). */}
-          <div ref={googleButtonRef} className={`activation-google${tableNoValid && !busy ? " step-blink" : ""}`} />
+          <div ref={googleButtonRef} className={`activation-google${firstStep ? (tableNoValid && !busy && firstTarget === "google" ? " step-blink" : "") : (tableNoValid && !busy ? " step-blink" : "")}`} />
           {!tableNoValid && <div className="activation-zone__guard" onClick={() => setSkipHint(true)} />}
         </div>
         {skipHint && (
