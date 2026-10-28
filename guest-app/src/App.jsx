@@ -601,10 +601,6 @@ function ServiceSelect({ services, value, onChange, disabled, highlight = false,
                   style={highlight && !value ? { animationDelay: `${index}s `, animationDuration: `${Math.max(services.length, 3)}s ` } : undefined}
                 >
                   <div className="service-picker__row">
-                    <button type="button" className="service-picker__option" style={s.display_color ? { color: s.display_color } : undefined} onClick={() => choose(s)}>
-                      {labelOf(s)}
-                      {s.description ? ` (${s.description})` : ""}
-                    </button>
                     <button
                       type="button"
                       className="service-picker__order"
@@ -612,6 +608,10 @@ function ServiceSelect({ services, value, onChange, disabled, highlight = false,
                       onClick={() => choose(s)}
                     >
                       Заказ
+                    </button>
+                    <button type="button" className="service-picker__option" style={s.display_color ? { color: s.display_color } : undefined} onClick={() => choose(s)}>
+                      {labelOf(s)}
+                      {s.description ? ` (${s.description})` : ""}
                     </button>
                     <button
                       type="button"
@@ -4711,19 +4711,6 @@ export default function App() {
                   </div>
                 )}
               </div>
-              <button
-                type="submit"
-                disabled={submitting || !songTitle.trim() || !artist.trim()}
-                className={
-                  // Пока гость выбирает стол и входит через Google (showActivation),
-                  // моргает только этот шаг, а не кнопка "Заказать".
-                  !submitting && !showActivation && songTitle.trim() && artist.trim() && (serviceId || services.length === 0)
-                    ? "step-blink"
-                    : undefined
-                }
-              >
-                {submitting ? "Отправляем…" : "🎶 Заказать"}
-              </button>
             </form>
             {submitError && <div className="banner banner--error">{submitError}</div>}
             {/* ТЗ п.45: единственный способ стать Role 4 — эта попытка
