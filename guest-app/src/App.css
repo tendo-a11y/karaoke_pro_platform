@@ -1280,3 +1280,15 @@ button.step-blink-fill { animation: button-fill-blink 2s ease-in-out infinite; }
   border-radius: 999px; padding: 3px 9px; font-size: 12px; font-weight: 600; line-height: 1.2;
   white-space: nowrap; cursor: pointer;
 }
+
+/* Заголовок "Активная очередь" — кнопка, сворачивает/раскрывает блок с очередью и списками песен. */
+.active-queue-toggle {
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 0;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
