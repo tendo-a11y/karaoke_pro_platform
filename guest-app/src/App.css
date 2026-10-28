@@ -1281,15 +1281,23 @@ button.step-blink-fill { animation: button-fill-blink 2s ease-in-out infinite; }
   white-space: nowrap; cursor: pointer;
 }
 
-/* Заголовок "Активная очередь" — кнопка, сворачивает/раскрывает блок с очередью и списками песен. */
-.active-queue-toggle {
+/* Заголовок "Активная очередь" — кнопка, сворачивает/раскрывает блок с очередью и списками песен.
+   Внешний вид как у прежнего заголовка (цвет, капс), треугольник справа. */
+.panel .active-queue-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   width: 100%;
+  margin: 0 0 12px;
+  padding: 0;
   background: none;
   border: none;
-  padding: 0;
   text-align: left;
-  font: inherit;
-  color: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  color: #ff7a7a;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
   cursor: pointer;
 }
 
