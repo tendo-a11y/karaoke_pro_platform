@@ -3605,6 +3605,16 @@ export default function App() {
   const [songListsTab, setSongListsTab] = useState(null);
   // Активная очередь по умолчанию свёрнута; открывается по треугольнику (запрос 2026-10-28).
   const [queueOpen, setQueueOpen] = useState(false);
+  // Активная очередь закрывается, если нажали на что-то вне её раздела (запрос 2026-10-28).
+  const queueSectionRef = useRef(null);
+  useEffect(() => {
+    if (!queueOpen) return undefined;
+    function onOutside(e) {
+      if (queueSectionRef.current && !queueSectionRef.current.contains(e.target)) setQueueOpen(false);
+    }
+    document.addEventListener("pointerdown", onOutside, true);
+    return () => document.removeEventListener("pointerdown", onOutside, true);
+  }, [queueOpen]);
   const [titleHint, setTitleHint] = useState(false);
   const [categoryPicking, setCategoryPicking] = useState(false);
   const [songConfirming, setSongConfirming] = useState(false);
@@ -4761,7 +4771,7 @@ export default function App() {
         </div>
       </div>
 
-      <section className={`panel${songListsOpen ? " panel--lists-focus" : ""}`}>
+      <section ref={queueSectionRef} className={`panel${songListsOpen ? " panel--lists-focus" : ""}`}>
         {turnToast ? (
           <button type="button" className="turn-toast" onClick={() => setTurnToast(null)}>
             {turnToast}
