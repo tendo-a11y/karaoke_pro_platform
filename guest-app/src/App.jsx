@@ -1683,7 +1683,7 @@ function resizeImageToBase64(file) {
   });
 }
 
-const TYPING_PHRASES = ["Рюмка водки Лепс", "Oriunde ai fi Balan"];
+const TYPING_PHRASES = ["Рюмка водки", "Лепс", "Oriunde ai fi", "Balan"];
 // Подсказки набора в поля "Простого поиска" (запрос 2026-10-28).
 const SIMPLE_NAME_PHRASES = ["Рюмка водки", "Oriunde ai fi"];
 const SIMPLE_ARTIST_PHRASES = ["Лепс", "Balan"];
@@ -3586,7 +3586,7 @@ export default function App() {
   const guideActive = !guideDone && view === "home" && meInfo?.table_no != null;
   let guideTarget = null;
   if (guideActive && !serviceId) {
-    if (!searchStyleTouched) guideTarget = ".search-style-choice button:first-child";
+    if (!searchStyleTouched) guideTarget = "[data-guide=\"simple-search\"]";
     else if (!songTitle.trim()) guideTarget = searchStyle === "simple" ? "form.order-form input:nth-of-type(1)" : ".ai-search input";
     else if (!artist.trim()) guideTarget = "form.order-form input:nth-of-type(2)";
     else guideTarget = ".service-picker__toggle";
@@ -4335,6 +4335,7 @@ export default function App() {
         <div className="search-style-choice" role="group" aria-label="Способ поиска">
           <button
             type="button"
+            data-guide="simple-search"
             className={`link-btn${searchStyle === "simple" ? " finder-modes__active" : ""}${!searchStyleTouched ? " search-style-blink" : ""}`}
             onClick={() => setSearchStyle("simple")}
           >
