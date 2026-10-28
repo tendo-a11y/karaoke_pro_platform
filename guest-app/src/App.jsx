@@ -4463,7 +4463,13 @@ export default function App() {
           </p>
         ) : (
           <>
-            <form className={`order-form${categoryPicking ? " order-form--picking" : ""}${categoryStep ? " order-form--category-step" : ""}`} onSubmit={handleSubmitOrder}>
+            {/* Раздел 1 "Простой поиск" (запрос 2026-10-28): поля названия и исполнителя.
+            В "Интеллектуальном поиске" они скрыты, пока песня не выбрана через ИИ/ссылку/скриншот. */}
+            <form
+              className={`order-form${categoryPicking ? " order-form--picking" : ""}${categoryStep ? " order-form--category-step" : ""}`}
+              style={searchStyle === "smart" && !songTitle.trim() ? { display: "none" } : undefined}
+              onSubmit={handleSubmitOrder}
+            >
               <input
                 type="text"
                 value={songTitle}
