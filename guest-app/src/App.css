@@ -1235,3 +1235,12 @@ button.step-blink-fill { animation: button-fill-blink 2s ease-in-out infinite; }
   border-color: #60a5fa;
   background: rgba(96, 165, 250, 0.18);
 }
+
+/* Медленное мигание "Простой поиск", пока гость не выбрал способ поиска (запрос 2026-10-28). */
+@keyframes search-style-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+.search-style-choice .search-style-blink {
+  animation: search-style-blink 2.4s ease-in-out infinite;
+}
