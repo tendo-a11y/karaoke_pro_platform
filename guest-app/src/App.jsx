@@ -1714,7 +1714,7 @@ function useTypingPlaceholder(phrases, enabled) {
   return hint;
 }
 
-function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSuggestOther, onSearchStart, onAiStatus, onConfirmChange, active = false, showProfileTabs = true, initialMode = "text" }) {
+function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSuggestOther, onSearchStart, onAiStatus, onConfirmChange, active = false, showProfileTabs = true, showExtraRow = true, initialMode = "text" }) {
   // "Не эта" под найденной песней: подсказываем другие способы — моргают "Ссылка" и "Скриншот".
   const [suggestOther, setSuggestOther] = useState(false);
   // Неудачный поиск — пусть ещё моргает поле "Название песни" (запрос пользователя 2026-10).
@@ -1831,7 +1831,7 @@ function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSu
           </button>
         ))}
         </div>
-        {onExtra ? (
+        {onExtra && showExtraRow ? (
           <div className="finder-group finder-group--extra">
             {[
               { key: "orders", label: "Мои заказы" },
@@ -4326,6 +4326,7 @@ export default function App() {
           }}
           extra={orderExtra}
           showProfileTabs={!!meInfo.has_permanent_profile}
+          showExtraRow={false}
           onExtra={(key) => {
             if (key === "orders") setOrdersTab("current");
             if (key === "history") setOrdersTab("history");
@@ -4463,6 +4464,31 @@ export default function App() {
           </p>
         ) : (
           <>
+            {/* "Мои заказы / Избранное / История" (запрос 2026-10-28): только в "Простом поиске". */}
+            {searchStyle === "simple" ? (
+              <div className="finder-modes">
+                <div className="finder-group finder-group--extra">
+                  {[
+                    { key: "orders", label: "Мои заказы" },
+                    { key: "fav", label: "Избранное" },
+                    { key: "history", label: "История" },
+                  ].filter((b) => !!meInfo.has_permanent_profile || (b.key !== "fav" && b.key !== "history")).map((b) => (
+                    <button
+                      key={b.key}
+                      type="button"
+                      className={`link-btn finder-modes__fav${orderExtra === b.key ? " finder-modes__active" : ""}`}
+                      onClick={() => {
+                        if (b.key === "orders") setOrdersTab("current");
+                        if (b.key === "history") setOrdersTab("history");
+                        setOrderExtra((prev) => (prev === b.key ? null : b.key));
+                      }}
+                    >
+                      {b.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
             {/* Раздел 1 "Простой поиск" (запрос 2026-10-28): поля названия и исполнителя.
             В "Интеллектуальном поиске" они скрыты, пока песня не выбрана через ИИ/ссылку/скриншот. */}
             <form
