@@ -3770,6 +3770,8 @@ export default function App() {
   const [showActivation, setShowActivation] = useState(false);
   // Категорию без песни и исполнителя не открываем: показываем короткую подсказку (запрос 2026-10-28).
   const [categoryNotice, setCategoryNotice] = useState(null);
+  // Плашка "Сначала выберите наименование песни и исполнителя" (запрос 2026-10-29).
+  const [songWarning, setSongWarning] = useState(false);
   // Короткая подсказка рядом с категориями; пропадает сама через 3 секунды.
   function flashCategoryNotice(text) {
     setCategoryNotice(text);
@@ -4378,6 +4380,17 @@ export default function App() {
       {guideBox && guideTarget ? (
         <div className="guide-finger" style={{ left: guideBox.left, top: guideBox.top }} aria-hidden="true">👆</div>
       ) : null}
+      {songWarning && (
+        <div className="msg-popup-overlay" role="alertdialog" aria-modal="true">
+          <div className="msg-popup">
+            <div className="msg-popup__title">⚠️ Внимание</div>
+            <div className="msg-popup__text">Сначала выберите наименование песни и исполнителя</div>
+            <div className="msg-popup__actions">
+              <button type="button" onClick={() => setSongWarning(false)}>Понятно</button>
+            </div>
+          </div>
+        </div>
+      )}
       {showFirstOrderNotice && (
         <div className="msg-popup-overlay" role="alertdialog" aria-modal="true">
           <div className="msg-popup">
@@ -4679,7 +4692,6 @@ export default function App() {
                 required
                 className={guideRunning ? (guideStep === "artist" && !artist.trim() ? "step-blink" : undefined) : (songTitle.trim() && !artist.trim() ? "step-blink" : undefined)}
               />
-              {categoryNotice && <p className="service-notice">{categoryNotice}</p>}
               {services.length > 0 && (
                 // "Без тарифа" убран из списка (запрос пользователя
                 // 2026-09-14 — тариф в клубе есть всегда). Значение всегда
@@ -4699,7 +4711,9 @@ export default function App() {
                   onLinkSubmit={(url, linkCat) => {
                     // EXCLUSIVE вручную: ссылка введена в меню категории — тот же путь, что и заказ по ссылке.
                     if (!songTitle.trim() || !artist.trim()) {
-                      flashCategoryNotice("Сначала выберите песню и исполнителя");
+                      setSongWarning(true);
+                      setTitleHint(true);
+                      setTimeout(() => setTitleHint(false), 6000);
                       return;
                     }
                     setSongUrl(url);
@@ -4713,7 +4727,9 @@ export default function App() {
                     // Раньше здесь при любой блокировке заказ молча не уходил. Теперь гость видит, что мешает.
                     if (!v || songUrl || submitting) return;
                     if (!songTitle.trim() || !artist.trim()) {
-                      flashCategoryNotice("Сначала выберите песню и исполнителя");
+                      setSongWarning(true);
+                      setTitleHint(true);
+                      setTimeout(() => setTitleHint(false), 6000);
                       return;
                     }
                     if (!activated) {
