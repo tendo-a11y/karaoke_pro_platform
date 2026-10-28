@@ -4779,6 +4779,21 @@ export default function App() {
         </button>
         {queueOpen && (
         <>
+        <SongListsPanel
+          token={session.token}
+          tab={songListsTab}
+          onTab={setSongListsTab}
+          onPick={(song) => {
+            setSongTitle(song.song_title);
+            setArtist(song.artist || "");
+            setSongUrl(null);
+            setOrderExtra(null);
+            // Выбрали песню из списка — списки закрываем, чтобы открылся шаг заказа (запрос 2026-10).
+            setSongListsTab(null);
+            const panel = document.querySelector(".order-form-panel");
+            if (panel) panel.scrollIntoView({ behavior: "smooth", block: "start" });
+          }}
+        />
         {songListsOpen ? null : !queueVisible ? (
           <p className="empty-hint">Очередь не отображается.</p>
         ) : queue.length === 0 ? (
@@ -4825,21 +4840,6 @@ export default function App() {
           </ol>
           </>
         )}
-        <SongListsPanel
-          token={session.token}
-          tab={songListsTab}
-          onTab={setSongListsTab}
-          onPick={(song) => {
-            setSongTitle(song.song_title);
-            setArtist(song.artist || "");
-            setSongUrl(null);
-            setOrderExtra(null);
-            // Выбрали песню из списка — списки закрываем, чтобы открылся шаг заказа (запрос 2026-10).
-            setSongListsTab(null);
-            const panel = document.querySelector(".order-form-panel");
-            if (panel) panel.scrollIntoView({ behavior: "smooth", block: "start" });
-          }}
-        />
         </>
         )}
       </section>
