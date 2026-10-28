@@ -1272,3 +1272,11 @@ button.step-blink-fill { animation: button-fill-blink 2s ease-in-out infinite; }
   width: 20px; height: 20px; border: 1px solid var(--accent); border-radius: 4px;
   font-size: 12px; line-height: 1;
 }
+
+/* Небольшая кнопка «Заказ» возле каждой категории (запрос 2026-10-28). */
+.service-picker__order {
+  flex: none; align-self: center; margin: 0 6px 0 4px;
+  background: transparent; color: var(--accent); border: 1px solid var(--accent);
+  border-radius: 999px; padding: 3px 9px; font-size: 12px; font-weight: 600; line-height: 1.2;
+  white-space: nowrap; cursor: pointer;
+}
