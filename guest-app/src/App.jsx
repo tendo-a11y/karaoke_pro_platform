@@ -3603,6 +3603,8 @@ export default function App() {
   // две песни и за одну песню до выхода гостя, один раз на песню.
   const [turnToast, setTurnToast] = useState(null);
   const [songListsTab, setSongListsTab] = useState(null);
+  // Активная очередь по умолчанию свёрнута; открывается по треугольнику (запрос 2026-10-28).
+  const [queueOpen, setQueueOpen] = useState(false);
   const [titleHint, setTitleHint] = useState(false);
   const [categoryPicking, setCategoryPicking] = useState(false);
   const [songConfirming, setSongConfirming] = useState(false);
@@ -4769,41 +4771,24 @@ export default function App() {
             <span className="turn-toast__close">Нажмите, чтобы закрыть</span>
           </button>
         ) : null}
-        <SongListsPanel
-          token={session.token}
-          tab={songListsTab}
-          onTab={setSongListsTab}
-          onPick={(song) => {
-            setSongTitle(song.song_title);
-            setArtist(song.artist || "");
-            setSongUrl(null);
-            setOrderExtra(null);
-            // Выбрали песню из списка — списки закрываем, чтобы открылся шаг заказа (запрос 2026-10).
-            setSongListsTab(null);
-            const panel = document.querySelector(".order-form-panel");
-            if (panel) panel.scrollIntoView({ behavior: "smooth", block: "start" });
+        <h2
+          className="collapsible-header active-queue-title"
+          role="button"
+          tabIndex={0}
+          aria-expanded={queueOpen}
+          onClick={() => setQueueOpen((v) => !v)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              setQueueOpen((v) => !v);
+            }
           }}
-        />
-        {songListsOpen ? (
-          <h2
-            className="collapsible-header active-queue-title"
-            role="button"
-            tabIndex={0}
-            aria-expanded={false}
-            onClick={() => setSongListsTab(null)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                setSongListsTab(null);
-              }
-            }}
-          >
-            Активная очередь
-            <span className="collapsible-caret">▼</span>
-          </h2>
-        ) : (
-          <h2 className="active-queue-title">Активная очередь</h2>
-        )}
+        >
+          Активная очередь
+          <span className="collapsible-caret">{queueOpen ? "▲" : "▼"}</span>
+        </h2>
+        {queueOpen && (
+        <>
         {songListsOpen ? null : !queueVisible ? (
           <p className="empty-hint">Очередь не отображается.</p>
         ) : queue.length === 0 ? (
@@ -4850,6 +4835,23 @@ export default function App() {
           </ol>
           </>
         )}
+        </>
+        )}
+        <SongListsPanel
+          token={session.token}
+          tab={songListsTab}
+          onTab={setSongListsTab}
+          onPick={(song) => {
+            setSongTitle(song.song_title);
+            setArtist(song.artist || "");
+            setSongUrl(null);
+            setOrderExtra(null);
+            // Выбрали песню из списка — списки закрываем, чтобы открылся шаг заказа (запрос 2026-10).
+            setSongListsTab(null);
+            const panel = document.querySelector(".order-form-panel");
+            if (panel) panel.scrollIntoView({ behavior: "smooth", block: "start" });
+          }}
+        />
       </section>
     </div>
   );
