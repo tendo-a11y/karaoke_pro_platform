@@ -529,17 +529,22 @@ function ServiceSelect({ services, value, onChange, disabled, highlight = false,
     onChange(String(service.id));
   }
 
-  function submitLink(event) {
-    event.preventDefault();
-    const url = linkText.trim();
+  // Ссылка уходит сразу, как только её вставили: без кнопки "Далее" (запрос 2026-10-29).
+  const linkAutoTimer = useRef(null);
+  function sendLink(url) {
     if (!/^https?:\/\/(www\.|m\.|music\.)?(youtube\.com|youtu\.be)\//i.test(url)) {
       setLinkError("Нужна ссылка с YouTube — откройте песню в YouTube, нажмите «Поделиться» и вставьте ссылку сюда.");
       return;
     }
     const service = linkService;
+    clearTimeout(linkAutoTimer.current);
     setLinkId(null);
     setOpen(false);
     onLinkSubmit?.(url, service);
+  }
+  function submitLink(event) {
+    event.preventDefault();
+    sendLink(linkText.trim());
   }
 
   function confirmCard() {
@@ -660,12 +665,19 @@ function ServiceSelect({ services, value, onChange, disabled, highlight = false,
                 className="service-picker__linkinput"
                 placeholder="Вставьте ссылку на песню с YouTube"
                 value={linkText}
-                onChange={(e) => { setLinkText(e.target.value); setLinkError(null); }}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setLinkText(v);
+                  setLinkError(null);
+                  clearTimeout(linkAutoTimer.current);
+                  if (/^https?:\/\/(www\.|m\.|music\.)?(youtube\.com|youtu\.be)\/\S+/i.test(v.trim())) {
+                    linkAutoTimer.current = setTimeout(() => sendLink(v.trim()), 400);
+                  }
+                }}
                 autoFocus
               />
               {linkError ? <div className="service-picker__linkerror">{linkError}</div> : null}
               <div className="service-picker__linkbuttons">
-                <button type="submit" className="service-picker__linkok">Далее</button>
                 <button type="button" className="service-picker__linkback" onClick={() => { setLinkMode("choose"); setLinkError(null); }}>Назад</button>
               </div>
             </form>
