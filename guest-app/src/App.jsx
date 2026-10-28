@@ -4436,10 +4436,10 @@ export default function App() {
           </section>
         </>
       )}
-      {showFullUi && <TableJoinBanner token={session?.token} status={meInfo.table_group_status} hasTable={meInfo.table_no != null} tableNo={meInfo.table_no} onGoOrders={() => { setView("home"); setOrderExtra(null); setFinderInit("text"); setSearchKey((k) => k + 1); const panel = document.querySelector(".order-form-panel"); if (panel) panel.scrollIntoView({ behavior: "smooth", block: "start" }); }} />}
+      <TableJoinBanner token={session?.token} status={meInfo.table_group_status} hasTable={meInfo.table_no != null} tableNo={meInfo.table_no} onGoOrders={() => { setView("home"); setOrderExtra(null); setFinderInit("text"); setSearchKey((k) => k + 1); const panel = document.querySelector(".order-form-panel"); if (panel) panel.scrollIntoView({ behavior: "smooth", block: "start" }); }} />
       <TableClosedBanner tableNo={meInfo?.table_no} enabled={Boolean(session)} signal={closedSignal} />
 
-      {showFullUi && meInfo.table_close_receipt && !dismissedCloseRequestIds.has(meInfo.table_close_receipt.id) && (
+      {meInfo.table_close_receipt && !dismissedCloseRequestIds.has(meInfo.table_close_receipt.id) && (
         <TableCloseReceiptBanner
           closeRequest={meInfo.table_close_receipt}
           onDismiss={() =>
