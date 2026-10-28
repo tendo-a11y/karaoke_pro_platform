@@ -4464,31 +4464,6 @@ export default function App() {
           </p>
         ) : (
           <>
-            {/* "Мои заказы / Избранное / История" (запрос 2026-10-28): только в "Простом поиске". */}
-            {searchStyle === "simple" ? (
-              <div className="finder-modes">
-                <div className="finder-group finder-group--extra">
-                  {[
-                    { key: "orders", label: "Мои заказы" },
-                    { key: "fav", label: "Избранное" },
-                    { key: "history", label: "История" },
-                  ].filter((b) => !!meInfo.has_permanent_profile || (b.key !== "fav" && b.key !== "history")).map((b) => (
-                    <button
-                      key={b.key}
-                      type="button"
-                      className={`link-btn finder-modes__fav${orderExtra === b.key ? " finder-modes__active" : ""}`}
-                      onClick={() => {
-                        if (b.key === "orders") setOrdersTab("current");
-                        if (b.key === "history") setOrdersTab("history");
-                        setOrderExtra((prev) => (prev === b.key ? null : b.key));
-                      }}
-                    >
-                      {b.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ) : null}
             {/* Раздел 1 "Простой поиск" (запрос 2026-10-28): поля названия и исполнителя.
             В "Интеллектуальном поиске" они скрыты, пока песня не выбрана через ИИ/ссылку/скриншот. */}
             <form
@@ -4635,6 +4610,30 @@ export default function App() {
           </>
         )}
       </section>
+
+      {/* "Мои заказы / Избранное / История" (запрос 2026-10-28): над "Групповой стол". */}
+      <div className="finder-modes">
+        <div className="finder-group finder-group--extra">
+          {[
+            { key: "orders", label: "Мои заказы" },
+            { key: "fav", label: "Избранное" },
+            { key: "history", label: "История" },
+          ].filter((b) => !!meInfo.has_permanent_profile || (b.key !== "fav" && b.key !== "history")).map((b) => (
+            <button
+              key={b.key}
+              type="button"
+              className={`link-btn finder-modes__fav${orderExtra === b.key ? " finder-modes__active" : ""}`}
+              onClick={() => {
+                if (b.key === "orders") setOrdersTab("current");
+                if (b.key === "history") setOrdersTab("history");
+                setOrderExtra((prev) => (prev === b.key ? null : b.key));
+              }}
+            >
+              {b.label}
+            </button>
+          ))}
+        </div>
+      </div>
 
       <TableGroupPanel
         token={session.token}
