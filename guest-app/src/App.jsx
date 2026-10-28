@@ -2783,7 +2783,6 @@ function ProfileNamePanel({ token, meInfo, onNameChanged }) {
   // ДОБАВЛЕНО (2026-10, запрос пользователя: "раздел Имя Фото сделаем
   // раскрывающимся, по умолчанию свёрнут") — тот же приём, что и у
   // "Избранное"/"Финансы" (.collapsible-header).
-  const [profileOpen, setProfileOpen] = useState(false);
   // "Удалить мои данные" (запрос пользователя 2026-10-04, право на
   // удаление персональных данных) — сразу и полностью, без отдельного
   // экрана, с одним окном подтверждения (window.confirm).
@@ -2885,23 +2884,6 @@ function ProfileNamePanel({ token, meInfo, onNameChanged }) {
   if (!editing) {
     return (
       <section className="panel profile-panel">
-        <h2
-          className="collapsible-header"
-          role="button"
-          tabIndex={0}
-          aria-expanded={profileOpen}
-          onClick={() => setProfileOpen((prev) => !prev)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
-              setProfileOpen((prev) => !prev);
-            }
-          }}
-        >
-          👤 Профиль{meInfo.display_name ? ` · ${meInfo.display_name}` : ""}
-          <span className={`collapsible-caret${profileOpen ? " collapsible-caret--blink" : ""}`}>{profileOpen ? "▲" : "▼"}</span>
-        </h2>
-        {profileOpen && (
         <>
         <p className="empty-hint">
           {meInfo.display_name
@@ -2970,7 +2952,6 @@ function ProfileNamePanel({ token, meInfo, onNameChanged }) {
           </div>
         )}
         </>
-        )}
       </section>
     );
   }
@@ -3579,25 +3560,41 @@ export default function App() {
   const [songUrl, setSongUrl] = useState(null);
   const nameTypingHint = useTypingPlaceholder(SIMPLE_NAME_PHRASES, !songTitle);
   const artistTypingHint = useTypingPlaceholder(SIMPLE_ARTIST_PHRASES, !artist);
-  // Палец 👆 показывает, куда нажать, при первом заходе (запрос 2026-10-28). Без подписи.
+  // Палец 👆 ведёт гостя при первом заказе (запрос 2026-10-28, уточнено):
+  // Простой поиск → наименование → исполнитель → категория. Каждый следующий шаг
+  // наступает через 2 секунды паузы; после первого отправленного заказа всё гаснет навсегда.
   const [guideDone, setGuideDone] = useState(() => {
     try { return localStorage.getItem("guideDone") === "1"; } catch { return false; }
   });
-  const guideActive = !guideDone && view === "home" && meInfo?.table_no != null;
+  const [guideStep, setGuideStep] = useState("mode");
+  // Профиль вынесен наверх, слева от кнопки «Язык» (запрос 2026-10-28): кнопка-квадратик
+  // в шапке открывает/закрывает раздел под шапкой.
+  const [profileTopOpen, setProfileTopOpen] = useState(false);
+  const guideRunning = !guideDone && view === "home" && meInfo?.table_no != null && searchStyle === "simple";
+  useEffect(() => {
+    if (!guideRunning || guideStep !== "mode") return;
+    const t = setTimeout(() => setGuideStep("name"), 2000);
+    return () => clearTimeout(t);
+  }, [guideRunning, guideStep]);
+  useEffect(() => {
+    // Пока гость пишет в наименование, таймер сбрасывается; после паузы — исполнитель.
+    if (!guideRunning || guideStep !== "name") return;
+    const t = setTimeout(() => setGuideStep("artist"), 2000);
+    return () => clearTimeout(t);
+  }, [guideRunning, guideStep, songTitle]);
+  useEffect(() => {
+    if (!guideRunning || guideStep !== "artist" || !artist.trim()) return;
+    const t = setTimeout(() => setGuideStep("category"), 2000);
+    return () => clearTimeout(t);
+  }, [guideRunning, guideStep, artist]);
   let guideTarget = null;
-  if (guideActive && !serviceId) {
-    if (!searchStyleTouched) guideTarget = "[data-guide=\"simple-search\"]";
-    else if (!songTitle.trim()) guideTarget = searchStyle === "simple" ? "form.order-form input:nth-of-type(1)" : ".ai-search input";
-    else if (!artist.trim()) guideTarget = "form.order-form input:nth-of-type(2)";
+  if (guideRunning) {
+    if (guideStep === "mode") guideTarget = '[data-guide="simple-search"]';
+    else if (guideStep === "name") guideTarget = '[data-guide="name"]';
+    else if (guideStep === "artist") guideTarget = '[data-guide="artist"]';
     else guideTarget = ".service-picker__toggle";
   }
   const [guideBox, setGuideBox] = useState(null);
-  useEffect(() => {
-    if (serviceId && !guideDone) {
-      setGuideDone(true);
-      try { localStorage.setItem("guideDone", "1"); } catch { /* браузер не даёт сохранить — ничего страшного */ }
-    }
-  }, [serviceId, guideDone]);
   useEffect(() => {
     if (!guideTarget) { setGuideBox(null); return; }
     const el = document.querySelector(guideTarget);
@@ -3921,6 +3918,9 @@ export default function App() {
       // случай (не должен происходить в штатной работе), если сервер по
       // какой-то причине его не прислал, тогда просто "Заказ отправлен!".
       setSubmitOk(created.queue_position ?? 0);
+      // Первый заказ отправлен — подсказка-палец и её миганье больше не нужны (запрос 2026-10-28).
+      setGuideDone(true);
+      try { localStorage.setItem("guideDone", "1"); } catch { /* браузер не даёт сохранить — ничего страшного */ }
       // Чтобы уведомление было видно сразу, прокручиваем экран к началу (запрос 2026-10).
       window.scrollTo({ top: 0, behavior: "smooth" });
       await refreshOrders();
@@ -4283,6 +4283,17 @@ export default function App() {
       
       <header className="app-header">
         <h1>🎤 {meInfo.club_name || "Karaoke"}</h1>
+        {activated && (
+          <button
+            type="button"
+            className="btn-link profile-top-btn"
+            aria-expanded={profileTopOpen}
+            onClick={() => setProfileTopOpen((v) => !v)}
+          >
+            <span className="profile-top-btn__icon" aria-hidden="true">👤</span>
+            Профиль
+          </button>
+        )}
         <LanguageButton /><span className="app-header__table" style={{ display: guestHasOrdered() ? undefined : "none" }}>
           {meInfo.table_no != null ? `Стол ${tableLabel(meInfo.table_no)}` : "Без стола"}
         </span>
@@ -4290,6 +4301,10 @@ export default function App() {
           ✏️
         </button>
       </header>
+
+      {activated && profileTopOpen && (
+        <ProfileNamePanel token={session.token} meInfo={meInfo} onNameChanged={refreshMe} />
+      )}
 
       <AddToHomeScreenHint /><OfflineBanner />
       {submitOk != null && (
@@ -4315,10 +4330,6 @@ export default function App() {
         />
       )}
 
-      {activated && (
-        <ProfileNamePanel token={session.token} meInfo={meInfo} onNameChanged={refreshMe} />
-      )}
-
       <section className={`panel order-form-panel${favPicking || reorderPickedId != null ? " order-form-panel--fav-pick" : ""}${songConfirming ? " order-form-panel--confirm" : ""}${showActivation ? " order-form-panel--activation" : ""}${categoryStep ? " order-form-panel--category" : ""}`}>
         <h2>Заказать песню</h2>
         {/* ИЗМЕНЕНО (жалоба пользователя 2026-09-22: "возможность выбрать
@@ -4336,7 +4347,7 @@ export default function App() {
           <button
             type="button"
             data-guide="simple-search"
-            className={`link-btn${searchStyle === "simple" ? " finder-modes__active" : ""}${!searchStyleTouched ? " search-style-blink" : ""}`}
+            className={`link-btn${searchStyle === "simple" ? " finder-modes__active" : ""}${guideRunning && guideStep === "mode" && !searchStyleTouched ? " search-style-blink" : ""}`}
             onClick={() => setSearchStyle("simple")}
           >
             Простой поиск
@@ -4528,8 +4539,9 @@ export default function App() {
                 type="text"
                 value={songTitle}
                 onChange={(e) => setSongTitle(e.target.value)} onFocus={() => setTypingField(true)} onBlur={() => setTimeout(() => { const a = document.activeElement; if (!(a && a.tagName === "INPUT" && a.closest(".order-form"))) setTypingField(false); }, 400)}
+                data-guide="name"
                 placeholder={nameTypingHint || "Название песни"}
-                className={titleHint && !songTitle.trim() ? "step-blink" : undefined}
+                className={guideRunning ? (guideStep === "name" ? "step-blink" : undefined) : (titleHint && !songTitle.trim() ? "step-blink" : undefined)}
                 maxLength={200}
                 required
               />
@@ -4537,10 +4549,11 @@ export default function App() {
                 type="text"
                 value={artist}
                 onChange={(e) => setArtist(e.target.value)} onFocus={() => setTypingField(true)} onBlur={() => setTimeout(() => { const a = document.activeElement; if (!(a && a.tagName === "INPUT" && a.closest(".order-form"))) setTypingField(false); }, 400)}
+                data-guide="artist"
                 placeholder={artistTypingHint || "Исполнитель (обязательно)"}
                 maxLength={200}
                 required
-                className={songTitle.trim() && !artist.trim() ? "step-blink" : undefined}
+                className={guideRunning ? (guideStep === "artist" && !artist.trim() ? "step-blink" : undefined) : (songTitle.trim() && !artist.trim() ? "step-blink" : undefined)}
               />
               {services.length > 0 && (
                 // "Без тарифа" убран из списка (запрос пользователя
@@ -4577,7 +4590,7 @@ export default function App() {
                       submitOrderWithToken(session.token, v);
                     }
                   }}
-                  highlight={Boolean(songTitle.trim() && artist.trim())}
+                  highlight={guideRunning ? guideStep === "category" : Boolean(songTitle.trim() && artist.trim())}
                   onOpenChange={setCategoryPicking}
                   onCancel={() => {
                     setSongTitle("");
