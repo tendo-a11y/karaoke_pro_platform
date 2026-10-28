@@ -1684,6 +1684,9 @@ function resizeImageToBase64(file) {
 }
 
 const TYPING_PHRASES = ["Рюмка водки Лепс", "Oriunde ai fi Balan"];
+// Подсказки набора в поля "Простого поиска" (запрос 2026-10-28).
+const SIMPLE_NAME_PHRASES = ["Рюмка водки", "Oriunde ai fi"];
+const SIMPLE_ARTIST_PHRASES = ["Лепс", "Balan"];
 
 function useTypingPlaceholder(phrases, enabled) {
   const [hint, setHint] = useState("");
@@ -3574,6 +3577,8 @@ export default function App() {
   const [songConfirming, setSongConfirming] = useState(false);
   // Ссылка, по которой гость нашёл песню ("🔗 Ссылка") — уходит с заказом.
   const [songUrl, setSongUrl] = useState(null);
+  const nameTypingHint = useTypingPlaceholder(SIMPLE_NAME_PHRASES, !songTitle);
+  const artistTypingHint = useTypingPlaceholder(SIMPLE_ARTIST_PHRASES, !artist);
   const songListsOpen = songListsTab != null;
   const turnToastShownRef = useRef(new Set());
   useEffect(() => {
@@ -4481,7 +4486,7 @@ export default function App() {
                 type="text"
                 value={songTitle}
                 onChange={(e) => setSongTitle(e.target.value)} onFocus={() => setTypingField(true)} onBlur={() => setTimeout(() => { const a = document.activeElement; if (!(a && a.tagName === "INPUT" && a.closest(".order-form"))) setTypingField(false); }, 400)}
-                placeholder="Название песни"
+                placeholder={nameTypingHint || "Название песни"}
                 className={titleHint && !songTitle.trim() ? "step-blink" : undefined}
                 maxLength={200}
                 required
@@ -4490,7 +4495,7 @@ export default function App() {
                 type="text"
                 value={artist}
                 onChange={(e) => setArtist(e.target.value)} onFocus={() => setTypingField(true)} onBlur={() => setTimeout(() => { const a = document.activeElement; if (!(a && a.tagName === "INPUT" && a.closest(".order-form"))) setTypingField(false); }, 400)}
-                placeholder="Исполнитель (обязательно)"
+                placeholder={artistTypingHint || "Исполнитель (обязательно)"}
                 maxLength={200}
                 required
                 className={songTitle.trim() && !artist.trim() ? "step-blink" : undefined}
