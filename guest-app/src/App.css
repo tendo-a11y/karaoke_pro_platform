@@ -1252,13 +1252,14 @@ button.step-blink-fill { animation: button-fill-blink 2s ease-in-out infinite; }
   pointer-events: none;
   font-size: 34px;
   line-height: 1;
-  transform: translate(-50%, -100%);
+  transform-origin: 50% 0;
+  transform: translate(-50%, 0) rotate(30deg);
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
   animation: guide-bob 1s ease-in-out infinite;
 }
 @keyframes guide-bob {
-  0%, 100% { transform: translate(-50%, -100%); }
-  50% { transform: translate(-50%, calc(-100% + 10px)); }
+  0%, 100% { transform: translate(-50%, 0) rotate(30deg); }
+  50% { transform: translate(-50%, 6px) rotate(30deg); }
 }
 @media (prefers-reduced-motion: reduce) {
   .guide-finger { animation: none; }
