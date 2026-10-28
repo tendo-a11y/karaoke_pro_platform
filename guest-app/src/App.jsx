@@ -4771,22 +4771,15 @@ export default function App() {
             <span className="turn-toast__close">Нажмите, чтобы закрыть</span>
           </button>
         ) : null}
-        <h2
-          className="collapsible-header active-queue-title"
-          role="button"
-          tabIndex={0}
+        <button
+          type="button"
+          className="collapsible-header active-queue-title active-queue-toggle"
           aria-expanded={queueOpen}
           onClick={() => setQueueOpen((v) => !v)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
-              setQueueOpen((v) => !v);
-            }
-          }}
         >
           Активная очередь
           <span className="collapsible-caret">{queueOpen ? "▲" : "▼"}</span>
-        </h2>
+        </button>
         {queueOpen && (
         <>
         {songListsOpen ? null : !queueVisible ? (
@@ -4835,8 +4828,6 @@ export default function App() {
           </ol>
           </>
         )}
-        </>
-        )}
         <SongListsPanel
           token={session.token}
           tab={songListsTab}
@@ -4852,6 +4843,8 @@ export default function App() {
             if (panel) panel.scrollIntoView({ behavior: "smooth", block: "start" });
           }}
         />
+        </>
+        )}
       </section>
     </div>
   );
