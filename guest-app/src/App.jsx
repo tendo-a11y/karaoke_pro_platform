@@ -3508,7 +3508,7 @@ export default function App() {
   // Выбор способа поиска (запрос 2026-10-28): "Простой поиск" — только ручной ввод
   // названия и исполнителя; "Интеллектуальный поиск" — ИИ-поиск как и раньше
   // (текст, ссылка, скриншот). Остальное в экране не меняется.
-  const [searchStyle, setSearchStyleRaw] = useState("smart");
+  const [searchStyle, setSearchStyleRaw] = useState("simple");
   // Пока гость сам не выбрал способ поиска, кнопка "Простой поиск" медленно моргает (запрос 2026-10-28).
   const [searchStyleTouched, setSearchStyleTouched] = useState(false);
   function setSearchStyle(next) {
