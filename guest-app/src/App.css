@@ -1308,20 +1308,6 @@ button.step-blink-fill { animation: button-fill-blink 2s ease-in-out infinite; }
   color: var(--accent);
 }
 
-/* Списки песен внутри "Активная очередь": простой ряд вкладок без вложенных рамок и фонов. */
-.song-lists { background: none; border: none; padding: 0; margin: 0 0 12px; }
-.song-lists .finder-modes { margin: 0 0 8px; gap: 14px; flex-wrap: wrap; }
-.song-lists .finder-group { gap: 14px; padding: 0; background: none; border: none; flex-wrap: wrap; }
-.song-lists .finder-modes .link-btn { padding: 4px 0; font-size: 13px; color: var(--muted); background: none; border: none; border-bottom: 2px solid transparent; border-radius: 0; }
-.song-lists .finder-modes .finder-modes__active { color: var(--accent); background: none; border-bottom-color: var(--accent); }
-.song-lists .finder-modes .finder-modes__active .collapsible-caret { color: var(--accent); }
-.song-lists__collapse { margin-left: auto; padding: 4px 0 !important; font-size: 13px !important; color: var(--muted) !important; border: none !important; }
-.song-lists__sort { display: flex; flex-wrap: wrap; gap: 14px; margin: 0 0 8px; }
-.song-lists__sort-btn { padding: 0; font-size: 12px; color: var(--muted); background: none; border: none; }
-.song-lists__sort-btn--active { color: var(--accent); }
-.song-lists__body { margin-top: 4px; }
-.song-lists__list { padding-left: 20px; }
-
 /* Шапка на телефоне: название клуба на всю ширину в одну строку, ниже стол и кнопки в ряд без наложений. */
 @media (max-width: 520px) {
   .app-header { flex-wrap: wrap; justify-content: flex-start; row-gap: 8px; column-gap: 6px; }
