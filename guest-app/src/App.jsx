@@ -4483,7 +4483,7 @@ export default function App() {
         "Заказать". */}
         <div className="search-style-choice" role="group" aria-label="Способ поиска">
           <h2 className="search-style-title">Петь караоке</h2>
-          <h2 className="search-style-plus-caption">Слушать караоке</h2>
+          <h2 className="search-style-plus-caption">Слушать песню</h2>
           <button
             type="button"
             data-guide="simple-search"
