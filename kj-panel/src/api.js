@@ -348,9 +348,9 @@ export const api = {
   closeSungOrders: (token, clubId, tableNo) =>
     request(`/api/kj/table-groups/${clubId}/${tableNo}/close-sung`, { method: "POST", token }),
   // Смена категории песни из пречека (2026-10-13).
-  updateTableOrderCategory: (token, clubId, tableNo, orderId, serviceId) =>
+  updateTableOrderCategory: (token, clubId, tableNo, orderId, serviceId, skipConsent = false) =>
     request(`/api/kj/table-groups/${clubId}/${tableNo}/orders/${orderId}/category`, {
-      method: "PUT", token, body: { service_id: serviceId },
+      method: "PUT", token, body: { service_id: serviceId, skip_consent: skipConsent },
     }),
   // Все чеки клуба за вечер + итоги по категориям (2026-10-13).
   getEveningReceipts: (token, clubId) =>
