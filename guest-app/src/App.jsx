@@ -4470,7 +4470,7 @@ export default function App() {
       )}
 
       <section className={`panel order-form-panel${favPicking || reorderPickedId != null ? " order-form-panel--fav-pick" : ""}${songConfirming ? " order-form-panel--confirm" : ""}${showActivation ? " order-form-panel--activation" : ""}${categoryStep ? " order-form-panel--category" : ""}`}>
-        <h2>Заказать песню</h2>
+        <h2>Петь песню</h2>
         {/* ИЗМЕНЕНО (жалоба пользователя 2026-09-22: "возможность выбрать
         песню была у всех независимо от стола — а вот заказать только после
         выбора стола и входа в Google"): раньше AiSearch был внутри той же
@@ -4491,6 +4491,8 @@ export default function App() {
           >
             Заказ караоке
           </button>
+          <div className="search-style-plus-wrap">
+          <span className="search-style-plus-caption">Послушать песню</span>
           <button
             type="button"
             className={`link-btn search-style-plus${searchStyle === "smart" ? " finder-modes__active" : ""}`}
@@ -4500,6 +4502,7 @@ export default function App() {
           >
             +
           </button>
+          </div>
         </div>
         <div style={searchStyle === "simple" ? { display: "none" } : undefined}>
         <AiSearch
