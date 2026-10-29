@@ -4492,7 +4492,7 @@ export default function App() {
             Заказ караоке
           </button>
           <div className="search-style-plus-wrap">
-          <span className="search-style-plus-caption">Послушать песню</span>
+          <h2 className="search-style-plus-caption">Послушать песню</h2>
           <button
             type="button"
             className={`link-btn${searchStyle === "smart" ? " finder-modes__active" : ""}`}
