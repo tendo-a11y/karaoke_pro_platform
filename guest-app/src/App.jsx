@@ -1637,6 +1637,8 @@ const FINDER_MODES = [
   { key: "link", label: "🔗 Ссылка" },
   { key: "screenshot", label: "📷 Скриншот" },
 ];
+// Временно скрыт ИИ-поиск (кнопка «🤖 ИИ-поиск» не показывается). Код не удалён: чтобы вернуть, поставить false.
+const AI_SEARCH_HIDDEN = true;
 
 // Категория для заказов вручную по ссылке (EXCLUSIVE): та же, что у заказа по ссылке — признак link_default в панели KJ.
 function isExclusiveCategory(s) {
@@ -1731,7 +1733,7 @@ function useTypingPlaceholder(phrases, enabled) {
   return hint;
 }
 
-function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSuggestOther, onSearchStart, onAiStatus, onConfirmChange, active = false, showProfileTabs = true, showExtraRow = true, initialMode = "text" }) {
+function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSuggestOther, onSearchStart, onAiStatus, onConfirmChange, active = false, showProfileTabs = true, showExtraRow = true, initialMode = "link" }) {
   // "Не эта" под найденной песней: подсказываем другие способы — моргают "Ссылка" и "Скриншот".
   const [suggestOther, setSuggestOther] = useState(false);
   // Неудачный поиск — пусть ещё моргает поле "Название песни" (запрос пользователя 2026-10).
@@ -1863,7 +1865,7 @@ function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSu
         <div className="finder-group">
         {/* Распознавание скриншота отключено (2026-10-09): кнопка "Скриншот"
         есть только там, где она отправляет картинку ведущему. */}
-        {FINDER_MODES.filter((m) => m.key !== "screenshot" || onScreenshotHelp).map((m) => (
+        {FINDER_MODES.filter((m) => (m.key !== "screenshot" || onScreenshotHelp) && !(m.key === "text" && AI_SEARCH_HIDDEN)).map((m) => (
           <button
             key={m.key}
             type="button"
@@ -3572,7 +3574,7 @@ export default function App() {
   const [aiSearchStarted, setAiSearchStarted] = useState(false);
   // Отмена в списке категорий возвращает к началу поиска (запрос 2026-10-27): поиск ИИ пересоздаётся.
   const [searchKey, setSearchKey] = useState(0);
-  const [finderInit, setFinderInit] = useState("text");
+  const [finderInit, setFinderInit] = useState("link");
   // Пока печатают название или исполнителя, список категорий не открывается (запрос 2026-10-27).
   const [typingField, setTypingField] = useState(false);
   const [aiSearchFailed, setAiSearchFailed] = useState(false);
@@ -4021,7 +4023,7 @@ export default function App() {
       setArtist("");
       setSongUrl(null);
       setAiSearchStarted(false);
-      setFinderInit("text");
+      setFinderInit("link");
       setSearchKey((k) => k + 1);
       setServiceId("");
       setToneOn(false);
@@ -4223,7 +4225,7 @@ export default function App() {
   useEffect(() => {
     const accepted = (meInfo?.table_no ?? null) != null && (meInfo?.table_group_status === "admin" || meInfo.table_group_status === "member");
     if (accepted) {
-      setFinderInit("text");
+      setFinderInit("link");
       setSearchKey((k) => k + 1);
     }
   }, [meInfo?.table_group_status, meInfo?.table_no]);
@@ -4455,7 +4457,7 @@ export default function App() {
           </section>
         </>
       )}
-      <TableJoinBanner token={session?.token} status={meInfo.table_group_status} hasTable={meInfo.table_no != null} tableNo={meInfo.table_no} onGoOrders={() => { setView("home"); setOrderExtra(null); setFinderInit("text"); setSearchKey((k) => k + 1); const panel = document.querySelector(".order-form-panel"); if (panel) panel.scrollIntoView({ behavior: "smooth", block: "start" }); }} />
+      <TableJoinBanner token={session?.token} status={meInfo.table_group_status} hasTable={meInfo.table_no != null} tableNo={meInfo.table_no} onGoOrders={() => { setView("home"); setOrderExtra(null); setFinderInit("link"); setSearchKey((k) => k + 1); const panel = document.querySelector(".order-form-panel"); if (panel) panel.scrollIntoView({ behavior: "smooth", block: "start" }); }} />
       <TableClosedBanner tableNo={meInfo?.table_no} enabled={Boolean(session)} signal={closedSignal} />
 
       {meInfo.table_close_receipt && !dismissedCloseRequestIds.has(meInfo.table_close_receipt.id) && (
@@ -4765,7 +4767,7 @@ export default function App() {
                     setServiceId("");
                     setSongUrl(null);
                     setAiSearchStarted(false);
-                    setFinderInit("text");
+                    setFinderInit("link");
                     setSearchKey((k) => k + 1);
                   }}
                 />
