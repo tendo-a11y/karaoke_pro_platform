@@ -109,8 +109,8 @@ const D = {
     "⏳ Запит на заміну пісні надіслано — чекайте рішення ведучого.",
   ],
   "Без стола": ["Fără masă", "No table", "Без столу"],
-  "Петь песню": ["Cântă o melodie", "Sing a song", "Заспівати пісню"],
-  "Послушать песню": ["Ascultă o melodie", "Listen to a song", "Послухати пісню"],
+  "Петь караоке": ["Cântă karaoke", "Sing karaoke", "Заспівати караоке"],
+  "Слушать караоке": ["Ascultă karaoke", "Listen to karaoke", "Слухати караоке"],
   "Заказов пока нет — закажите первую песню выше.": [
     "Deocamdată nu sunt comenzi — comandați prima melodie mai sus.",
     "No orders yet — order your first song above.",
