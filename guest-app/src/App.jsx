@@ -1639,6 +1639,8 @@ const FINDER_MODES = [
 ];
 // Временно скрыт ИИ-поиск (кнопка «🤖 ИИ-поиск» не показывается). Код не удалён: чтобы вернуть, поставить false.
 const AI_SEARCH_HIDDEN = true;
+// Временно убраны категории в форме «Заказ караоке»: заказ идёт в обычное караоке после подтверждения цены.
+const CATEGORIES_HIDDEN = true;
 
 // Категория для заказов вручную по ссылке (EXCLUSIVE): та же, что у заказа по ссылке — признак link_default в панели KJ.
 function isExclusiveCategory(s) {
@@ -3751,7 +3753,7 @@ export default function App() {
   const [services, setServices] = useState([]);
   // Шаг "категория" (запрос пользователя 2026-10): песня и исполнитель введены, категории ещё нет —
   // на экране только кнопка категории.
-  const categoryStep = Boolean(songTitle.trim() && artist.trim() && !serviceId && !categoryPicking && !typingField) && services.length > 0;
+  const categoryStep = !CATEGORIES_HIDDEN && Boolean(songTitle.trim() && artist.trim() && !serviceId && !categoryPicking && !typingField) && services.length > 0;
   const [favoriteBusyOrderId, setFavoriteBusyOrderId] = useState(null);
   const [favoriteMessage, setFavoriteMessage] = useState(null);
   const [replacingOrderId, setReplacingOrderId] = useState(null);
@@ -4071,6 +4073,15 @@ export default function App() {
   async function handleSubmitOrder(event) {
     event.preventDefault();
     if (!session || !songTitle.trim()) return;
+    if (CATEGORIES_HIDDEN) {
+      // Обычное караоке по умолчанию: сначала подтверждение цены, как при заказе по ссылке.
+      const karaoke = services.find((c) => c.name === "KARAOKE" || c.description === "Обычное караоке");
+      if (!karaoke) { setSubmitError("Категория «Обычное караоке» не найдена"); return; }
+      if (!artist.trim()) { setSongWarning(true); setTitleHint(true); setTimeout(() => setTitleHint(false), 6000); return; }
+      setServiceId(String(karaoke.id));
+      setInternetHint({ name: karaoke.description || karaoke.name, price: karaoke.price, fromLink: false });
+      return;
+    }
     // EXCLUSIVE теперь может быть и по ссылке, и по названию/исполнителю (запрос 2026-10-28):
     // выбор делается в меню категории, поэтому здесь ссылку больше не требуем.
 
@@ -4697,7 +4708,7 @@ export default function App() {
                 required
                 className={guideRunning ? (guideStep === "artist" && !artist.trim() ? "step-blink" : undefined) : (songTitle.trim() && !artist.trim() ? "step-blink" : undefined)}
               />
-              {services.length > 0 && (
+              {!CATEGORIES_HIDDEN && services.length > 0 && (
                 // "Без тарифа" убран из списка (запрос пользователя
                 // 2026-09-14 — тариф в клубе есть всегда). Значение всегда
                 // начинается пустым (запрос пользователя 2026-09-23) —
@@ -4772,6 +4783,9 @@ export default function App() {
                     setSearchKey((k) => k + 1);
                   }}
                 />
+              )}
+              {CATEGORIES_HIDDEN && (
+                <button type="submit" disabled={!songTitle.trim() || !artist.trim()}>Заказать</button>
               )}
               <div className="tone-picker">
                 <label className="tone-picker__check">
