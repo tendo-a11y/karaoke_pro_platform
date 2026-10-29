@@ -640,7 +640,7 @@ def screenshot_powered_search(image_base64: str, media_type: str) -> list[dict]:
     return results
 
 
-def ai_powered_search(text: str) -> list[dict]:
+def _ai_powered_search_uncached(text: str) -> list[dict]:
     """
     Возвращает от 0 до 5 словарей {title, artist}. Никогда не дополняет
     список выдуманными записями сверх того, что в итоге решил Claude — если
@@ -713,4 +713,37 @@ def ai_powered_search(text: str) -> list[dict]:
         "AI-поиск: текст гостя %r -> варианты от Claude %r -> каталоги нашли %d подсказок -> итог %d результат(ов)",
         text, guesses, len(catalog_hits), len(results),
     )
+    return results
+
+
+# Кеш ответов умного поиска (2026-10-29): повтор того же запроса — мгновенно,
+# без обращения к Claude и каталогам. Хранится в памяти процесса, 24 часа.
+import re as _re
+import threading as _threading
+import time as _time
+
+_AI_CACHE_TTL = 24 * 3600
+_AI_CACHE_MAX = 500
+_ai_cache: dict[str, tuple[float, list[dict]]] = {}
+_ai_cache_lock = _threading.Lock()
+
+
+def _ai_cache_key(text: str) -> str:
+    return _re.sub(r"\s+", " ", text.strip().lower())
+
+
+def ai_powered_search(text: str) -> list[dict]:
+    key = _ai_cache_key(text)
+    now = _time.time()
+    with _ai_cache_lock:
+        hit = _ai_cache.get(key)
+        if hit and now - hit[0] < _AI_CACHE_TTL:
+            return [dict(x) for x in hit[1]]
+    results = _ai_powered_search_uncached(text)
+    # Пустой ответ не кешируем: может быть временный сбой внешних сервисов.
+    if results:
+        with _ai_cache_lock:
+            if len(_ai_cache) >= _AI_CACHE_MAX:
+                _ai_cache.pop(next(iter(_ai_cache)))
+            _ai_cache[key] = (now, [dict(x) for x in results])
     return results
