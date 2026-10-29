@@ -640,6 +640,22 @@ def screenshot_powered_search(image_base64: str, media_type: str) -> list[dict]:
     return results
 
 
+def _exact_catalog_match(guesses: list[str], catalog_hits: list[dict]) -> dict | None:
+    """Возвращает попадание каталога, если и название, и исполнитель
+    присутствуют в одном из вариантов Claude (без учёта регистра). Иначе None."""
+    def norm(s: str) -> str:
+        return _re.sub(r"\s+", " ", (s or "").strip().lower())
+
+    for guess in guesses:
+        g = norm(guess)
+        for hit in catalog_hits:
+            title = norm(hit.get("title"))
+            artist = norm(hit.get("artist"))
+            if title and artist and title in g and artist in g:
+                return {"title": hit["title"], "artist": hit.get("artist")}
+    return None
+
+
 def _ai_powered_search_uncached(text: str) -> list[dict]:
     """
     Возвращает от 0 до 5 словарей {title, artist}. Никогда не дополняет
@@ -696,7 +712,12 @@ def _ai_powered_search_uncached(text: str) -> list[dict]:
         guesses = [text]
 
     catalog_hits = _gather_catalog_hits(guesses)
-    decided = _ask_claude_to_decide(text, guesses, catalog_hits)
+    # 2026-10-29: если каталог (Deezer/MusicBrainz) подтвердил ровно ту пару
+    # "исполнитель + название", которую предложил Claude, второй запрос с
+    # веб-поиском не нужен — это уже реальная запись из каталога, а не
+    # выдумка. Это ускоряет первый поиск с 4–8 с до примерно одного запроса.
+    exact = _exact_catalog_match(guesses, catalog_hits)
+    decided = [exact] if exact else _ask_claude_to_decide(text, guesses, catalog_hits)
 
     seen = set()
     results: list[dict] = []
