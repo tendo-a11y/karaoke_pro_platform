@@ -3065,7 +3065,7 @@ const ORDER_OK_BOX = { position: "fixed", top: "50%", left: "50%", transform: "t
 const ORDER_OK_BTN = { display: "block", width: "100%", padding: "16px", borderRadius: 12, border: "none", fontWeight: 800, fontSize: 20, marginTop: 12, color: "#fff", background: "#052e16", cursor: "pointer" };
 const ORDER_OK_OVERLAY = { position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.6)", zIndex: 1000 };
 
-const DEFAULT_ENTRY_NOTICE = "Введите номер стола. Он написан на бумажке на столе, либо спросите у диджея.\nДалее, войдите через Google (Рекомендуем) одним действием. Доступны: Функции Vip. Бонусы и прочие преимущества.\nБез входа в Google всё ограничено.";
+const DEFAULT_ENTRY_NOTICE = "Введите номер стола. Он написан на бумажке на столе, либо спросите у диджея.";
 
 function ActivationPanel({ token, onActivated, onCancel, firstStep = false }) {
   const [tableNo, setTableNo] = useState("");
@@ -3096,21 +3096,10 @@ function ActivationPanel({ token, onActivated, onCancel, firstStep = false }) {
   const tableNoValid =
     selectedExtra != null || (tableNo.trim() !== "" && Number.isInteger(parsedTableNo) && parsedTableNo > 0);
 
-  // Палец на первом экране входа (запрос 2026-10-28): сначала номер стола; после выбора стола
-  // через 2 секунды палец идёт на «Вход через Google», потом через 2 секунды на «Без входа»,
-  // и так по кругу, пока гость не выберет вход.
-  const [firstTarget, setFirstTarget] = useState("table");
-  const [fingerBox, setFingerBox] = useState(null);
+  // Палец всегда на поле номера стола (вход через Google и без входа убраны, 2026-10-30).
   useEffect(() => {
-    if (!firstStep || busy) return;
-    if (!tableNoValid) {
-      setFirstTarget("table");
-      return;
-    }
-    const next = firstTarget === "table" ? "google" : firstTarget === "google" ? "nologin" : "google";
-    const t = setTimeout(() => setFirstTarget(next), 2000);
-    return () => clearTimeout(t);
-  }, [firstStep, busy, tableNoValid, firstTarget]);
+    setFirstTarget("table");
+  }, [firstStep, busy, tableNoValid]);
   useEffect(() => {
     if (!firstStep || busy) {
       setFingerBox(null);
@@ -3138,6 +3127,14 @@ function ActivationPanel({ token, onActivated, onCancel, firstStep = false }) {
   useEffect(() => {
     stateRef.current = { tableNoValid, parsedTableNo, busy };
   });
+
+  // Ввод номера стола сразу переводит на «Заказ караоке» (запрос 2026-10-30): вход без Google.
+  useEffect(() => {
+    if (busy || !tableNoValid) return undefined;
+    const t = setTimeout(() => { handleNoLogin(); }, selectedExtra != null ? 0 : 500);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tableNoValid, parsedTableNo]);
 
   async function handleGoogleCredential(response) {
     const { tableNoValid: valid, parsedTableNo: n, busy: isBusy } = stateRef.current;
@@ -3177,52 +3174,6 @@ function ActivationPanel({ token, onActivated, onCancel, firstStep = false }) {
     }
   }
 
-  // ИСПРАВЛЕНО (жалоба пользователя 2026-09-28 "нету у меня входа"): скрипт
-  // https://accounts.google.com/gsi/client подключён в index.html как
-  // async defer — он грузится параллельно с самим React-приложением, и
-  // нет никакой гарантии, что window.google.accounts.id уже существует
-  // именно в момент, когда монтируется этот экран (медленная сеть, первый
-  // заход без кэша браузера на accounts.google.com — на практике вполне
-  // обычная ситуация, не редкий крайний случай). Раньше здесь была ОДНА
-  // проверка сразу при монтировании: если скрипт Google в этот момент ещё
-  // не успел подгрузиться — гость навсегда получал ошибку "не удалось
-  // загрузить вход через Google" и кнопка так и не появлялась, даже если
-  // скрипт долетал долей секунды позже. Теперь вместо одной проверки —
-  // опрос каждые 150мс в течение 10 секунд, чего с большим запасом хватает
-  // на реальную загрузку внешнего скрипта; ошибка показывается только если
-  // за 10 секунд скрипт так и не появился (это уже настоящий сбой сети, а
-  // не гонка при рендере).
-  useEffect(() => {
-    let cancelled = false;
-    let attempts = 0;
-    const maxAttempts = 67; // ~10 секунд при шаге 150мс
-
-    function tryInit() {
-      if (cancelled) return;
-      if (window.google?.accounts?.id && googleButtonRef.current) {
-        window.google.accounts.id.initialize({
-          client_id: GOOGLE_CLIENT_ID,
-          callback: handleGoogleCredential,
-        });
-        window.google.accounts.id.renderButton(googleButtonRef.current, {
-          theme: "outline", size: "large", text: "signin_with", locale: "ru", width: 280,
-        });
-        return;
-      }
-      attempts += 1;
-      if (attempts >= maxAttempts) {
-        setError("Не удалось загрузить вход через Google — проверьте подключение к интернету и обновите страницу");
-        return;
-      }
-      setTimeout(tryInit, 150);
-    }
-
-    tryInit();
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   return (
     <section ref={panelRef} className="panel activation-panel">
@@ -3231,14 +3182,7 @@ function ActivationPanel({ token, onActivated, onCancel, firstStep = false }) {
       ) : null}
       {firstStep ? null : (
         <>
-          <h2>Выберите стол и войдите через Google</h2>
-          <p className="empty-hint">
-            Укажите номер своего стола и войдите через Google одним действием — это нужно один раз,
-            дальше ваш стол, история заказов и избранное сохранятся.
-          </p>
-          <p className="empty-hint">
-            Или нажмите «Заказать без входа» — тогда доступны только заказы песен, без избранного, кэшбэка и VIP.
-          </p>
+          <h2>Введите номер стола</h2>
         </>
       )}
       {error && <div className="banner banner--error">{error}</div>}
@@ -3258,32 +3202,24 @@ function ActivationPanel({ token, onActivated, onCancel, firstStep = false }) {
         />
         {extraTables.length > 0 && (
           <details className="extra-table-picker-wrap">
-            <summary className="extra-table-picker__summary">Доп. столы</summary>
+            <summary className="extra-table-picker__summary">Дополнительные столы</summary>
             <div className="extra-table-picker">
-            {extraTables.map((t) => (
-              <button
-                key={t.table_no}
-                type="button"
-                className={`extra-table-picker__btn${selectedExtra === t.table_no ? " extra-table-picker__btn--active" : ""}`}
-                onClick={() => {
-                  setSelectedExtra(t.table_no);
-                  setTableNo("");
-                }}
-              >
-                {t.title}
-              </button>
-            ))}
+              {extraTables.map((t) => (
+                <button
+                  key={t.table_no}
+                  type="button"
+                  className={`extra-table-picker__btn${selectedExtra === t.table_no ? " extra-table-picker__btn--active" : ""}`}
+                  onClick={() => {
+                    setSelectedExtra(t.table_no);
+                    setTableNo("");
+                  }}
+                >
+                  {t.title}
+                </button>
+              ))}
             </div>
           </details>
         )}
-        <div className="activation-zone">
-          <button type="button" className={`activation-nologin ${firstStep ? (tableNoValid && firstTarget === "nologin" ? "step-blink-alt" : "") : (tableNoValid ? "step-blink-alt" : "step-dim")}`} onClick={handleNoLogin} disabled={busy || !tableNoValid}>
-            Заказать без входа
-          </button>
-          {/* Шаг 2: моргает, когда стол уже выбран (первый шаг — номер стола). */}
-          <div ref={googleButtonRef} className={`activation-google${firstStep ? (tableNoValid && !busy && firstTarget === "google" ? " step-blink" : "") : (tableNoValid && !busy ? " step-blink" : "")}`} />
-          {!tableNoValid && <div className="activation-zone__guard" onClick={() => setSkipHint(true)} />}
-        </div>
         {skipHint && (
           <>
             <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.6)", zIndex: 1000 }} />
@@ -4312,7 +4248,7 @@ export default function App() {
               </section>
             </>
           )}
-          <div className="entry-notice">{meInfo.entry_notice || DEFAULT_ENTRY_NOTICE}</div>
+          <div className="entry-notice">{DEFAULT_ENTRY_NOTICE}</div>
           <ActivationPanel token={session.token} onActivated={handleActivated} onCancel={() => {}} firstStep />
         </div>
       </div>
