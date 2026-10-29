@@ -2017,14 +2017,6 @@ function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSu
                   onClick={startVoiceSearch}
                 >🎤</button>
               )}
-              {onScreenshotHelp && (
-                <button
-                  type="button"
-                  className="search-pill__btn"
-                  aria-label="Скриншот"
-                  onClick={() => { setPlusOpen(false); onScreenshotHelp(); }}
-                >📷</button>
-              )}
             </div>
             {plusOpen && (
               <div className="search-pill__menu">
@@ -2032,6 +2024,12 @@ function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSu
                   type="button"
                   onClick={() => { setPlusOpen(false); switchMode("link"); }}
                 >🔗 Ссылка на YouTube</button>
+                {onScreenshotHelp && (
+                  <button
+                    type="button"
+                    onClick={() => { setPlusOpen(false); onScreenshotHelp(); }}
+                  >📷 Скриншот</button>
+                )}
               </div>
             )}
           </form>
