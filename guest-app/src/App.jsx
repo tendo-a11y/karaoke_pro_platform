@@ -3123,7 +3123,7 @@ const ORDER_OK_BOX = { position: "fixed", top: "50%", left: "50%", transform: "t
 const ORDER_OK_BTN = { display: "block", width: "100%", padding: "16px", borderRadius: 12, border: "none", fontWeight: 800, fontSize: 20, marginTop: 12, color: "#fff", background: "#052e16", cursor: "pointer" };
 const ORDER_OK_OVERLAY = { position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.6)", zIndex: 1000 };
 
-const DEFAULT_ENTRY_NOTICE = "Введите номер стола. Он написан на бумажке на столе, либо спросите у диджея.\nДалее, войдите через Google (Рекомендуем) одним действием. Доступны: Функции Vip. Бонусы и прочие преимущества.\nБез входа в Google всё ограничено.";
+const DEFAULT_ENTRY_NOTICE = "Введите номер стола. Он написан на бумажке на столе, либо спросите у диджея.";
 
 function ActivationPanel({ token, onActivated, onCancel, firstStep = false }) {
   const [tableNo, setTableNo] = useState("");
@@ -3325,24 +3325,21 @@ function ActivationPanel({ token, onActivated, onCancel, firstStep = false }) {
           required={selectedExtra == null}
         />
         {extraTables.length > 0 && (
-          <details className="extra-table-picker-wrap">
-            <summary className="extra-table-picker__summary">Доп. столы</summary>
-            <div className="extra-table-picker">
+          <select
+            className="extra-table-select"
+            value={selectedExtra ?? ""}
+            onChange={(e) => {
+              const v = e.target.value;
+              if (v === "") { setSelectedExtra(null); return; }
+              setSelectedExtra(Number(v));
+              setTableNo("");
+            }}
+          >
+            <option value="">Доп. столы</option>
             {extraTables.map((t) => (
-              <button
-                key={t.table_no}
-                type="button"
-                className={`extra-table-picker__btn${selectedExtra === t.table_no ? " extra-table-picker__btn--active" : ""}`}
-                onClick={() => {
-                  setSelectedExtra(t.table_no);
-                  setTableNo("");
-                }}
-              >
-                {t.title}
-              </button>
+              <option key={t.table_no} value={t.table_no}>{t.title}</option>
             ))}
-            </div>
-          </details>
+          </select>
         )}
         <div className="activation-zone">
           <button type="button" className={`activation-nologin ${firstStep ? (tableNoValid && firstTarget === "nologin" ? "step-blink-alt" : "") : (tableNoValid ? "step-blink-alt" : "step-dim")}`} onClick={handleNoLogin} disabled={busy || !tableNoValid}>
