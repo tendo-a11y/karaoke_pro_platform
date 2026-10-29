@@ -4071,6 +4071,8 @@ function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged, auto
   const [queueCategories, setQueueCategories] = useState([]);
   const [queueCatBusyId, setQueueCatBusyId] = useState(null);
   const [queueCatError, setQueueCatError] = useState(null);
+  // Чекбокс «Без согласия гостя»: если включён, категория меняется сразу, без запроса гостю.
+  const [queueSkipConsent, setQueueSkipConsent] = useState(false);
   useEffect(() => {
     api.listCategories(token, clubId).then(setQueueCategories).catch(() => {});
   }, [token, clubId]);
@@ -4079,7 +4081,7 @@ function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged, auto
     setQueueCatBusyId(orderId);
     setQueueCatError(null);
     try {
-      await api.updateOrderCategory(token, orderId, value === "" ? null : Number(value));
+      await api.updateOrderCategory(token, orderId, value === "" ? null : Number(value), queueSkipConsent);
       await reload();
     } catch (err) {
       setQueueCatError(err instanceof ApiError ? err.message : String(err));
@@ -4332,6 +4334,10 @@ function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged, auto
           {/* Приоритет песни за столом (2026-10): вся очередь стола по порядку. */}
           <div className="table-queue">
             <h4>Очередь стола</h4>
+            <label style={{ display: "block", margin: "4px 0 8px" }}>
+              <input type="checkbox" checked={queueSkipConsent} onChange={(e) => setQueueSkipConsent(e.target.checked)} />{" "}
+              Без согласия гостя (категория меняется сразу)
+            </label>
             {priorityError && <div className="banner banner--error">{priorityError}</div>}
             {(group.table_orders || []).length === 0 ? (
               <p className="empty-hint">За этим столом пока нет песен в очереди.</p>
