@@ -1632,9 +1632,6 @@ function SongSearch({ token, onPick }) {
 // (backend/services/ai_search_service.py::_ask_claude_vision) и определяет
 // название/исполнителя, дальше поиск в iTunes идёт так же, как у двух
 // других режимов.
-const VOICE_SUPPORTED = typeof window !== "undefined" && Boolean(window.SpeechRecognition || window.webkitSpeechRecognition);
-const VOICE_LANG = { ru: "ru-RU", ro: "ro-RO", en: "en-US", uk: "uk-UA" };
-
 const FINDER_MODES = [
   { key: "text", label: "🤖 ИИ-поиск" },
   { key: "link", label: "🔗 Ссылка" },
@@ -1734,7 +1731,7 @@ function useTypingPlaceholder(phrases, enabled) {
   return hint;
 }
 
-function AiSearch({ token, onPick, onQuickOrder, onScreenshotHelp, extra = null, onExtra, onSuggestOther, onSearchStart, onAiStatus, onConfirmChange, active = false, showProfileTabs = true, showExtraRow = true, initialMode = "text" }) {
+function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSuggestOther, onSearchStart, onAiStatus, onConfirmChange, active = false, showProfileTabs = true, showExtraRow = true, initialMode = "text" }) {
   // "Не эта" под найденной песней: подсказываем другие способы — моргают "Ссылка" и "Скриншот".
   const [suggestOther, setSuggestOther] = useState(false);
   // Неудачный поиск — пусть ещё моргает поле "Название песни" (запрос пользователя 2026-10).
@@ -1743,9 +1740,6 @@ function AiSearch({ token, onPick, onQuickOrder, onScreenshotHelp, extra = null,
   }, [suggestOther, onSuggestOther]);
   // initialMode: EXCLUSIVE выбран вручную — поле для ссылки открывается сразу (запрос 2026-10-27).
   const [mode, setMode] = useState(initialMode);
-  // Строка поиска в стиле Google: «+» (ссылка), микрофон, камера (скриншот).
-  const [plusOpen, setPlusOpen] = useState(false);
-  const [listening, setListening] = useState(false);
   const [text, setText] = useState("");
   const [results, setResults] = useState([]);
   const [searching, setSearching] = useState(false);
@@ -1756,23 +1750,6 @@ function AiSearch({ token, onPick, onQuickOrder, onScreenshotHelp, extra = null,
   useEffect(() => {
     if (onConfirmChange) onConfirmChange(results.length > 0);
   }, [results.length, onConfirmChange]);
-
-  function startVoiceSearch() {
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) return;
-    const rec = new SR();
-    rec.lang = VOICE_LANG[LANG] || "en-US";
-    rec.interimResults = false;
-    rec.maxAlternatives = 1;
-    setListening(true);
-    rec.onresult = (e) => {
-      const t = e.results && e.results[0] && e.results[0][0] ? e.results[0][0].transcript : "";
-      if (t) onInputTyped(t.trim());
-    };
-    rec.onend = () => setListening(false);
-    rec.onerror = () => setListening(false);
-    try { rec.start(); } catch { setListening(false); }
-  }
 
   function switchMode(nextMode) {
     setMode(nextMode);
@@ -1883,7 +1860,7 @@ function AiSearch({ token, onPick, onQuickOrder, onScreenshotHelp, extra = null,
   return (
     <div className={`ai-search${searching || active ? " is-searching" : ""}`}>
       <div className="finder-modes">
-        <div className="finder-group" style={{ display: "none" }}>
+        <div className="finder-group">
         {/* Распознавание скриншота отключено (2026-10-09): кнопка "Скриншот"
         есть только там, где она отправляет картинку ведущему. */}
         {FINDER_MODES.filter((m) => m.key !== "screenshot" || onScreenshotHelp).map((m) => (
@@ -1963,13 +1940,6 @@ function AiSearch({ token, onPick, onQuickOrder, onScreenshotHelp, extra = null,
                       type="button"
                       className="song-confirm song-confirm--yes step-blink"
                       onClick={() => {
-                        if (mode === "text" && onQuickOrder && onQuickOrder(s)) {
-                          setText("");
-                          setResults([]);
-                          setSearched(false);
-                          setSuggestOther(false);
-                          return;
-                        }
                         onPick(mode === "link" ? { ...s, link: text.trim() } : s);
                         setResults([]);
                         setSearched(false);
@@ -1977,7 +1947,7 @@ function AiSearch({ token, onPick, onQuickOrder, onScreenshotHelp, extra = null,
                         if (screenshotInputRef.current) screenshotInputRef.current.value = "";
                       }}
                     >
-                      ✅ Да, это песня
+                      ✅ Эта?
                     </button>
                     <button
                       type="button"
@@ -2001,43 +1971,18 @@ function AiSearch({ token, onPick, onQuickOrder, onScreenshotHelp, extra = null,
         </div>
       ) : (
         <>
-          <form className="order-form search-pill-form" onSubmit={handleSearch}>
-            <div className="search-pill">
-              <button
-                type="button"
-                className="search-pill__btn search-pill__plus"
-                aria-label="Добавить"
-                onClick={() => setPlusOpen((v) => !v)}
-              >+</button>
-              <input
-                type="text"
-                value={text}
-                onChange={(e) => onInputTyped(e.target.value)}
-                placeholder={mode === "link" ? "Вставьте ссылку на YouTube" : "Название песни или исполнитель"}
-                maxLength={300}
-              />
-              {VOICE_SUPPORTED && (
-                <button
-                  type="button"
-                  className={`search-pill__btn${listening ? " is-listening" : ""}`}
-                  aria-label="Голосовой поиск"
-                  onClick={startVoiceSearch}
-                >🎤</button>
-              )}
-            </div>
-            {plusOpen && (
-              <div className="search-pill__menu">
-                <button
-                  type="button"
-                  onClick={() => { setPlusOpen(false); switchMode("link"); }}
-                >🔗 Ссылка на YouTube</button>
-                {onScreenshotHelp && (
-                  <button
-                    type="button"
-                    onClick={() => { setPlusOpen(false); onScreenshotHelp(); }}
-                  >📷 Скриншот</button>
-                )}
-              </div>
+          <form className="order-form" onSubmit={handleSearch}>
+            <input
+              type="text"
+              value={text}
+              onChange={(e) => onInputTyped(e.target.value)}
+              placeholder={placeholder}
+              maxLength={300}
+            />
+            {mode !== "link" && (
+            <button type="submit" className={searching ? "is-searching" : undefined} disabled={searching || !text.trim()}>
+              {searching ? "Ищем песню. Ждите..." : "Найти"}
+            </button>
             )}
           </form>
           {error && <div className="banner banner--error">{error}</div>}
@@ -2066,13 +2011,6 @@ function AiSearch({ token, onPick, onQuickOrder, onScreenshotHelp, extra = null,
                       type="button"
                       className="song-confirm song-confirm--yes step-blink"
                       onClick={() => {
-                        if (mode === "text" && onQuickOrder && onQuickOrder(s)) {
-                          setText("");
-                          setResults([]);
-                          setSearched(false);
-                          setSuggestOther(false);
-                          return;
-                        }
                         onPick(mode === "link" ? { ...s, link: text.trim() } : s);
                         setResults([]);
                         setSearched(false);
@@ -2080,7 +2018,7 @@ function AiSearch({ token, onPick, onQuickOrder, onScreenshotHelp, extra = null,
                         if (screenshotInputRef.current) screenshotInputRef.current.value = "";
                       }}
                     >
-                      ✅ Да, это песня
+                      ✅ Эта?
                     </button>
                     <button
                       type="button"
@@ -3123,7 +3061,7 @@ const ORDER_OK_BOX = { position: "fixed", top: "50%", left: "50%", transform: "t
 const ORDER_OK_BTN = { display: "block", width: "100%", padding: "16px", borderRadius: 12, border: "none", fontWeight: 800, fontSize: 20, marginTop: 12, color: "#fff", background: "#052e16", cursor: "pointer" };
 const ORDER_OK_OVERLAY = { position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.6)", zIndex: 1000 };
 
-const DEFAULT_ENTRY_NOTICE = "Введите номер стола. Он написан на бумажке на столе, либо спросите у диджея.";
+const DEFAULT_ENTRY_NOTICE = "Введите номер стола. Он написан на бумажке на столе, либо спросите у диджея.\nДалее, войдите через Google (Рекомендуем) одним действием. Доступны: Функции Vip. Бонусы и прочие преимущества.\nБез входа в Google всё ограничено.";
 
 function ActivationPanel({ token, onActivated, onCancel, firstStep = false }) {
   const [tableNo, setTableNo] = useState("");
@@ -3151,15 +3089,6 @@ function ActivationPanel({ token, onActivated, onCancel, firstStep = false }) {
   }, []);
 
   const parsedTableNo = selectedExtra != null ? selectedExtra : Number(tableNo);
-  // Выбор стола и есть вход (решение 2026-10-29): на первом экране после номера стола
-  // входим сами, через короткую паузу (чтобы не оборвать ввод вроде «7/1»).
-  useEffect(() => {
-    if (!firstStep || busy) return;
-    const valid = selectedExtra != null || (tableNo.trim() !== "" && Number.isInteger(Number(tableNo)) && Number(tableNo) > 0);
-    if (!valid) return;
-    const t = setTimeout(() => { handleNoLogin(); }, 900);
-    return () => clearTimeout(t);
-  }, [firstStep, busy, tableNo, selectedExtra]);
   const tableNoValid =
     selectedExtra != null || (tableNo.trim() !== "" && Number.isInteger(parsedTableNo) && parsedTableNo > 0);
 
@@ -3200,16 +3129,6 @@ function ActivationPanel({ token, onActivated, onCancel, firstStep = false }) {
       window.removeEventListener("scroll", place, true);
     };
   }, [firstStep, busy, firstTarget, tableNoValid]);
-  // После ввода номера стола экранная клавиатура закрывает кнопки входа.
-  // Прокручиваем экран к кнопке «Вход через Google», чтобы она была видна.
-  useEffect(() => {
-    if (!firstStep || !tableNoValid || busy) return;
-    const t = setTimeout(() => {
-      const el = panelRef.current && panelRef.current.querySelector(".activation-google");
-      if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
-    }, 350);
-    return () => clearTimeout(t);
-  }, [firstStep, tableNoValid, busy]);
 
   const stateRef = useRef({ tableNoValid, parsedTableNo, busy });
   useEffect(() => {
@@ -3313,11 +3232,9 @@ function ActivationPanel({ token, onActivated, onCancel, firstStep = false }) {
             Укажите номер своего стола и войдите через Google одним действием — это нужно один раз,
             дальше ваш стол, история заказов и избранное сохранятся.
           </p>
-          {!firstStep && (
           <p className="empty-hint">
             Или нажмите «Заказать без входа» — тогда доступны только заказы песен, без избранного, кэшбэка и VIP.
           </p>
-          )}
         </>
       )}
       {error && <div className="banner banner--error">{error}</div>}
@@ -3336,28 +3253,31 @@ function ActivationPanel({ token, onActivated, onCancel, firstStep = false }) {
           required={selectedExtra == null}
         />
         {extraTables.length > 0 && (
-          <select
-            className="extra-table-select"
-            value={selectedExtra ?? ""}
-            onChange={(e) => {
-              const v = e.target.value;
-              if (v === "") { setSelectedExtra(null); return; }
-              setSelectedExtra(Number(v));
-              setTableNo("");
-            }}
-          >
-            <option value="">Доп. столы</option>
+          <details className="extra-table-picker-wrap">
+            <summary className="extra-table-picker__summary">Доп. столы</summary>
+            <div className="extra-table-picker">
             {extraTables.map((t) => (
-              <option key={t.table_no} value={t.table_no}>{t.title}</option>
+              <button
+                key={t.table_no}
+                type="button"
+                className={`extra-table-picker__btn${selectedExtra === t.table_no ? " extra-table-picker__btn--active" : ""}`}
+                onClick={() => {
+                  setSelectedExtra(t.table_no);
+                  setTableNo("");
+                }}
+              >
+                {t.title}
+              </button>
             ))}
-          </select>
+            </div>
+          </details>
         )}
         <div className="activation-zone">
-          <button type="button" className={`activation-nologin ${firstStep ? (tableNoValid && firstTarget === "nologin" ? "step-blink-alt" : "") : (tableNoValid ? "step-blink-alt" : "step-dim")}`} onClick={handleNoLogin} disabled={busy || !tableNoValid} style={firstStep ? { display: "none" } : undefined}>
+          <button type="button" className={`activation-nologin ${firstStep ? (tableNoValid && firstTarget === "nologin" ? "step-blink-alt" : "") : (tableNoValid ? "step-blink-alt" : "step-dim")}`} onClick={handleNoLogin} disabled={busy || !tableNoValid}>
             Заказать без входа
           </button>
           {/* Шаг 2: моргает, когда стол уже выбран (первый шаг — номер стола). */}
-          <div ref={googleButtonRef} className={`activation-google${firstStep ? (tableNoValid && !busy && firstTarget === "google" ? " step-blink" : "") : (tableNoValid && !busy ? " step-blink" : "")}`} style={firstStep ? { display: "none" } : undefined} />
+          <div ref={googleButtonRef} className={`activation-google${firstStep ? (tableNoValid && !busy && firstTarget === "google" ? " step-blink" : "") : (tableNoValid && !busy ? " step-blink" : "")}`} />
           {!tableNoValid && <div className="activation-zone__guard" onClick={() => setSkipHint(true)} />}
         </div>
         {skipHint && (
@@ -3659,8 +3579,7 @@ export default function App() {
   // Выбор способа поиска (запрос 2026-10-28): "Простой поиск" — только ручной ввод
   // названия и исполнителя; "Интеллектуальный поиск" — ИИ-поиск как и раньше
   // (текст, ссылка, скриншот). Остальное в экране не меняется.
-  // Главный экран (решение 2026-10-29): только строка поиска в стиле Google.
-  const [searchStyle, setSearchStyleRaw] = useState("smart");
+  const [searchStyle, setSearchStyleRaw] = useState("simple");
   // Пока гость сам не выбрал способ поиска, кнопка "Простой поиск" медленно моргает (запрос 2026-10-28).
   const [searchStyleTouched, setSearchStyleTouched] = useState(false);
   function setSearchStyle(next) {
@@ -3670,8 +3589,6 @@ export default function App() {
   // Предупреждение "Вы заказываете через Интернет" — показываем один раз, при первом
   // автовыборе категории по ссылке. Флаг запоминаем в браузере гостя (localStorage, с try/catch).
   const [internetHint, setInternetHint] = useState(null);
-  // Плашка «Войдите через Google» после 4-й песни, которую KJ отметил «Готово» (решение 2026-10-29).
-  const [loginPromptOff, setLoginPromptOff] = useState(false);
   const [internetHintOff, setInternetHintOff] = useState(() => {
     try { return window.localStorage.getItem("internetHintOff") === "1"; } catch { return false; }
   });
@@ -4086,7 +4003,7 @@ export default function App() {
   // handleActivated выше — после единственного экрана "стол + Google"
   // нужно закончить то же самое действие уже настоящим (новым) токеном, а
   // не токеном, который был в session на момент нажатия "Заказать".
-  async function submitOrderWithToken(token, overrideServiceId, overrideSong) {
+  async function submitOrderWithToken(token, overrideServiceId) {
     // Выбор категории сразу отправляет заказ (запрос 2026-10): категория передаётся явно,
     // потому что состояние serviceId в этот момент ещё старое.
     const sid = overrideServiceId !== undefined ? overrideServiceId : serviceId;
@@ -4095,7 +4012,7 @@ export default function App() {
     setSubmitOk(null);
     try {
       const created = await createOrderMarked(
-        token, (overrideSong ? overrideSong.title : songTitle).trim(), (overrideSong ? (overrideSong.artist || "") : artist).trim() || null,
+        token, songTitle.trim(), artist.trim() || null,
         sid ? Number(sid) : null,
         toneOn && tone != null ? tone : null,
         songUrl,
@@ -4354,17 +4271,12 @@ export default function App() {
   // см. create_order); постоянный профиль нужен только для избранного и VIP.
   const activated = meInfo.table_no != null;
 
-  // Вход первым шагом (решение 2026-10-27) отключён (решение 2026-10-29): гость
-  // сразу ищет песню, а стол выбирает при заказе (там же единый экран входа).
-  // Чтобы вернуть прежний порядок, поставить true.
-  // Сколько песен этого визита KJ отметил «Готово» (статус playing/completed).
-  const doneSongs = ordersTab === "current"
-    ? (orders || []).filter((o) => o.status === "playing" || o.status === "completed").length
-    : 0;
-  const TABLE_FIRST_GATE = true;
-  if (TABLE_FIRST_GATE && !activated && !getLegalPage()) {
+  // Вход первым шагом (решение 2026-10-27): гость сначала вводит номер стола
+  // и входит через Google, и только потом видит поиск песен и категории.
+  if (!activated && !getLegalPage()) {
     return (
       <div className="app-shell centered">
+        <h1>🎤 {meInfo.club_name || "Karaoke"}</h1>
         <div className="table-first-screen">
           {meInfo.table_removed && !removedNoticeClosed && (
             <>
@@ -4568,7 +4480,26 @@ export default function App() {
         ветки и виден всегда, независимо ни от activated, ни от groupOk —
         ограничивается (веткой ниже) только форма ввода со кнопкой
         "Заказать". */}
-        <div>
+        <div className="search-style-choice" role="group" aria-label="Способ поиска">
+          <button
+            type="button"
+            data-guide="simple-search"
+            className={`link-btn${searchStyle === "simple" ? " finder-modes__active" : ""}${guideRunning && guideStep === "mode" && !searchStyleTouched ? " search-style-blink" : ""}`}
+            onClick={() => setSearchStyle("simple")}
+          >
+            Заказ караоке
+          </button>
+          <button
+            type="button"
+            className={`link-btn search-style-plus${searchStyle === "smart" ? " finder-modes__active" : ""}`}
+            aria-label="Поиск по описанию и ссылке"
+            aria-expanded={searchStyle === "smart"}
+            onClick={() => setSearchStyle(searchStyle === "smart" ? "simple" : "smart")}
+          >
+            +
+          </button>
+        </div>
+        <div style={searchStyle === "simple" ? { display: "none" } : undefined}>
         <AiSearch
           key={`${searchKey}-${canOrder ? "ok" : "wait"}`}
           initialMode={finderInit}
@@ -4596,14 +4527,6 @@ export default function App() {
               }
             }
           }}
-          onQuickOrder={(song) => {
-            // Поиск по тексту: «Эта» — сразу заказ в обычное караоке (категория KARAOKE).
-            const karaoke = services.find((c) => c.name === "KARAOKE" || c.description === "Обычное караоке");
-            if (!karaoke) return false;
-            if (!activated) { setShowActivation(true); return true; }
-            submitOrderWithToken(session.token, String(karaoke.id), { title: song.title, artist: song.artist || "" });
-            return true;
-          }}
           extra={orderExtra}
           showProfileTabs={!!meInfo.has_permanent_profile}
           showExtraRow={false}
@@ -4614,34 +4537,11 @@ export default function App() {
           }}
         />
         </div>
-        {doneSongs >= 4 && !loginPromptOff && !meInfo.has_permanent_profile ? (
-          <div className="link-confirm-overlay" role="alertdialog" aria-modal="true">
-            <div className="link-confirm-plate">
-              <p>Войдите через Google, чтобы сохранить историю и избранное.</p>
-              <div className="link-confirm-buttons">
-                <button
-                  type="button"
-                  className="link-confirm-yes"
-                  onClick={() => { setLoginPromptOff(true); setShowActivation(true); }}
-                >
-                  Войти через Google
-                </button>
-                <button
-                  type="button"
-                  className="link-confirm-cancel"
-                  onClick={() => setLoginPromptOff(true)}
-                >
-                  Позже
-                </button>
-              </div>
-            </div>
-          </div>
-        ) : null}
         {internetHint ? (
           <div className="link-confirm-overlay" role="alertdialog" aria-modal="true">
             <div className="link-confirm-plate">
               <p>{internetHint.fromLink !== false ? "Заказ по ссылке. " : ""}Категория: <b>{internetHint.name}</b></p>
-              <p>Заказать за {Number(internetHint.price)} лей?</p>
+              <p>Цена {Number(internetHint.price)} лей. Подтвердите заказ или отмените его.</p>
               <div className="link-confirm-buttons">
                 <button
                   type="button"
@@ -4652,7 +4552,7 @@ export default function App() {
                     proceedSubmitOrder();
                   }}
                 >
-                  ✅ Да
+                  ✅ Подтвердить {Number(internetHint.price)} лей
                 </button>
                 <button
                   type="button"
@@ -4665,7 +4565,7 @@ export default function App() {
                     setArtist("");
                   }}
                 >
-                  ✕ Нет
+                  ✕ Отменить
                 </button>
               </div>
             </div>
