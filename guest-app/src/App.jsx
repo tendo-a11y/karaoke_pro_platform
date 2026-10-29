@@ -1977,7 +1977,7 @@ function AiSearch({ token, onPick, onQuickOrder, onScreenshotHelp, extra = null,
                         if (screenshotInputRef.current) screenshotInputRef.current.value = "";
                       }}
                     >
-                      ✅ Эта?
+                      ✅ Да, это песня
                     </button>
                     <button
                       type="button"
@@ -2080,7 +2080,7 @@ function AiSearch({ token, onPick, onQuickOrder, onScreenshotHelp, extra = null,
                         if (screenshotInputRef.current) screenshotInputRef.current.value = "";
                       }}
                     >
-                      ✅ Эта?
+                      ✅ Да, это песня
                     </button>
                     <button
                       type="button"
@@ -3151,6 +3151,15 @@ function ActivationPanel({ token, onActivated, onCancel, firstStep = false }) {
   }, []);
 
   const parsedTableNo = selectedExtra != null ? selectedExtra : Number(tableNo);
+  // Выбор стола и есть вход (решение 2026-10-29): на первом экране после номера стола
+  // входим сами, через короткую паузу (чтобы не оборвать ввод вроде «7/1»).
+  useEffect(() => {
+    if (!firstStep || busy) return;
+    const valid = selectedExtra != null || (tableNo.trim() !== "" && Number.isInteger(Number(tableNo)) && Number(tableNo) > 0);
+    if (!valid) return;
+    const t = setTimeout(() => { handleNoLogin(); }, 900);
+    return () => clearTimeout(t);
+  }, [firstStep, busy, tableNo, selectedExtra]);
   const tableNoValid =
     selectedExtra != null || (tableNo.trim() !== "" && Number.isInteger(parsedTableNo) && parsedTableNo > 0);
 
@@ -3304,9 +3313,11 @@ function ActivationPanel({ token, onActivated, onCancel, firstStep = false }) {
             Укажите номер своего стола и войдите через Google одним действием — это нужно один раз,
             дальше ваш стол, история заказов и избранное сохранятся.
           </p>
+          {!firstStep && (
           <p className="empty-hint">
             Или нажмите «Заказать без входа» — тогда доступны только заказы песен, без избранного, кэшбэка и VIP.
           </p>
+          )}
         </>
       )}
       {error && <div className="banner banner--error">{error}</div>}
@@ -3342,7 +3353,7 @@ function ActivationPanel({ token, onActivated, onCancel, firstStep = false }) {
           </select>
         )}
         <div className="activation-zone">
-          <button type="button" className={`activation-nologin ${firstStep ? (tableNoValid && firstTarget === "nologin" ? "step-blink-alt" : "") : (tableNoValid ? "step-blink-alt" : "step-dim")}`} onClick={handleNoLogin} disabled={busy || !tableNoValid}>
+          <button type="button" className={`activation-nologin ${firstStep ? (tableNoValid && firstTarget === "nologin" ? "step-blink-alt" : "") : (tableNoValid ? "step-blink-alt" : "step-dim")}`} onClick={handleNoLogin} disabled={busy || !tableNoValid} style={firstStep ? { display: "none" } : undefined}>
             Заказать без входа
           </button>
           {/* Шаг 2: моргает, когда стол уже выбран (первый шаг — номер стола). */}
@@ -3659,8 +3670,7 @@ export default function App() {
   // Предупреждение "Вы заказываете через Интернет" — показываем один раз, при первом
   // автовыборе категории по ссылке. Флаг запоминаем в браузере гостя (localStorage, с try/catch).
   const [internetHint, setInternetHint] = useState(null);
-  // Плашка «Войдите через Google» после 4-й песни (решение 2026-10-29): один раз за визит.
-  const [orderedCount, setOrderedCount] = useState(0);
+  // Плашка «Войдите через Google» после 4-й песни, которую KJ отметил «Готово» (решение 2026-10-29).
   const [loginPromptOff, setLoginPromptOff] = useState(false);
   const [internetHintOff, setInternetHintOff] = useState(() => {
     try { return window.localStorage.getItem("internetHintOff") === "1"; } catch { return false; }
@@ -4090,7 +4100,6 @@ export default function App() {
         toneOn && tone != null ? tone : null,
         songUrl,
       );
-      setOrderedCount((c) => c + 1);
       setSongTitle("");
       setArtist("");
       setSongUrl(null);
@@ -4348,6 +4357,10 @@ export default function App() {
   // Вход первым шагом (решение 2026-10-27) отключён (решение 2026-10-29): гость
   // сразу ищет песню, а стол выбирает при заказе (там же единый экран входа).
   // Чтобы вернуть прежний порядок, поставить true.
+  // Сколько песен этого визита KJ отметил «Готово» (статус playing/completed).
+  const doneSongs = ordersTab === "current"
+    ? (orders || []).filter((o) => o.status === "playing" || o.status === "completed").length
+    : 0;
   const TABLE_FIRST_GATE = true;
   if (TABLE_FIRST_GATE && !activated && !getLegalPage()) {
     return (
@@ -4601,7 +4614,7 @@ export default function App() {
           }}
         />
         </div>
-        {orderedCount >= 4 && !loginPromptOff && !meInfo.has_permanent_profile ? (
+        {doneSongs >= 4 && !loginPromptOff && !meInfo.has_permanent_profile ? (
           <div className="link-confirm-overlay" role="alertdialog" aria-modal="true">
             <div className="link-confirm-plate">
               <p>Войдите через Google, чтобы сохранить историю и избранное.</p>
