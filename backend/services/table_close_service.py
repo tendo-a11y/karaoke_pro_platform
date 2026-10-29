@@ -268,7 +268,7 @@ def list_table_receipts(club_id: int, table_no: int, since) -> list[TableCloseRe
     )
 
 
-def update_table_order_category(club_id: int, table_no: int, order_id: int, kj, service_id):
+def update_table_order_category(club_id: int, table_no: int, order_id: int, kj, service_id, skip_consent: bool = False):
     """
     ДОБАВЛЕНО (запрос пользователя 2026-10-13): смена категории песни прямо в
     пречеке стола, в том числе у уже сыгранной песни (до закрытия стола).
@@ -301,6 +301,15 @@ def update_table_order_category(club_id: int, table_no: int, order_id: int, kj, 
         service = db.session.get(Service, service_id)
         if service is None or service.club_id != club_id:
             return order, "service_not_found"
+
+    # KJ включил «Без согласия гостя»: категория применяется сразу.
+    if skip_consent:
+        order.service_id = service_id
+        order.pending_service_id = None
+        order.pending_category_at = None
+        db.session.commit()
+        emit_order_updated(order)
+        return order, "updated"
 
     # Как и в очереди: новая категория ждёт ответа гостя (см. vdj_service.respond_category_change).
     order.pending_service_id = service_id
