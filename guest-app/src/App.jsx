@@ -3639,7 +3639,8 @@ export default function App() {
   // Выбор способа поиска (запрос 2026-10-28): "Простой поиск" — только ручной ввод
   // названия и исполнителя; "Интеллектуальный поиск" — ИИ-поиск как и раньше
   // (текст, ссылка, скриншот). Остальное в экране не меняется.
-  const [searchStyle, setSearchStyleRaw] = useState("simple");
+  // Главный экран (решение 2026-10-29): только строка поиска в стиле Google.
+  const [searchStyle, setSearchStyleRaw] = useState("smart");
   // Пока гость сам не выбрал способ поиска, кнопка "Простой поиск" медленно моргает (запрос 2026-10-28).
   const [searchStyleTouched, setSearchStyleTouched] = useState(false);
   function setSearchStyle(next) {
@@ -4541,24 +4542,7 @@ export default function App() {
         ветки и виден всегда, независимо ни от activated, ни от groupOk —
         ограничивается (веткой ниже) только форма ввода со кнопкой
         "Заказать". */}
-        <div className="search-style-choice" role="group" aria-label="Способ поиска">
-          <button
-            type="button"
-            data-guide="simple-search"
-            className={`link-btn${searchStyle === "simple" ? " finder-modes__active" : ""}${guideRunning && guideStep === "mode" && !searchStyleTouched ? " search-style-blink" : ""}`}
-            onClick={() => setSearchStyle("simple")}
-          >
-            Простой поиск
-          </button>
-          <button
-            type="button"
-            className={`link-btn${searchStyle === "smart" ? " finder-modes__active" : ""}`}
-            onClick={() => setSearchStyle("smart")}
-          >
-            Интеллектуальный поиск
-          </button>
-        </div>
-        <div style={searchStyle === "simple" ? { display: "none" } : undefined}>
+        <div>
         <AiSearch
           key={`${searchKey}-${canOrder ? "ok" : "wait"}`}
           initialMode={finderInit}
