@@ -1632,6 +1632,9 @@ function SongSearch({ token, onPick }) {
 // (backend/services/ai_search_service.py::_ask_claude_vision) и определяет
 // название/исполнителя, дальше поиск в iTunes идёт так же, как у двух
 // других режимов.
+const VOICE_SUPPORTED = typeof window !== "undefined" && Boolean(window.SpeechRecognition || window.webkitSpeechRecognition);
+const VOICE_LANG = { ru: "ru-RU", ro: "ro-RO", en: "en-US", uk: "uk-UA" };
+
 const FINDER_MODES = [
   { key: "text", label: "🤖 ИИ-поиск" },
   { key: "link", label: "🔗 Ссылка" },
@@ -1740,6 +1743,9 @@ function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSu
   }, [suggestOther, onSuggestOther]);
   // initialMode: EXCLUSIVE выбран вручную — поле для ссылки открывается сразу (запрос 2026-10-27).
   const [mode, setMode] = useState(initialMode);
+  // Строка поиска в стиле Google: «+» (ссылка), микрофон, камера (скриншот).
+  const [plusOpen, setPlusOpen] = useState(false);
+  const [listening, setListening] = useState(false);
   const [text, setText] = useState("");
   const [results, setResults] = useState([]);
   const [searching, setSearching] = useState(false);
@@ -1750,6 +1756,23 @@ function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSu
   useEffect(() => {
     if (onConfirmChange) onConfirmChange(results.length > 0);
   }, [results.length, onConfirmChange]);
+
+  function startVoiceSearch() {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) return;
+    const rec = new SR();
+    rec.lang = VOICE_LANG[LANG] || "en-US";
+    rec.interimResults = false;
+    rec.maxAlternatives = 1;
+    setListening(true);
+    rec.onresult = (e) => {
+      const t = e.results && e.results[0] && e.results[0][0] ? e.results[0][0].transcript : "";
+      if (t) onInputTyped(t.trim());
+    };
+    rec.onend = () => setListening(false);
+    rec.onerror = () => setListening(false);
+    try { rec.start(); } catch { setListening(false); }
+  }
 
   function switchMode(nextMode) {
     setMode(nextMode);
@@ -1860,7 +1883,7 @@ function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSu
   return (
     <div className={`ai-search${searching || active ? " is-searching" : ""}`}>
       <div className="finder-modes">
-        <div className="finder-group">
+        <div className="finder-group" style={{ display: "none" }}>
         {/* Распознавание скриншота отключено (2026-10-09): кнопка "Скриншот"
         есть только там, где она отправляет картинку ведущему. */}
         {FINDER_MODES.filter((m) => m.key !== "screenshot" || onScreenshotHelp).map((m) => (
@@ -1971,18 +1994,45 @@ function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSu
         </div>
       ) : (
         <>
-          <form className="order-form" onSubmit={handleSearch}>
-            <input
-              type="text"
-              value={text}
-              onChange={(e) => onInputTyped(e.target.value)}
-              placeholder={placeholder}
-              maxLength={300}
-            />
-            {mode !== "link" && (
-            <button type="submit" className={searching ? "is-searching" : undefined} disabled={searching || !text.trim()}>
-              {searching ? "Ищем песню. Ждите..." : "Найти"}
-            </button>
+          <form className="order-form search-pill-form" onSubmit={handleSearch}>
+            <div className="search-pill">
+              <button
+                type="button"
+                className="search-pill__btn search-pill__plus"
+                aria-label="Добавить"
+                onClick={() => setPlusOpen((v) => !v)}
+              >+</button>
+              <input
+                type="text"
+                value={text}
+                onChange={(e) => onInputTyped(e.target.value)}
+                placeholder={mode === "link" ? "Вставьте ссылку на YouTube" : "Название песни или исполнитель"}
+                maxLength={300}
+              />
+              {VOICE_SUPPORTED && (
+                <button
+                  type="button"
+                  className={`search-pill__btn${listening ? " is-listening" : ""}`}
+                  aria-label="Голосовой поиск"
+                  onClick={startVoiceSearch}
+                >🎤</button>
+              )}
+              {onScreenshotHelp && (
+                <button
+                  type="button"
+                  className="search-pill__btn"
+                  aria-label="Скриншот"
+                  onClick={() => { setPlusOpen(false); onScreenshotHelp(); }}
+                >📷</button>
+              )}
+            </div>
+            {plusOpen && (
+              <div className="search-pill__menu">
+                <button
+                  type="button"
+                  onClick={() => { setPlusOpen(false); switchMode("link"); }}
+                >🔗 Ссылка на YouTube</button>
+              </div>
             )}
           </form>
           {error && <div className="banner banner--error">{error}</div>}
@@ -4281,9 +4331,11 @@ export default function App() {
   // см. create_order); постоянный профиль нужен только для избранного и VIP.
   const activated = meInfo.table_no != null;
 
-  // Вход первым шагом (решение 2026-10-27): гость сначала вводит номер стола
-  // и входит через Google, и только потом видит поиск песен и категории.
-  if (!activated && !getLegalPage()) {
+  // Вход первым шагом (решение 2026-10-27) отключён (решение 2026-10-29): гость
+  // сразу ищет песню, а стол выбирает при заказе (там же единый экран входа).
+  // Чтобы вернуть прежний порядок, поставить true.
+  const TABLE_FIRST_GATE = false;
+  if (TABLE_FIRST_GATE && !activated && !getLegalPage()) {
     return (
       <div className="app-shell centered">
         <div className="table-first-screen">
