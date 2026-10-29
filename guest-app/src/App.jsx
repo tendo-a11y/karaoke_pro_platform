@@ -4070,6 +4070,18 @@ export default function App() {
     setPendingCrazyServiceId(null);
   }
 
+  // Обычное караоке без категорий: когда заполнены название и исполнитель, через 2 секунды после ввода появляется плашка "Ок / Отмена".
+  useEffect(() => {
+    if (!CATEGORIES_HIDDEN || !songTitle.trim() || !artist.trim()) return undefined;
+    const t = setTimeout(() => {
+      const karaoke = services.find((c) => c.name === "KARAOKE" || c.description === "Обычное караоке");
+      if (!karaoke) return;
+      setServiceId(String(karaoke.id));
+      setInternetHint({ name: karaoke.description || karaoke.name, price: karaoke.price, fromLink: false, auto: true, song: songTitle.trim(), artistName: artist.trim() });
+    }, 2000);
+    return () => clearTimeout(t);
+  }, [songTitle, artist, services]);
+
   async function handleSubmitOrder(event) {
     event.preventDefault();
     if (!session || !songTitle.trim()) return;
@@ -4554,8 +4566,17 @@ export default function App() {
         {internetHint ? (
           <div className="link-confirm-overlay" role="alertdialog" aria-modal="true">
             <div className="link-confirm-plate">
-              <p>{internetHint.fromLink !== false ? "Заказ по ссылке. " : ""}Категория: <b>{internetHint.name}</b></p>
-              <p>Цена {Number(internetHint.price)} лей. Подтвердите заказ или отмените его.</p>
+              {internetHint.auto ? (
+                <>
+                  <p><b>{internetHint.artistName}</b> — {internetHint.song}</p>
+                  <p>Заказать за {Number(internetHint.price)} лей?</p>
+                </>
+              ) : (
+                <>
+                  <p>{internetHint.fromLink !== false ? "Заказ по ссылке. " : ""}Категория: <b>{internetHint.name}</b></p>
+                  <p>Цена {Number(internetHint.price)} лей. Подтвердите заказ или отмените его.</p>
+                </>
+              )}
               <div className="link-confirm-buttons">
                 <button
                   type="button"
@@ -4566,7 +4587,7 @@ export default function App() {
                     proceedSubmitOrder();
                   }}
                 >
-                  ✅ Подтвердить {Number(internetHint.price)} лей
+                  {internetHint.auto ? "✅ Ок" : "✅ Подтвердить " + Number(internetHint.price) + " лей"}
                 </button>
                 <button
                   type="button"
@@ -4579,7 +4600,7 @@ export default function App() {
                     setArtist("");
                   }}
                 >
-                  ✕ Отменить
+                  {internetHint.auto ? "✕ Отмена" : "✕ Отменить"}
                 </button>
               </div>
             </div>
@@ -4693,6 +4714,7 @@ export default function App() {
                 value={songTitle}
                 onChange={(e) => setSongTitle(e.target.value)} onFocus={() => setTypingField(true)} onBlur={() => setTimeout(() => { const a = document.activeElement; if (!(a && a.tagName === "INPUT" && a.closest(".order-form"))) setTypingField(false); }, 400)}
                 data-guide="name"
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); document.querySelector('[data-guide="artist"]')?.focus(); } }}
                 placeholder={nameTypingHint || "Название песни"}
                 className={guideRunning ? (guideStep === "name" ? "step-blink" : undefined) : (titleHint && !songTitle.trim() ? "step-blink" : undefined)}
                 maxLength={200}
@@ -4783,9 +4805,6 @@ export default function App() {
                     setSearchKey((k) => k + 1);
                   }}
                 />
-              )}
-              {CATEGORIES_HIDDEN && (
-                <button type="submit" disabled={!songTitle.trim() || !artist.trim()}>Заказать</button>
               )}
               <div className="tone-picker">
                 <label className="tone-picker__check">
