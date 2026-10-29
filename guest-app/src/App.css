@@ -1326,3 +1326,7 @@ button.step-blink-fill { animation: button-fill-blink 2s ease-in-out infinite; }
   font-weight: 700;
   padding: 8px 0;
 }
+
+/* Подпись над кнопкой «+» («Послушать песню»). */
+.search-style-plus-wrap { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.search-style-plus-caption { font-size: 12px; color: #9a9ca3; line-height: 1.2; }
