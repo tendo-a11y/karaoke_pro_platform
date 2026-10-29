@@ -4483,6 +4483,7 @@ export default function App() {
         ограничивается (веткой ниже) только форма ввода со кнопкой
         "Заказать". */}
         <div className="search-style-choice" role="group" aria-label="Способ поиска">
+          <h2 className="search-style-plus-caption">Слушать караоке</h2>
           <button
             type="button"
             data-guide="simple-search"
@@ -4491,8 +4492,6 @@ export default function App() {
           >
             Заказ караоке
           </button>
-          <div className="search-style-plus-wrap">
-          <h2 className="search-style-plus-caption">Слушать караоке</h2>
           <button
             type="button"
             className={`link-btn${searchStyle === "smart" ? " finder-modes__active" : ""}`}
@@ -4502,7 +4501,6 @@ export default function App() {
           >
             +
           </button>
-          </div>
         </div>
         <div style={searchStyle === "simple" ? { display: "none" } : undefined}>
         <AiSearch
