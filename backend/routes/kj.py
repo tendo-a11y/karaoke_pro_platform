@@ -1992,7 +1992,8 @@ def update_table_order_category_route(club_id, table_no, order_id):
     service_id = payload.get("service_id")
     if service_id is not None and (isinstance(service_id, bool) or not isinstance(service_id, int)):
         return api_error(400, "VALIDATION_ERROR", "service_id должен быть числом, либо null (без категории)")
-    order, outcome = table_close_service.update_table_order_category(club_id, table_no, order_id, g.kj, service_id)
+    skip_consent = payload.get("skip_consent") is True
+    order, outcome = table_close_service.update_table_order_category(club_id, table_no, order_id, g.kj, service_id, skip_consent=skip_consent)
     if outcome == "updated":
         return api_ok(order.to_dict())
     messages = {
