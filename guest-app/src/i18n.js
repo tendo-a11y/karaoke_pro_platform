@@ -110,7 +110,7 @@ const D = {
   ],
   "Без стола": ["Fără masă", "No table", "Без столу"],
   "Петь караоке": ["Cântă karaoke", "Sing karaoke", "Заспівати караоке"],
-  "Слушать караоке": ["Ascultă karaoke", "Listen to karaoke", "Слухати караоке"],
+  "Слушать песню": ["Ascultă o melodie", "Listen to a song", "Слухати пісню"],
   "Заказов пока нет — закажите первую песню выше.": [
     "Deocamdată nu sunt comenzi — comandați prima melodie mai sus.",
     "No orders yet — order your first song above.",
