@@ -4470,7 +4470,6 @@ export default function App() {
       )}
 
       <section className={`panel order-form-panel${favPicking || reorderPickedId != null ? " order-form-panel--fav-pick" : ""}${songConfirming ? " order-form-panel--confirm" : ""}${showActivation ? " order-form-panel--activation" : ""}${categoryStep ? " order-form-panel--category" : ""}`}>
-        <h2>Петь караоке</h2>
         {/* ИЗМЕНЕНО (жалоба пользователя 2026-09-22: "возможность выбрать
         песню была у всех независимо от стола — а вот заказать только после
         выбора стола и входа в Google"): раньше AiSearch был внутри той же
@@ -4483,6 +4482,7 @@ export default function App() {
         ограничивается (веткой ниже) только форма ввода со кнопкой
         "Заказать". */}
         <div className="search-style-choice" role="group" aria-label="Способ поиска">
+          <h2 className="search-style-title">Петь караоке</h2>
           <h2 className="search-style-plus-caption">Слушать караоке</h2>
           <button
             type="button"
