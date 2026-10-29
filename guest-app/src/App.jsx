@@ -1734,7 +1734,7 @@ function useTypingPlaceholder(phrases, enabled) {
   return hint;
 }
 
-function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSuggestOther, onSearchStart, onAiStatus, onConfirmChange, active = false, showProfileTabs = true, showExtraRow = true, initialMode = "text" }) {
+function AiSearch({ token, onPick, onQuickOrder, onScreenshotHelp, extra = null, onExtra, onSuggestOther, onSearchStart, onAiStatus, onConfirmChange, active = false, showProfileTabs = true, showExtraRow = true, initialMode = "text" }) {
   // "Не эта" под найденной песней: подсказываем другие способы — моргают "Ссылка" и "Скриншот".
   const [suggestOther, setSuggestOther] = useState(false);
   // Неудачный поиск — пусть ещё моргает поле "Название песни" (запрос пользователя 2026-10).
@@ -1963,6 +1963,13 @@ function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSu
                       type="button"
                       className="song-confirm song-confirm--yes step-blink"
                       onClick={() => {
+                        if (mode === "text" && onQuickOrder && onQuickOrder(s)) {
+                          setText("");
+                          setResults([]);
+                          setSearched(false);
+                          setSuggestOther(false);
+                          return;
+                        }
                         onPick(mode === "link" ? { ...s, link: text.trim() } : s);
                         setResults([]);
                         setSearched(false);
@@ -2059,6 +2066,13 @@ function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSu
                       type="button"
                       className="song-confirm song-confirm--yes step-blink"
                       onClick={() => {
+                        if (mode === "text" && onQuickOrder && onQuickOrder(s)) {
+                          setText("");
+                          setResults([]);
+                          setSearched(false);
+                          setSuggestOther(false);
+                          return;
+                        }
                         onPick(mode === "link" ? { ...s, link: text.trim() } : s);
                         setResults([]);
                         setSearched(false);
@@ -3335,7 +3349,7 @@ function ActivationPanel({ token, onActivated, onCancel, firstStep = false }) {
             Заказать без входа
           </button>
           {/* Шаг 2: моргает, когда стол уже выбран (первый шаг — номер стола). */}
-          <div ref={googleButtonRef} className={`activation-google${firstStep ? (tableNoValid && !busy && firstTarget === "google" ? " step-blink" : "") : (tableNoValid && !busy ? " step-blink" : "")}`} />
+          <div ref={googleButtonRef} className={`activation-google${firstStep ? (tableNoValid && !busy && firstTarget === "google" ? " step-blink" : "") : (tableNoValid && !busy ? " step-blink" : "")}`} style={firstStep ? { display: "none" } : undefined} />
           {!tableNoValid && <div className="activation-zone__guard" onClick={() => setSkipHint(true)} />}
         </div>
         {skipHint && (
@@ -4062,7 +4076,7 @@ export default function App() {
   // handleActivated выше — после единственного экрана "стол + Google"
   // нужно закончить то же самое действие уже настоящим (новым) токеном, а
   // не токеном, который был в session на момент нажатия "Заказать".
-  async function submitOrderWithToken(token, overrideServiceId) {
+  async function submitOrderWithToken(token, overrideServiceId, overrideSong) {
     // Выбор категории сразу отправляет заказ (запрос 2026-10): категория передаётся явно,
     // потому что состояние serviceId в этот момент ещё старое.
     const sid = overrideServiceId !== undefined ? overrideServiceId : serviceId;
@@ -4071,7 +4085,7 @@ export default function App() {
     setSubmitOk(null);
     try {
       const created = await createOrderMarked(
-        token, songTitle.trim(), artist.trim() || null,
+        token, (overrideSong ? overrideSong.title : songTitle).trim(), (overrideSong ? (overrideSong.artist || "") : artist).trim() || null,
         sid ? Number(sid) : null,
         toneOn && tone != null ? tone : null,
         songUrl,
@@ -4333,7 +4347,7 @@ export default function App() {
   // Вход первым шагом (решение 2026-10-27) отключён (решение 2026-10-29): гость
   // сразу ищет песню, а стол выбирает при заказе (там же единый экран входа).
   // Чтобы вернуть прежний порядок, поставить true.
-  const TABLE_FIRST_GATE = false;
+  const TABLE_FIRST_GATE = true;
   if (TABLE_FIRST_GATE && !activated && !getLegalPage()) {
     return (
       <div className="app-shell centered">
@@ -4568,6 +4582,14 @@ export default function App() {
               }
             }
           }}
+          onQuickOrder={(song) => {
+            // Поиск по тексту: «Эта» — сразу заказ в обычное караоке (категория KARAOKE).
+            const karaoke = services.find((c) => c.name === "KARAOKE" || c.description === "Обычное караоке");
+            if (!karaoke) return false;
+            if (!activated) { setShowActivation(true); return true; }
+            submitOrderWithToken(session.token, String(karaoke.id), { title: song.title, artist: song.artist || "" });
+            return true;
+          }}
           extra={orderExtra}
           showProfileTabs={!!meInfo.has_permanent_profile}
           showExtraRow={false}
@@ -4582,7 +4604,7 @@ export default function App() {
           <div className="link-confirm-overlay" role="alertdialog" aria-modal="true">
             <div className="link-confirm-plate">
               <p>{internetHint.fromLink !== false ? "Заказ по ссылке. " : ""}Категория: <b>{internetHint.name}</b></p>
-              <p>Цена {Number(internetHint.price)} лей. Подтвердите заказ или отмените его.</p>
+              <p>Заказать за {Number(internetHint.price)} лей?</p>
               <div className="link-confirm-buttons">
                 <button
                   type="button"
@@ -4593,7 +4615,7 @@ export default function App() {
                     proceedSubmitOrder();
                   }}
                 >
-                  ✅ Подтвердить {Number(internetHint.price)} лей
+                  ✅ Да
                 </button>
                 <button
                   type="button"
@@ -4606,7 +4628,7 @@ export default function App() {
                     setArtist("");
                   }}
                 >
-                  ✕ Отменить
+                  ✕ Нет
                 </button>
               </div>
             </div>
