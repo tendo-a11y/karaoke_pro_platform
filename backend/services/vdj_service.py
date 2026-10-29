@@ -833,7 +833,9 @@ def update_order_category(order_id: int, kj, service_id):
         return None, "not_found"
     if order.club_id != kj.club_id:
         return None, "forbidden"
-    if order.status != STATUS_QUEUED:
+    # Сыгранные песни стола (STATUS_PLAYING, до закрытия стола) тоже можно
+    # переназначить — с тем же подтверждением гостя.
+    if order.status not in (STATUS_QUEUED, STATUS_PLAYING):
         return order, "not_queued"
 
     if service_id is not None:
