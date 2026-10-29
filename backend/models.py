@@ -121,6 +121,8 @@ class Club(db.Model):
     guest_queue_visible = db.Column(db.Boolean, nullable=False, default=True, server_default=db.true())
     # Плашка на экране входа (стол + Google), меняется в KJ (запрос 2026-10-27). None — текст по умолчанию.
     entry_notice = db.Column(db.Text, nullable=True)
+    # Крейзи-предложение (запрос 2026-10-30): после скольких песен в очереди клуба гостям предлагают песню вне очереди. None — выключено.
+    crazy_after_queue = db.Column(db.Integer, nullable=True)
 
     # ДОБАВЛЕНО (2026-10-04, запрос пользователя "бот и приложение — два
     # отдельных инструмента, что в боте то и в приложении"): перенос
