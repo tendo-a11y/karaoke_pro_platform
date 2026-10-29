@@ -816,7 +816,7 @@ def update_order_table(order_id: int, kj, table_no):
     return order, "updated"
 
 
-def update_order_category(order_id: int, kj, service_id):
+def update_order_category(order_id: int, kj, service_id, skip_consent: bool = False):
     """
     Доп. ТЗ "KJ Pro": назначение/смена категории (Service, см. её докстринг в
     models.py) у песни, уже стоящей в очереди. До этого ни один эндпоинт
@@ -842,6 +842,16 @@ def update_order_category(order_id: int, kj, service_id):
         service = db.session.get(Service, service_id)
         if service is None or service.club_id != kj.club_id:
             return order, "service_not_found"
+
+    # KJ сам включил «Без согласия гостя»: категория применяется сразу, без запроса гостю.
+    if skip_consent:
+        order.service_id = service_id
+        order.pending_service_id = None
+        order.pending_category_at = None
+        db.session.commit()
+        emit_order_updated(order)
+        emit_queue_updated(order.club_id, get_kj_queue_view(order.club_id))
+        return order, "updated"
 
     # Смена категории НЕ применяется сразу: гость получает запрос «Да / Удалить
     # песню» (см. respond_category_change). Пока он не ответил, песня остаётся
