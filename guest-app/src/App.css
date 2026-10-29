@@ -1322,4 +1322,3 @@ button.step-blink-fill { animation: button-fill-blink 2s ease-in-out infinite; }
 /* Подпись над кнопкой «+»: такой же вид, как у заголовков панели. */
 .search-style-plus-wrap { flex: 1 1 0; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .search-style-plus-wrap > .link-btn { flex: none; width: 100%; }
-.search-style-plus-caption { margin: 0; font-size: 15px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; text-align: center; }
