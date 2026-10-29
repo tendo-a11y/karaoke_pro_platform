@@ -1319,8 +1319,10 @@ button.step-blink-fill { animation: button-fill-blink 2s ease-in-out infinite; }
   .app-header > .btn-link { order: 4; padding: 4px 8px; font-size: 12px; }
 }
 
-/* Подпись «Слушать караоке» и кнопки в две колонки, ровно по одной линии. */
+/* Заголовки «Петь караоке» и «Слушать караоке» в одной строке на любом телефоне: размер подстраивается под ширину, текст не переносится. */
 .search-style-choice { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-items: center; }
-.search-style-choice > .search-style-plus-caption { grid-column: 2; grid-row: 1; margin: 0; text-align: center; }
-.search-style-choice > :nth-child(2) { grid-column: 1; grid-row: 2; }
-.search-style-choice > :nth-child(3) { grid-column: 2; grid-row: 2; }
+.search-style-choice > .search-style-title, .search-style-choice > .search-style-plus-caption { margin: 0; text-align: center; white-space: nowrap; font-size: clamp(11px, 3.2vw, 15px); }
+.search-style-choice > .search-style-title { grid-column: 1; grid-row: 1; text-align: left; }
+.search-style-choice > .search-style-plus-caption { grid-column: 2; grid-row: 1; }
+.search-style-choice > :nth-child(3) { grid-column: 1; grid-row: 2; }
+.search-style-choice > :nth-child(4) { grid-column: 2; grid-row: 2; }
