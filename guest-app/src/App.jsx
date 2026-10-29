@@ -3096,6 +3096,9 @@ function ActivationPanel({ token, onActivated, onCancel, firstStep = false }) {
   const tableNoValid =
     selectedExtra != null || (tableNo.trim() !== "" && Number.isInteger(parsedTableNo) && parsedTableNo > 0);
 
+  const [firstTarget, setFirstTarget] = useState("table");
+  const [fingerBox, setFingerBox] = useState(null);
+
   // Палец всегда на поле номера стола (вход через Google и без входа убраны, 2026-10-30).
   useEffect(() => {
     setFirstTarget("table");
