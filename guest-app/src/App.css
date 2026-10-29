@@ -1349,3 +1349,12 @@ button.step-blink-fill { animation: button-fill-blink 2s ease-in-out infinite; }
   color: #e8e8ea; font-size: 15px; padding: 10px 12px; border-radius: 10px; cursor: pointer;
 }
 .search-pill__menu button:active { background: #2c2e35; }
+
+/* Первый экран (запрос 2026-10-29): квадратное поле номера стола и выпадающий список доп. столов. */
+.table-first-screen input[placeholder="Номер стола"] {
+  border-radius: 0; text-align: center; font-size: 22px; height: 64px; font-weight: 700;
+}
+.extra-table-select {
+  width: 100%; height: 48px; box-sizing: border-box; border-radius: 0; margin-top: 8px;
+  background: #1d1f25; color: #e8e8ea; border: 1px solid #34363c; font-size: 16px; padding: 0 12px;
+}
