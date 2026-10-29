@@ -279,8 +279,8 @@ export const api = {
     request(`/api/kj/table-group/${clubId}/${tableNo}/reset`, { method: "POST", token }),
   updateOrderTable: (token, orderId, tableNo) =>
     request(`/api/kj/order/${orderId}/table`, { method: "PUT", token, body: { table_no: tableNo } }),
-  updateOrderCategory: (token, orderId, serviceId) =>
-    request(`/api/kj/order/${orderId}/category`, { method: "PUT", token, body: { service_id: serviceId } }),
+  updateOrderCategory: (token, orderId, serviceId, skipConsent = false) =>
+    request(`/api/kj/order/${orderId}/category`, { method: "PUT", token, body: { service_id: serviceId, skip_consent: skipConsent } }),
   // ДОБАВЛЕНО (2026-10-18): KJ отменяет смену категории, которую гость не подтвердил.
   cancelOrderCategoryChange: (token, orderId) =>
     request(`/api/kj/order/${orderId}/category-cancel`, { method: "POST", token }),
