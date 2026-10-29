@@ -1,6 +1,31 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { GOOGLE_CLIENT_ID, api, ApiError, resolveToken, storeToken } from "./api";
 import { connectSocket } from "./socket";
+
+// Общий переключатель «Без согласия гостя» для всех мест смены категории в панели KJ.
+// Если включён — категория меняется сразу, без запроса гостю.
+let skipConsentValue = false;
+const skipConsentListeners = new Set();
+function getSkipConsent() {
+  return skipConsentValue;
+}
+function subscribeSkipConsent(cb) {
+  skipConsentListeners.add(cb);
+  return () => skipConsentListeners.delete(cb);
+}
+function setSkipConsent(v) {
+  skipConsentValue = v;
+  skipConsentListeners.forEach((cb) => cb());
+}
+function SkipConsentCheckbox() {
+  const value = useSyncExternalStore(subscribeSkipConsent, getSkipConsent);
+  return (
+    <label style={{ display: "block", margin: "4px 0 8px" }}>
+      <input type="checkbox" checked={value} onChange={(e) => setSkipConsent(e.target.checked)} />{" "}
+      Без согласия гостя (категория меняется сразу)
+    </label>
+  );
+}
 import "./App.css";
 
 // ДОБАВЛЕНО (2026-10-18, запрос пользователя): скриншот гостя открывается на весь экран (нажать — открыть, нажать ещё раз — закрыть).
@@ -254,7 +279,7 @@ function QueueTable({ queue, token, clubId }) {
     setBusyKey(`category-${item.order_id}`);
     setRowError(item.order_id, null);
     try {
-      await api.updateOrderCategory(token, item.order_id, serviceId);
+      await api.updateOrderCategory(token, item.order_id, serviceId, getSkipConsent());
     } catch (err) {
       setRowError(item.order_id, err instanceof ApiError ? err.message : String(err));
     } finally {
@@ -385,6 +410,7 @@ function QueueTable({ queue, token, clubId }) {
 
   return (
     <div className="queue-dropzone" ref={dropzoneRef}>
+      <SkipConsentCheckbox />
       {newHelpPos && (
         <button
           type="button"
@@ -3964,7 +3990,7 @@ function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged, auto
     setPrecheckBusy(true);
     setPrecheckError(null);
     try {
-      await api.updateTableOrderCategory(token, clubId, tableNo, orderId, value === "" ? null : Number(value));
+      await api.updateTableOrderCategory(token, clubId, tableNo, orderId, value === "" ? null : Number(value), getSkipConsent());
       setPrecheck(await api.getTablePrecheck(token, clubId, tableNo));
     } catch (err) {
       setPrecheckError(err instanceof ApiError ? err.message : String(err));
@@ -4071,8 +4097,6 @@ function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged, auto
   const [queueCategories, setQueueCategories] = useState([]);
   const [queueCatBusyId, setQueueCatBusyId] = useState(null);
   const [queueCatError, setQueueCatError] = useState(null);
-  // Чекбокс «Без согласия гостя»: если включён, категория меняется сразу, без запроса гостю.
-  const [queueSkipConsent, setQueueSkipConsent] = useState(false);
   useEffect(() => {
     api.listCategories(token, clubId).then(setQueueCategories).catch(() => {});
   }, [token, clubId]);
@@ -4081,7 +4105,7 @@ function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged, auto
     setQueueCatBusyId(orderId);
     setQueueCatError(null);
     try {
-      await api.updateOrderCategory(token, orderId, value === "" ? null : Number(value), queueSkipConsent);
+      await api.updateOrderCategory(token, orderId, value === "" ? null : Number(value), getSkipConsent());
       await reload();
     } catch (err) {
       setQueueCatError(err instanceof ApiError ? err.message : String(err));
@@ -4334,10 +4358,7 @@ function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged, auto
           {/* Приоритет песни за столом (2026-10): вся очередь стола по порядку. */}
           <div className="table-queue">
             <h4>Очередь стола</h4>
-            <label style={{ display: "block", margin: "4px 0 8px" }}>
-              <input type="checkbox" checked={queueSkipConsent} onChange={(e) => setQueueSkipConsent(e.target.checked)} />{" "}
-              Без согласия гостя (категория меняется сразу)
-            </label>
+            <SkipConsentCheckbox />
             {priorityError && <div className="banner banner--error">{priorityError}</div>}
             {(group.table_orders || []).length === 0 ? (
               <p className="empty-hint">За этим столом пока нет песен в очереди.</p>
@@ -4461,6 +4482,7 @@ function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged, auto
           {precheckOpen && (
             <div className="precheck">
               <h3>🧾 Пречек стола {tableLabel(tableNo)}</h3>
+              <SkipConsentCheckbox />
               <p className="empty-hint">Так будет выглядеть чек, если закрыть стол сейчас. Стол не закрывается.</p>
               {precheckError && <div className="banner banner--error">{precheckError}</div>}
               {!precheck && !precheckError && <p className="empty-hint">Загрузка…</p>}
@@ -5051,7 +5073,7 @@ function OrdersBoard({ token, clubId, socket, onOpenGuest, onOpenTable }) {
     setBusyOrderId(orderId);
     setActionError(null);
     try {
-      await api.updateOrderCategory(token, orderId, serviceId);
+      await api.updateOrderCategory(token, orderId, serviceId, getSkipConsent());
       await reload();
     } catch (err) {
       setActionError(err instanceof ApiError ? err.message : String(err));
@@ -5119,6 +5141,7 @@ function OrdersBoard({ token, clubId, socket, onOpenGuest, onOpenTable }) {
   return (
     <div className="orders-board">
       <div className="orders-board__header">
+        <SkipConsentCheckbox />
         <form className="table-settings-form orders-board__queue-start" onSubmit={handleSaveQueueStartTable}>
           <label className="table-settings-field">
             <span>Начало очереди (стол)</span>
