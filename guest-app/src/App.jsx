@@ -3129,6 +3129,16 @@ function ActivationPanel({ token, onActivated, onCancel, firstStep = false }) {
       window.removeEventListener("scroll", place, true);
     };
   }, [firstStep, busy, firstTarget, tableNoValid]);
+  // После ввода номера стола экранная клавиатура закрывает кнопки входа.
+  // Прокручиваем экран к кнопке «Вход через Google», чтобы она была видна.
+  useEffect(() => {
+    if (!firstStep || !tableNoValid || busy) return;
+    const t = setTimeout(() => {
+      const el = panelRef.current && panelRef.current.querySelector(".activation-google");
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 350);
+    return () => clearTimeout(t);
+  }, [firstStep, tableNoValid, busy]);
 
   const stateRef = useRef({ tableNoValid, parsedTableNo, busy });
   useEffect(() => {
@@ -4276,7 +4286,6 @@ export default function App() {
   if (!activated && !getLegalPage()) {
     return (
       <div className="app-shell centered">
-        <h1>🎤 {meInfo.club_name || "Karaoke"}</h1>
         <div className="table-first-screen">
           {meInfo.table_removed && !removedNoticeClosed && (
             <>
