@@ -440,7 +440,8 @@ def update_order_category_route(order_id):
     if service_id is not None and (isinstance(service_id, bool) or not isinstance(service_id, int)):
         return api_error(400, "VALIDATION_ERROR", "service_id должен быть числом, либо null (без категории)")
 
-    order, outcome = update_order_category(order_id, g.kj, service_id)
+    skip_consent = payload.get("skip_consent") is True
+    order, outcome = update_order_category(order_id, g.kj, service_id, skip_consent=skip_consent)
     if outcome == "updated":
         return api_ok(order.to_dict())
     if outcome in _QUEUE_EDIT_OUTCOME_HTTP:
