@@ -4066,6 +4066,69 @@ function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged, auto
     }
   }
 
+  // Смена категории прямо из "Очереди стола" и "Сыгранных песен": как и везде,
+  // смена НЕ применяется сразу — гость получает запрос «Да / Удалить песню».
+  const [queueCategories, setQueueCategories] = useState([]);
+  const [queueCatBusyId, setQueueCatBusyId] = useState(null);
+  const [queueCatError, setQueueCatError] = useState(null);
+  useEffect(() => {
+    api.listCategories(token, clubId).then(setQueueCategories).catch(() => {});
+  }, [token, clubId]);
+
+  async function handleQueueCategoryChange(orderId, value) {
+    setQueueCatBusyId(orderId);
+    setQueueCatError(null);
+    try {
+      await api.updateOrderCategory(token, orderId, value === "" ? null : Number(value));
+      await reload();
+    } catch (err) {
+      setQueueCatError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setQueueCatBusyId(null);
+    }
+  }
+
+  async function handleQueueCategoryCancel(orderId) {
+    setQueueCatBusyId(orderId);
+    setQueueCatError(null);
+    try {
+      await api.cancelOrderCategoryChange(token, orderId);
+      await reload();
+    } catch (err) {
+      setQueueCatError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setQueueCatBusyId(null);
+    }
+  }
+
+  function renderQueueCategory(o) {
+    if (queueCategories.length === 0) return null;
+    return (
+      <>
+        {" "}
+        <select
+          className="queue-row__category-select"
+          value={o.service_id ?? ""}
+          disabled={queueCatBusyId === o.id}
+          onChange={(e) => handleQueueCategoryChange(o.id, e.target.value)}
+        >
+          {o.service_id == null && <option value="">Без категории</option>}
+          {queueCategories.map((c) => (
+            <option key={c.id} value={c.id}>{c.name}</option>
+          ))}
+        </select>
+        {o.pending_category_at && (
+          <>
+            {" "}<span className="empty-hint">⏳ ждём ответа гостя</span>{" "}
+            <button type="button" className="link-btn" disabled={queueCatBusyId === o.id} onClick={() => handleQueueCategoryCancel(o.id)}>
+              Отменить смену
+            </button>
+          </>
+        )}
+      </>
+    );
+  }
+
   useEffect(() => {
     reload();
     setSelectedGuestId(null);
@@ -4302,6 +4365,8 @@ function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged, auto
                     >
                       🗑 Убрать из очереди
                     </button>
+                    {renderQueueCategory(o)}
+                    {queueCatError && <div className="banner banner--error">{queueCatError}</div>}
                   </li>
                 ))}
               </ol>
@@ -4367,6 +4432,7 @@ function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged, auto
                       {order.artist && <span> — {order.artist}</span>}
                       <br />
                       <span className="empty-hint">Гость {guestLabel(guestNames, order.telegram_user_id)}</span>
+                      {renderQueueCategory(order)}
                     </div>
                     <div className="vip-row__actions">
                       <button
