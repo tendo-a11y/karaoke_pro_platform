@@ -4495,7 +4495,7 @@ export default function App() {
           <span className="search-style-plus-caption">Послушать песню</span>
           <button
             type="button"
-            className={`link-btn search-style-plus${searchStyle === "smart" ? " finder-modes__active" : ""}`}
+            className={`link-btn${searchStyle === "smart" ? " finder-modes__active" : ""}`}
             aria-label="Поиск по описанию и ссылке"
             aria-expanded={searchStyle === "smart"}
             onClick={() => setSearchStyle(searchStyle === "smart" ? "simple" : "smart")}
