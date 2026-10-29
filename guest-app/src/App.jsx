@@ -3659,6 +3659,9 @@ export default function App() {
   // Предупреждение "Вы заказываете через Интернет" — показываем один раз, при первом
   // автовыборе категории по ссылке. Флаг запоминаем в браузере гостя (localStorage, с try/catch).
   const [internetHint, setInternetHint] = useState(null);
+  // Плашка «Войдите через Google» после 4-й песни (решение 2026-10-29): один раз за визит.
+  const [orderedCount, setOrderedCount] = useState(0);
+  const [loginPromptOff, setLoginPromptOff] = useState(false);
   const [internetHintOff, setInternetHintOff] = useState(() => {
     try { return window.localStorage.getItem("internetHintOff") === "1"; } catch { return false; }
   });
@@ -4087,6 +4090,7 @@ export default function App() {
         toneOn && tone != null ? tone : null,
         songUrl,
       );
+      setOrderedCount((c) => c + 1);
       setSongTitle("");
       setArtist("");
       setSongUrl(null);
@@ -4597,6 +4601,29 @@ export default function App() {
           }}
         />
         </div>
+        {orderedCount >= 4 && !loginPromptOff && !meInfo.has_permanent_profile ? (
+          <div className="link-confirm-overlay" role="alertdialog" aria-modal="true">
+            <div className="link-confirm-plate">
+              <p>Войдите через Google, чтобы сохранить историю и избранное.</p>
+              <div className="link-confirm-buttons">
+                <button
+                  type="button"
+                  className="link-confirm-yes"
+                  onClick={() => { setLoginPromptOff(true); setShowActivation(true); }}
+                >
+                  Войти через Google
+                </button>
+                <button
+                  type="button"
+                  className="link-confirm-cancel"
+                  onClick={() => setLoginPromptOff(true)}
+                >
+                  Позже
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
         {internetHint ? (
           <div className="link-confirm-overlay" role="alertdialog" aria-modal="true">
             <div className="link-confirm-plate">
