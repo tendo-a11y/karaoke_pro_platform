@@ -1237,6 +1237,7 @@ def delete_category(club_id, category_id):
 _TABLE_SETTINGS_FIELDS = {
     "table_count": "table_count должен быть положительным целым числом, либо null (без ограничения)",
     "songs_per_table": "songs_per_table должен быть положительным целым числом, либо null (не задано)",
+    "crazy_after_queue": "crazy_after_queue должен быть положительным целым числом, либо null (выключено)",
 }
 
 # ДОБАВЛЕНО (2026-09-24, "варианты очереди" — быстрый тумблер на вкладке
