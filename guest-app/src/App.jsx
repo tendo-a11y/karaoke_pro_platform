@@ -4620,8 +4620,8 @@ export default function App() {
         ) : null}
         {showFullUi && (orderExtra === "orders" || orderExtra === "history") ? (
           <div className={`profile-finance pick-scope${reorderPickedId != null ? " orders-block--pick" : ""}`}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}><h2 style={{ margin: 0 }}>{ordersTab === "history" ? "История" : "Мои заказы"}</h2><div style={{ display: "flex", alignItems: "center", gap: 6 }}><button type="button" className="link-btn" onClick={() => setOrdersCollapsed((v) => !v)}>{ordersCollapsed ? "Открыть" : "Закрыть"}</button><button type="button" className="link-btn" aria-label={ordersCollapsed ? "Развернуть" : "Свернуть"} onClick={() => setOrdersCollapsed((v) => !v)}>{ordersCollapsed ? "▲" : "▼"}</button></div></div> {ordersTab !== "history" && <GuestPrecheck token={session?.token} />}
-          {!ordersCollapsed && (<>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}><h2 style={{ margin: 0 }}>{ordersTab === "history" ? "История" : "Мои заказы"}</h2><div style={{ display: "flex", alignItems: "center", gap: 6 }}><button type="button" className="link-btn" onClick={() => setOrdersCollapsed((v) => !v)}>{ordersCollapsed ? "Открыть" : "Закрыть"}</button><button type="button" className="link-btn" aria-label={ordersCollapsed ? "Развернуть" : "Свернуть"} onClick={() => setOrdersCollapsed((v) => !v)}>{ordersCollapsed ? "▲" : "▼"}</button></div></div> 
+          {!ordersCollapsed && (<>{ordersTab !== "history" && <GuestPrecheck token={session?.token} />}
         {ordersTab !== "history" && orders.some((o) => o.status === "pending" || o.status === "queued") && (
           <button
             type="button"
@@ -5011,11 +5011,11 @@ function GuestPrecheck({ token }) {
   return (
     <div className="guest-precheck">
       <button type="button" className="btn" disabled={busy} onClick={toggle}>
-        {open ? "Скрыть пречек" : "🧾 Пречек"}
+        {open ? "Скрыть спетые песни" : "🧾 Смотреть спетые песни"}
       </button>
       {open && (
         <div className="precheck">
-          <h3>🧾 Пречек стола</h3>
+          <h3>Спетые песни стола</h3>
           <p className="empty-hint">Так будет выглядеть чек, если закрыть стол сейчас. Стол не закрывается.</p>
           {err && <div className="banner banner--error">{err}</div>}
           {!data && !err && <p className="empty-hint">Загрузка…</p>}
