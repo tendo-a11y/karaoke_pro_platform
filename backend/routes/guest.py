@@ -1238,6 +1238,7 @@ def list_my_orders():
     вместо кнопок "🔁 Заменить"/"❌ Отменить" показать "ждите решения
     ведущего" — та же причина, что и у can_replace выше.
     """
+    vdj_service.apply_expired_category_changes(g.club_id)
     query = Order.query.filter_by(club_id=g.club_id, telegram_user_id=g.guest_id).filter(
         Order.status.notin_([STATUS_REJECTED, STATUS_ERROR])
     )
