@@ -1055,6 +1055,16 @@ function TableCloseRequestsPanel({ token, clubId, socket }) {
 // Статистика включена для всех KJ (запрос пользователя 2026-10-09: "показываем").
 const STATS_ENABLED = true;
 
+// Вкладки внутри кнопки «Настройки клуба» (запрос 2026-10-30).
+const SETTINGS_TABS = [
+  { key: "tables", label: "🪑 Столы" },
+  { key: "categories", label: "🎚 Категории" },
+  { key: "stats", label: "Статистика" },
+  { key: "vip", label: "⭐ VIP" },
+  { key: "guests", label: "👥 Гости" },
+];
+
+
 function statsDay(offsetDays) {
   // "Клубный день" начинается в 08:00 — до утра считается вчерашний вечер.
   const d = new Date(Date.now() - 8 * 3600 * 1000);
@@ -5773,35 +5783,24 @@ export default function App() {
               ✉️ Сообщения
             </button>
           )}
-          {view !== "vip" && (
-            <button type="button" className="btn-link" onClick={() => setView("vip")}>
-              ⭐ VIP
-            </button>
-          )}
-          {view !== "categories" && (
-            <button type="button" className="btn-link" onClick={() => setView("categories")}>
-              🎚 Категории
-            </button>
-          )}
-          {view !== "tables" && (
+          {!SETTINGS_TABS.some((t) => t.key === view) && (
             <button type="button" className="btn-link" onClick={() => setView("tables")}>
-              🪑 Столы
+              ⚙️ Настройки клуба
             </button>
           )}
-          {view !== "guests" && (
-            <button type="button" className="btn-link" onClick={() => setView("guests")}>
-              👥 Гости
-            </button>
-          )}
-          {view !== "song-lists" && (
-            <button type="button" className="btn-link" onClick={() => setView("song-lists")}>
-              Списки для гостей
-            </button>
-          )}
-          {STATS_ENABLED && view !== "stats" && (
-            <button type="button" className="btn-link" onClick={() => setView("stats")}>
-              Статистика
-            </button>
+          {SETTINGS_TABS.some((t) => t.key === view) && (
+            <div className="settings-subnav">
+              {SETTINGS_TABS.filter((t) => STATS_ENABLED || t.key !== "stats").map((t) => (
+                <button
+                  key={t.key}
+                  type="button"
+                  className={view === t.key ? "btn-link settings-subnav__active" : "btn-link"}
+                  onClick={() => setView(t.key)}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
           )}
         </div>
       </header>
