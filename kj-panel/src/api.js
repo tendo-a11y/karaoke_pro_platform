@@ -131,6 +131,12 @@ export const api = {
   // собирающая все обращения, включая личный чат с гостями") — чат уже
   // был готов на бэкенде (routes/kj.py::list_chat/reply_chat), здесь не
   // хватало только обёртки на фронтенде.
+  getStandardMessages: (token, clubId) => request(`/api/kj/standard-messages/${clubId}`, { token }),
+  saveStandardMessages: (token, clubId, messages) =>
+    request(`/api/kj/standard-messages/${clubId}`, { method: "PUT", token, body: { messages } }),
+  getStandardMessages: (token, clubId) => request(`/api/kj/standard-messages/${clubId}`, { token }),
+  saveStandardMessages: (token, clubId, messages) =>
+    request(`/api/kj/standard-messages/${clubId}`, { method: "PUT", token, body: { messages } }),
   listChat: (token, clubId, telegramUserId) =>
     request(
       `/api/kj/chat/${clubId}${telegramUserId ? `?telegram_user_id=${telegramUserId}` : ""}`,
