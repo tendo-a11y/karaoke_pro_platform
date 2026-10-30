@@ -4015,7 +4015,8 @@ export default function App() {
 
   // Обычное караоке без категорий: когда заполнены название и исполнитель, через 2 секунды после ввода появляется плашка "Ок / Отмена".
   useEffect(() => {
-    if (!CATEGORIES_HIDDEN || !songTitle.trim() || !artist.trim()) return undefined;
+    // Заказ по ссылке ведёт своей плашкой: обычная плашка «Заказать за N лей?» не должна перебивать её.
+    if (!CATEGORIES_HIDDEN || !songTitle.trim() || !artist.trim() || songUrl) return undefined;
     const t = setTimeout(() => {
       const karaoke = services.find((c) => c.name === "KARAOKE" || c.description === "Обычное караоке");
       if (!karaoke) return;
@@ -4023,7 +4024,7 @@ export default function App() {
       setInternetHint({ name: karaoke.description || karaoke.name, price: karaoke.price, fromLink: false, auto: true, song: songTitle.trim(), artistName: artist.trim() });
     }, 2000);
     return () => clearTimeout(t);
-  }, [songTitle, artist, services]);
+  }, [songTitle, artist, services, songUrl]);
 
   async function handleSubmitOrder(event) {
     event.preventDefault();
