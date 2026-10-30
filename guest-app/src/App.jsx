@@ -4031,6 +4031,8 @@ export default function App() {
     event.preventDefault();
     if (!session || !songTitle.trim()) return;
     if (CATEGORIES_HIDDEN) {
+      // Заказ по ссылке уже показал свою плашку (100 лей) — обычная плашка (35 лей) не должна её менять.
+      if (songUrl) return;
       // Обычное караоке по умолчанию: сначала подтверждение цены, как при заказе по ссылке.
       const karaoke = services.find((c) => c.name === "KARAOKE" || c.description === "Обычное караоке");
       if (!karaoke) { setSubmitError("Категория «Обычное караоке» не найдена"); return; }
