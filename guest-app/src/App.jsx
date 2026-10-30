@@ -4526,6 +4526,10 @@ export default function App() {
                   onClick={() => {
                     // Подтверждение цены и есть заказ: отправляем сразу, без второго "Заказать".
                     setInternetHint(null);
+                    if (internetHint.auto && activated && meInfo?.crazy_after_queue && queue.length >= meInfo.crazy_after_queue && crazyService) {
+                      setCrazyOffer(true);
+                      return;
+                    }
                     proceedSubmitOrder();
                   }}
                 >
