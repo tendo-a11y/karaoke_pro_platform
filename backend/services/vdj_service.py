@@ -953,39 +953,6 @@ def apply_expired_category_changes(club_id: int) -> None:
     emit_queue_updated(club_id, get_kj_queue_view(club_id))
 
 
-# Согласие гостя на смену категории (запрос 2026-10-30): гость отвечает в течение 5 минут,
-# иначе смена категории применяется сама, без его согласия.
-CATEGORY_CONSENT_SECONDS = 5 * 60
-
-
-def apply_expired_category_changes(club_id: int) -> None:
-    """
-    Применяет смену категории, на которую гость не ответил за CATEGORY_CONSENT_SECONDS.
-    Вызывается при обновлении очереди и списка заказов — отдельного таймера не нужно.
-    """
-    cutoff = _utcnow() - timedelta(seconds=CATEGORY_CONSENT_SECONDS)
-    expired = (
-        Order.query
-        .filter(
-            Order.club_id == club_id,
-            Order.pending_service_id.isnot(None),
-            Order.pending_category_at.isnot(None),
-            Order.pending_category_at <= cutoff,
-        )
-        .all()
-    )
-    if not expired:
-        return
-    for order in expired:
-        order.service_id = order.pending_service_id
-        order.pending_service_id = None
-        order.pending_category_at = None
-    db.session.commit()
-    for order in expired:
-        emit_order_updated(order)
-    emit_queue_updated(club_id, get_kj_queue_view(club_id))
-
-
 def _norm_song_name(value) -> str:
     return " ".join((value or "").lower().replace("ё", "е").split())
 
@@ -1296,7 +1263,6 @@ def _merged_live_queue(club_id: int, persist: bool):
 
             rows = [row for row in rows if row[1] is not None or not _was_played(row[0])]
 
-    apply_expired_category_changes(club_id)
     # ИЗМЕНЕНО (2026-10, запрос пользователя): в режиме "Последовательно"
     # принятые заказы, которых нет в VirtualDJ, выстраиваются по кругу столов
     # от стола "Начало очереди" — так же, как номера на карточках столов.
