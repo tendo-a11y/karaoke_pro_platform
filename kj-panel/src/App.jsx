@@ -3428,7 +3428,7 @@ function TableSettingsPanel({ token, clubId }) {
             />
           </label>
           <label className="table-settings-field">
-            <span>Предлагать крейзи после N песен в очереди</span>
+            <span>ПЛАШКА КРЕЙЗИ: после N песен в очереди</span>
             <input
               type="number"
               min="1"
