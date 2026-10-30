@@ -3900,6 +3900,15 @@ export default function App() {
     }
   }
 
+  // Когда появляется любая плашка (подтверждение заказа, крейзи, смена категории, сообщения), прячем клавиатуру,
+  // чтобы плашка не перекрывалась клавиатурой.
+  useEffect(() => {
+    const plateOpen = !!(internetHint || crazyOffer || songWarning || showFirstOrderNotice || pendingCategoryOrder || chatPopup);
+    if (!plateOpen) return;
+    const el = document.activeElement;
+    if (el && typeof el.blur === "function") el.blur();
+  }, [internetHint, crazyOffer, songWarning, showFirstOrderNotice, pendingCategoryOrder, chatPopup]);
+
   const categoryPopupEl = pendingCategoryOrder ? (
     <div className="msg-popup-overlay" role="alertdialog" aria-modal="true">
       <div className="msg-popup">
