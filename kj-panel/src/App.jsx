@@ -3281,6 +3281,7 @@ function AutoClosePanel({ token }) {
 function TableSettingsPanel({ token, clubId }) {
   const [tableCountDraft, setTableCountDraft] = useState("");
   const [songsPerTableDraft, setSongsPerTableDraft] = useState("");
+  const [crazyAfterDraft, setCrazyAfterDraft] = useState("");
   const [queueMode, setQueueMode] = useState("manual");
   const [queueModeBusy, setQueueModeBusy] = useState(false);
   const [queueModeError, setQueueModeError] = useState(null);
@@ -3294,6 +3295,7 @@ function TableSettingsPanel({ token, clubId }) {
       const data = await api.getTableSettings(token, clubId);
       setTableCountDraft(data.table_count == null ? "" : String(data.table_count));
       setSongsPerTableDraft(data.songs_per_table == null ? "" : String(data.songs_per_table));
+      setCrazyAfterDraft(data.crazy_after_queue == null ? "" : String(data.crazy_after_queue));
       setQueueMode(data.queue_mode || "manual");
       setLoadError(null);
     } catch (err) {
@@ -3340,7 +3342,8 @@ function TableSettingsPanel({ token, clubId }) {
     event.preventDefault();
     const tableCount = parseDraft(tableCountDraft);
     const songsPerTable = parseDraft(songsPerTableDraft);
-    if (!tableCount.ok || !songsPerTable.ok) return;
+    const crazyAfter = parseDraft(crazyAfterDraft);
+    if (!tableCount.ok || !songsPerTable.ok || !crazyAfter.ok) return;
 
     setBusy(true);
     setActionError(null);
@@ -3349,9 +3352,11 @@ function TableSettingsPanel({ token, clubId }) {
       const data = await api.updateTableSettings(token, clubId, {
         table_count: tableCount.value,
         songs_per_table: songsPerTable.value,
+        crazy_after_queue: crazyAfter.value,
       });
       setTableCountDraft(data.table_count == null ? "" : String(data.table_count));
       setSongsPerTableDraft(data.songs_per_table == null ? "" : String(data.songs_per_table));
+      setCrazyAfterDraft(data.crazy_after_queue == null ? "" : String(data.crazy_after_queue));
       setSaved(true);
     } catch (err) {
       setActionError(err instanceof ApiError ? err.message : String(err));
@@ -3417,6 +3422,20 @@ function TableSettingsPanel({ token, clubId }) {
               value={songsPerTableDraft}
               onChange={(e) => {
                 setSongsPerTableDraft(e.target.value);
+                setSaved(false);
+              }}
+              disabled={busy}
+            />
+          </label>
+          <label className="table-settings-field">
+            <span>Предлагать крейзи после N песен в очереди</span>
+            <input
+              type="number"
+              min="1"
+              placeholder="Выключено"
+              value={crazyAfterDraft}
+              onChange={(e) => {
+                setCrazyAfterDraft(e.target.value);
                 setSaved(false);
               }}
               disabled={busy}
