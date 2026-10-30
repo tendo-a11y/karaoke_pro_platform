@@ -920,6 +920,72 @@ def cancel_category_change(order_id: int, kj):
     return order, "cancelled"
 
 
+# Согласие гостя на смену категории (запрос 2026-10-30): гость отвечает в течение 5 минут,
+# иначе смена категории применяется сама, без его согласия.
+CATEGORY_CONSENT_SECONDS = 5 * 60
+
+
+def apply_expired_category_changes(club_id: int) -> None:
+    """
+    Применяет смену категории, на которую гость не ответил за CATEGORY_CONSENT_SECONDS.
+    Вызывается при обновлении очереди и списка заказов — отдельного таймера не нужно.
+    """
+    cutoff = _utcnow() - timedelta(seconds=CATEGORY_CONSENT_SECONDS)
+    expired = (
+        Order.query
+        .filter(
+            Order.club_id == club_id,
+            Order.pending_service_id.isnot(None),
+            Order.pending_category_at.isnot(None),
+            Order.pending_category_at <= cutoff,
+        )
+        .all()
+    )
+    if not expired:
+        return
+    for order in expired:
+        order.service_id = order.pending_service_id
+        order.pending_service_id = None
+        order.pending_category_at = None
+    db.session.commit()
+    for order in expired:
+        emit_order_updated(order)
+    emit_queue_updated(club_id, get_kj_queue_view(club_id))
+
+
+# Согласие гостя на смену категории (запрос 2026-10-30): гость отвечает в течение 5 минут,
+# иначе смена категории применяется сама, без его согласия.
+CATEGORY_CONSENT_SECONDS = 5 * 60
+
+
+def apply_expired_category_changes(club_id: int) -> None:
+    """
+    Применяет смену категории, на которую гость не ответил за CATEGORY_CONSENT_SECONDS.
+    Вызывается при обновлении очереди и списка заказов — отдельного таймера не нужно.
+    """
+    cutoff = _utcnow() - timedelta(seconds=CATEGORY_CONSENT_SECONDS)
+    expired = (
+        Order.query
+        .filter(
+            Order.club_id == club_id,
+            Order.pending_service_id.isnot(None),
+            Order.pending_category_at.isnot(None),
+            Order.pending_category_at <= cutoff,
+        )
+        .all()
+    )
+    if not expired:
+        return
+    for order in expired:
+        order.service_id = order.pending_service_id
+        order.pending_service_id = None
+        order.pending_category_at = None
+    db.session.commit()
+    for order in expired:
+        emit_order_updated(order)
+    emit_queue_updated(club_id, get_kj_queue_view(club_id))
+
+
 def _norm_song_name(value) -> str:
     return " ".join((value or "").lower().replace("ё", "е").split())
 
@@ -1230,6 +1296,7 @@ def _merged_live_queue(club_id: int, persist: bool):
 
             rows = [row for row in rows if row[1] is not None or not _was_played(row[0])]
 
+    apply_expired_category_changes(club_id)
     # ИЗМЕНЕНО (2026-10, запрос пользователя): в режиме "Последовательно"
     # принятые заказы, которых нет в VirtualDJ, выстраиваются по кругу столов
     # от стола "Начало очереди" — так же, как номера на карточках столов.
@@ -1407,6 +1474,7 @@ def get_kj_queue_view(club_id: int) -> list[dict]:
     управляет только явное действие KJ (кнопка "Готово"), а не сверка с
     живой очередью VirtualDJ.
     """
+    apply_expired_category_changes(club_id)
     # ИЗМЕНЕНО (2026-10, запрос пользователя): живая очередь теперь — это
     # позиции VirtualDJ ПЛЮС принятые заказы, которых в VirtualDJ ещё нет
     # (in_vdj=False). Заказ и позиция VirtualDJ с одинаковым названием
@@ -1473,6 +1541,7 @@ def get_guest_queue_view(club_id: int, guest_id: int) -> list[dict]:
     очереди должно происходить только один раз за опрос, и её уже выполняет
     KJ Panel (оба экрана опрашивают один и тот же club_id параллельно).
     """
+    apply_expired_category_changes(club_id)
     # ИЗМЕНЕНО (2026-10): та же объединённая очередь, что и у KJ (позиции
     # VirtualDJ + принятые заказы, которых там ещё нет), но без записи в базу.
     rows, waiting = _merged_live_queue(club_id, persist=False)
