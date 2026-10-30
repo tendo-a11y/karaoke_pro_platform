@@ -4021,7 +4021,8 @@ export default function App() {
       const karaoke = services.find((c) => c.name === "KARAOKE" || c.description === "Обычное караоке");
       if (!karaoke) return;
       setServiceId(String(karaoke.id));
-      setInternetHint({ name: karaoke.description || karaoke.name, price: karaoke.price, fromLink: false, auto: true, song: songTitle.trim(), artistName: artist.trim() });
+      // Если уже открыта плашка по ссылке (100 лей), обычная плашка её не заменяет.
+      setInternetHint((prev) => prev || { name: karaoke.description || karaoke.name, price: karaoke.price, fromLink: false, auto: true, song: songTitle.trim(), artistName: artist.trim() });
     }, 2000);
     return () => clearTimeout(t);
   }, [songTitle, artist, services, songUrl]);
