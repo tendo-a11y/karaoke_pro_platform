@@ -1,3 +1,4 @@
+import json
 from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
 
@@ -464,6 +465,61 @@ def cancel_order_category_change_route(order_id):
     }
     status_code, error_code, message = messages.get(outcome, (500, "INTERNAL_ERROR", "Неизвестный результат"))
     return api_error(status_code, error_code, message)
+
+
+
+
+# Дежурные сообщения KJ гостям (запрос 2026-10-30): фразы вроде «Не свистите в зале».
+# Хранятся по клубу как JSON-список. Пока KJ ничего не сохранил, выдаём стартовый набор.
+DEFAULT_STANDARD_MESSAGES = [
+    'Не свистите в зале',
+    'Пишите песни корректно, правильно, без ошибок',
+]
+
+
+def _read_standard_messages(club):
+    raw = club.standard_messages if club else None
+    if raw is None:
+        return list(DEFAULT_STANDARD_MESSAGES)
+    try:
+        data = json.loads(raw)
+    except ValueError:
+        return list(DEFAULT_STANDARD_MESSAGES)
+    if not isinstance(data, list):
+        return list(DEFAULT_STANDARD_MESSAGES)
+    return [str(x) for x in data]
+
+
+@bp.get('/standard-messages/<int:club_id>')
+@require_kj
+def get_standard_messages(club_id):
+    denied = _ensure_own_club(club_id)
+    if denied:
+        return denied
+    return api_ok(_read_standard_messages(db.session.get(Club, club_id)))
+
+
+@bp.put('/standard-messages/<int:club_id>')
+@require_kj
+def put_standard_messages(club_id):
+    denied = _ensure_own_club(club_id)
+    if denied:
+        return denied
+    payload = request.get_json(silent=True) or {}
+    items = payload.get('messages')
+    if not isinstance(items, list) or any(not isinstance(x, str) for x in items):
+        return api_error(400, 'VALIDATION_ERROR', 'messages должен быть списком строк')
+    cleaned = []
+    for item in items:
+        text = item.strip()[:300]
+        if text and text not in cleaned:
+            cleaned.append(text)
+    club = db.session.get(Club, club_id)
+    if club is None:
+        return api_error(404, 'NOT_FOUND', 'Клуб не найден')
+    club.standard_messages = json.dumps(cleaned, ensure_ascii=False)
+    db.session.commit()
+    return api_ok(cleaned)
 
 
 @bp.get("/chat/<int:club_id>")
