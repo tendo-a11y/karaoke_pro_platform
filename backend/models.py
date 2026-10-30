@@ -123,6 +123,8 @@ class Club(db.Model):
     entry_notice = db.Column(db.Text, nullable=True)
     # Крейзи-предложение (запрос 2026-10-30): после скольких песен в очереди клуба гостям предлагают песню вне очереди. None — выключено.
     crazy_after_queue = db.Column(db.Integer, nullable=True)
+    # Дежурные сообщения KJ гостям: JSON-список фраз.
+    standard_messages = db.Column(db.Text, nullable=True)
 
     # ДОБАВЛЕНО (2026-10-04, запрос пользователя "бот и приложение — два
     # отдельных инструмента, что в боте то и в приложении"): перенос
