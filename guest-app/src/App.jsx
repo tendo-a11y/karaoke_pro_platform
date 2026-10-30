@@ -4548,6 +4548,40 @@ export default function App() {
             </div>
           </div>
         ) : null}
+        {crazyOffer && crazyService ? (
+          <div className="link-confirm-overlay" role="alertdialog" aria-modal="true">
+            <div className="link-confirm-plate">
+              <p>Сейчас в клубе большая очередь песен, вы можете спеть песню вне очереди.</p>
+              <p>Цена {Number(crazyService.price)} лей. Внимание: песня вне очереди стоит {Number(crazyService.price)} лей.</p>
+              <div className="link-confirm-buttons">
+                <button
+                  type="button"
+                  className="link-confirm-yes"
+                  onClick={async () => {
+                    setCrazyOffer(false);
+                    await submitOrderWithToken(session.token, String(crazyService.id));
+                    if (orders.length > 0) {
+                      setOrdersTab("current");
+                      setOrderExtra("orders");
+                    }
+                  }}
+                >
+                  ✅ Заказать
+                </button>
+                <button
+                  type="button"
+                  className="link-confirm-cancel"
+                  onClick={() => {
+                    setCrazyOffer(false);
+                    proceedSubmitOrder();
+                  }}
+                >
+                  ✕ Отмена
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
         {showFullUi && orderExtra === "fav" ? (
           <FavoritesPanel
             token={session.token}
