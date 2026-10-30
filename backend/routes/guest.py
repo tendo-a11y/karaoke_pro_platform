@@ -162,6 +162,9 @@ def me():
         "club_name": club.name if club else None,
         "entry_notice": club.entry_notice if club else None,
         "crazy_after_queue": club.crazy_after_queue if club else None,
+        # Круг для повторной плашки крейзи (запрос 2026-10-30): столов × песен на стол и сколько песен уже спето.
+        "crazy_round_size": (club.table_count * club.songs_per_table) if club and club.table_count and club.songs_per_table else None,
+        "sung_total": Order.query.filter(Order.club_id == g.club_id, Order.status.in_(["playing", STATUS_COMPLETED])).count() if club else 0,
         "table_removed": _table_removed_flag(g.club_id, g.guest_id, g.table_no),
         # ИЗМЕНЕНО (запрос пользователя 2026-10-01): чат гостя с ведущим
         # теперь работает всегда и больше не завязан на этот флаг (см.
