@@ -161,6 +161,7 @@ def me():
         "table_close_receipt": table_close_receipt,
         "club_name": club.name if club else None,
         "entry_notice": club.entry_notice if club else None,
+        "crazy_after_queue": club.crazy_after_queue if club else None,
         "table_removed": _table_removed_flag(g.club_id, g.guest_id, g.table_no),
         # ИЗМЕНЕНО (запрос пользователя 2026-10-01): чат гостя с ведущим
         # теперь работает всегда и больше не завязан на этот флаг (см.
