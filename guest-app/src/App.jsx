@@ -1100,6 +1100,11 @@ function OrderRow({
 // ещё не VIP-гостей. Баланс+пополнение переехали в экран "Сообщения" (см.
 // VipBalancePanel ниже) — эта панель остаётся на главном экране и теперь
 // только про "Стать VIP" (уже VIP-гостям ничего не показывает).
+const CRAZY_HIDE_KEY = "crazyHideSungTotal";
+function readCrazyHide() { try { const v = localStorage.getItem(CRAZY_HIDE_KEY); return v === null ? null : Number(v); } catch (e) { return null; } }
+function writeCrazyHide(value) { try { localStorage.setItem(CRAZY_HIDE_KEY, String(value)); } catch (e) { return; } }
+function crazyOfferAllowed(me) { const saved = readCrazyHide(); if (saved === null) return true; if (!me?.crazy_round_size) return false; return (me?.sung_total ?? 0) - saved >= me.crazy_round_size; }
+
 function VipPanel({ token, meInfo, embedded = false }) {
   const [requesting, setRequesting] = useState(false);
   const [requestSent, setRequestSent] = useState(false);
@@ -3695,6 +3700,9 @@ export default function App() {
   const crazyService = services.find((c) => c.name === "CRAZY") || null;
   const [crazyMode, setCrazyMode] = useState(false);
   const [crazyConfirm, setCrazyConfirm] = useState(false);
+  const [crazyHideChecked, setCrazyHideChecked] = useState(false);
+  const [ordersCollapsed, setOrdersCollapsed] = useState(false);
+  useEffect(() => { if (!crazyOffer && crazyHideChecked) writeCrazyHide(meInfo?.sung_total ?? 0); }, [crazyOffer]);
   // Шаг "категория" (запрос пользователя 2026-10): песня и исполнитель введены, категории ещё нет —
   // на экране только кнопка категории.
   const categoryStep = !CATEGORIES_HIDDEN && Boolean(songTitle.trim() && artist.trim() && !serviceId && !categoryPicking && !typingField) && services.length > 0;
@@ -4539,8 +4547,8 @@ export default function App() {
                       submitOrderWithToken(session.token, String(crazyService.id));
                       return;
                     }
-                    if (internetHint.auto && activated && !crazyMode && meInfo?.crazy_after_queue && queue.length >= meInfo.crazy_after_queue && crazyService) {
-                      setCrazyOffer(true);
+                    if (internetHint.auto && activated && !crazyMode && meInfo?.crazy_after_queue && queue.length >= meInfo.crazy_after_queue && crazyService && crazyOfferAllowed(meInfo)) {
+                      setCrazyHideChecked(false); setCrazyOffer(true);
                       return;
                     }
                     proceedSubmitOrder();
@@ -4570,6 +4578,7 @@ export default function App() {
           <div className="link-confirm-overlay" role="alertdialog" aria-modal="true">
             <div className="link-confirm-plate">
               <p>Сейчас большая очередь: {queue.length} песен. Но вы можете заказать песню вне очереди.</p>
+              <label className="crazy-hide-check"><input type="checkbox" checked={crazyHideChecked} onChange={(e) => setCrazyHideChecked(e.target.checked)} /><span>Не показывать</span><small> (покажем снова через круг)</small></label>
               <div className="link-confirm-buttons">
                 <button
                   type="button"
@@ -4611,7 +4620,8 @@ export default function App() {
         ) : null}
         {showFullUi && (orderExtra === "orders" || orderExtra === "history") ? (
           <div className={`profile-finance pick-scope${reorderPickedId != null ? " orders-block--pick" : ""}`}>
-          <h2>{ordersTab === "history" ? "История" : "Мои заказы"}</h2> {ordersTab !== "history" && <GuestPrecheck token={session?.token} />}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}><h2 style={{ margin: 0 }}>{ordersTab === "history" ? "История" : "Мои заказы"}</h2><div style={{ display: "flex", alignItems: "center", gap: 6 }}><button type="button" className="link-btn" onClick={() => setOrdersCollapsed((v) => !v)}>{ordersCollapsed ? "Открыть" : "Закрыть"}</button><button type="button" className="link-btn" aria-label={ordersCollapsed ? "Развернуть" : "Свернуть"} onClick={() => setOrdersCollapsed((v) => !v)}>{ordersCollapsed ? "▲" : "▼"}</button></div></div> {ordersTab !== "history" && <GuestPrecheck token={session?.token} />}
+          {!ordersCollapsed && (<>
         {ordersTab !== "history" && orders.some((o) => o.status === "pending" || o.status === "queued") && (
           <button
             type="button"
@@ -4687,6 +4697,7 @@ export default function App() {
             ))}
           </ul>
         )}
+          </>)}
           </div>
         ) : null}
         {activated && !groupOk ? (
