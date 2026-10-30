@@ -3693,6 +3693,7 @@ export default function App() {
   // Крейзи-плашка (запрос 2026-10-30): показывается, когда в очереди уже достаточно песен.
   const [crazyOffer, setCrazyOffer] = useState(false);
   const crazyService = services.find((c) => c.name === "CRAZY") || null;
+  const [crazyConfirm, setCrazyConfirm] = useState(false);
   // Шаг "категория" (запрос пользователя 2026-10): песня и исполнитель введены, категории ещё нет —
   // на экране только кнопка категории.
   const categoryStep = !CATEGORIES_HIDDEN && Boolean(songTitle.trim() && artist.trim() && !serviceId && !categoryPicking && !typingField) && services.length > 0;
@@ -4555,34 +4556,59 @@ export default function App() {
         {crazyOffer && crazyService ? (
           <div className="link-confirm-overlay" role="alertdialog" aria-modal="true">
             <div className="link-confirm-plate">
-              <p>Сейчас в клубе большая очередь песен, вы можете спеть песню вне очереди.</p>
-              <p>Цена {Number(crazyService.price)} лей. Внимание: песня вне очереди стоит {Number(crazyService.price)} лей.</p>
-              <div className="link-confirm-buttons">
-                <button
-                  type="button"
-                  className="link-confirm-yes"
-                  onClick={async () => {
-                    setCrazyOffer(false);
-                    await submitOrderWithToken(session.token, String(crazyService.id));
-                    if (orders.length > 0) {
-                      setOrdersTab("current");
-                      setOrderExtra("orders");
-                    }
-                  }}
-                >
-                  ✅ Заказать
-                </button>
-                <button
-                  type="button"
-                  className="link-confirm-cancel"
-                  onClick={() => {
-                    setCrazyOffer(false);
-                    proceedSubmitOrder();
-                  }}
-                >
-                  ✕ Отмена
-                </button>
-              </div>
+              {crazyConfirm ? (
+                <>
+                  <p>Вы действительно хотите заказать песню вне очереди?</p>
+                  <p>Цена {Number(crazyService.price)} лей.</p>
+                  <div className="link-confirm-buttons">
+                    <button
+                      type="button"
+                      className="link-confirm-yes"
+                      onClick={async () => {
+                        setCrazyOffer(false);
+                        setCrazyConfirm(false);
+                        await submitOrderWithToken(session.token, String(crazyService.id));
+                        if (orders.length > 0) {
+                          setOrdersTab("current");
+                          setOrderExtra("orders");
+                        }
+                      }}
+                    >
+                      ✅ Да
+                    </button>
+                    <button
+                      type="button"
+                      className="link-confirm-cancel"
+                      onClick={() => {
+                        setCrazyOffer(false);
+                        setCrazyConfirm(false);
+                      }}
+                    >
+                      ✕ Нет
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p>Сейчас в клубе большая очередь песен, вы можете спеть песню вне очереди.</p>
+                  <p>Цена {Number(crazyService.price)} лей. Внимание: песня вне очереди стоит {Number(crazyService.price)} лей.</p>
+                  <div className="link-confirm-buttons">
+                    <button type="button" className="link-confirm-yes" onClick={() => setCrazyConfirm(true)}>
+                      ✅ Заказать
+                    </button>
+                    <button
+                      type="button"
+                      className="link-confirm-cancel"
+                      onClick={() => {
+                        setCrazyOffer(false);
+                        proceedSubmitOrder();
+                      }}
+                    >
+                      ✕ Отмена
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         ) : null}
