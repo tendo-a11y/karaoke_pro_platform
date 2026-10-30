@@ -3693,6 +3693,7 @@ export default function App() {
   // Крейзи-плашка (запрос 2026-10-30): показывается, когда в очереди уже достаточно песен.
   const [crazyOffer, setCrazyOffer] = useState(false);
   const crazyService = services.find((c) => c.name === "CRAZY") || null;
+  const [crazyMode, setCrazyMode] = useState(false);
   const [crazyConfirm, setCrazyConfirm] = useState(false);
   // Шаг "категория" (запрос пользователя 2026-10): песня и исполнитель введены, категории ещё нет —
   // на экране только кнопка категории.
@@ -4019,13 +4020,14 @@ export default function App() {
     if (!CATEGORIES_HIDDEN || !songTitle.trim() || !artist.trim() || songUrl) return undefined;
     const t = setTimeout(() => {
       const karaoke = services.find((c) => c.name === "KARAOKE" || c.description === "Обычное караоке");
-      if (!karaoke) return;
-      setServiceId(String(karaoke.id));
+      const target = crazyMode ? crazyService : karaoke;
+      if (!target) return;
+      if (!crazyMode) setServiceId(String(karaoke.id));
       // Если уже открыта плашка по ссылке (100 лей), обычная плашка её не заменяет.
-      setInternetHint((prev) => prev || { name: karaoke.description || karaoke.name, price: karaoke.price, fromLink: false, auto: true, song: songTitle.trim(), artistName: artist.trim() });
+      setInternetHint((prev) => prev || { name: target.description || target.name, price: target.price, fromLink: false, auto: true, crazy: crazyMode, song: songTitle.trim(), artistName: artist.trim() });
     }, 2000);
     return () => clearTimeout(t);
-  }, [songTitle, artist, services, songUrl]);
+  }, [songTitle, artist, services, songUrl, crazyMode]);
 
   async function handleSubmitOrder(event) {
     event.preventDefault();
@@ -4516,6 +4518,7 @@ export default function App() {
               {internetHint.auto ? (
                 <>
                   <p><b>{internetHint.artistName}</b> — {internetHint.song}</p>
+                  {internetHint.crazy ? <p>Песня вне очереди (Crazy)</p> : null}
                   <p>Заказать за {Number(internetHint.price)} лей?</p>
                 </>
               ) : (
@@ -4531,7 +4534,12 @@ export default function App() {
                   onClick={() => {
                     // Подтверждение цены и есть заказ: отправляем сразу, без второго "Заказать".
                     setInternetHint(null);
-                    if (internetHint.auto && activated && meInfo?.crazy_after_queue && queue.length >= meInfo.crazy_after_queue && crazyService) {
+                    if (internetHint.crazy) {
+                      setCrazyMode(false);
+                      submitOrderWithToken(session.token, String(crazyService.id));
+                      return;
+                    }
+                    if (internetHint.auto && activated && !crazyMode && meInfo?.crazy_after_queue && queue.length >= meInfo.crazy_after_queue && crazyService) {
                       setCrazyOffer(true);
                       return;
                     }
@@ -4545,6 +4553,7 @@ export default function App() {
                   className="link-confirm-cancel"
                   onClick={() => {
                     setInternetHint(null);
+                    setCrazyMode(false);
                     setSongUrl(null);
                     setServiceId("");
                     setSongTitle("");
@@ -4560,59 +4569,33 @@ export default function App() {
         {crazyOffer && crazyService ? (
           <div className="link-confirm-overlay" role="alertdialog" aria-modal="true">
             <div className="link-confirm-plate">
-              {crazyConfirm ? (
-                <>
-                  <p>Вы действительно хотите заказать песню вне очереди?</p>
-                  <p>Цена {Number(crazyService.price)} лей.</p>
-                  <div className="link-confirm-buttons">
-                    <button
-                      type="button"
-                      className="link-confirm-yes"
-                      onClick={async () => {
-                        setCrazyOffer(false);
-                        setCrazyConfirm(false);
-                        await submitOrderWithToken(session.token, String(crazyService.id));
-                        if (orders.length > 0) {
-                          setOrdersTab("current");
-                          setOrderExtra("orders");
-                        }
-                      }}
-                    >
-                      ✅ Да
-                    </button>
-                    <button
-                      type="button"
-                      className="link-confirm-cancel"
-                      onClick={() => {
-                        setCrazyOffer(false);
-                        setCrazyConfirm(false);
-                      }}
-                    >
-                      ✕ Нет
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <p>Сейчас в клубе большая очередь песен, вы можете спеть песню вне очереди.</p>
-                  <p>Цена {Number(crazyService.price)} лей. Внимание: песня вне очереди стоит {Number(crazyService.price)} лей.</p>
-                  <div className="link-confirm-buttons">
-                    <button type="button" className="link-confirm-yes" onClick={() => setCrazyConfirm(true)}>
-                      ✅ Заказать
-                    </button>
-                    <button
-                      type="button"
-                      className="link-confirm-cancel"
-                      onClick={() => {
-                        setCrazyOffer(false);
-                        proceedSubmitOrder();
-                      }}
-                    >
-                      ✕ Отмена
-                    </button>
-                  </div>
-                </>
-              )}
+              <p>Сейчас большая очередь: {queue.length} песен. Но вы можете заказать песню вне очереди.</p>
+              <div className="link-confirm-buttons">
+                <button
+                  type="button"
+                  className="link-confirm-yes"
+                  onClick={() => {
+                    setCrazyOffer(false);
+                    setCrazyMode(true);
+                    setSongTitle("");
+                    setArtist("");
+                  }}
+                >
+                  ✅ Заказать
+                </button>
+                <button
+                  type="button"
+                  className="link-confirm-cancel"
+                  onClick={() => {
+                    setCrazyOffer(false);
+                    setCrazyMode(false);
+                    setSongTitle("");
+                    setArtist("");
+                  }}
+                >
+                  ✕ Отмена
+                </button>
+              </div>
             </div>
           </div>
         ) : null}
