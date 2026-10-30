@@ -4705,7 +4705,7 @@ export default function App() {
               <input
                 type="text"
                 value={songTitle}
-                onChange={(e) => setSongTitle(e.target.value)} onFocus={() => setTypingField(true)} onBlur={() => setTimeout(() => { const a = document.activeElement; if (!(a && a.tagName === "INPUT" && a.closest(".order-form"))) setTypingField(false); }, 400)}
+                onChange={(e) => { setSongTitle(e.target.value); setSubmitError(null); }} onFocus={() => setTypingField(true)} onBlur={() => setTimeout(() => { const a = document.activeElement; if (!(a && a.tagName === "INPUT" && a.closest(".order-form"))) setTypingField(false); }, 400)}
                 data-guide="name"
                 onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); document.querySelector('[data-guide="artist"]')?.focus(); } }}
                 placeholder={nameTypingHint || "Название песни"}
@@ -4716,7 +4716,7 @@ export default function App() {
               <input
                 type="text"
                 value={artist}
-                onChange={(e) => setArtist(e.target.value)} onFocus={() => setTypingField(true)} onBlur={() => setTimeout(() => { const a = document.activeElement; if (!(a && a.tagName === "INPUT" && a.closest(".order-form"))) setTypingField(false); }, 400)}
+                onChange={(e) => { setArtist(e.target.value); setSubmitError(null); }} onFocus={() => setTypingField(true)} onBlur={() => setTimeout(() => { const a = document.activeElement; if (!(a && a.tagName === "INPUT" && a.closest(".order-form"))) setTypingField(false); }, 400)}
                 data-guide="artist"
                 placeholder={artistTypingHint || "Исполнитель (обязательно)"}
                 maxLength={200}
