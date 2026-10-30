@@ -1312,6 +1312,7 @@ def get_table_settings(club_id):
     return api_ok({
         "table_count": club.table_count,
         "songs_per_table": club.songs_per_table,
+        "crazy_after_queue": club.crazy_after_queue,
         "queue_mode": get_queue_mode(club),
         "queue_start_table": get_queue_start_table(club),
         "guest_queue_visible": bool(club.guest_queue_visible),
@@ -1379,6 +1380,7 @@ def update_table_settings(club_id):
     return api_ok({
         "table_count": club.table_count,
         "songs_per_table": club.songs_per_table,
+        "crazy_after_queue": club.crazy_after_queue,
         "queue_mode": get_queue_mode(club),
         "queue_start_table": get_queue_start_table(club),
         "guest_queue_visible": bool(club.guest_queue_visible),
