@@ -3909,6 +3909,20 @@ export default function App() {
     if (el && typeof el.blur === "function") el.blur();
   }, [internetHint, crazyOffer, songWarning, showFirstOrderNotice, pendingCategoryOrder, chatPopup]);
 
+  // Обратный отсчёт на ответ о смене категории (5 минут; потом смена применяется сама).
+  const [categoryNow, setCategoryNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!pendingCategoryOrder) return undefined;
+    const timer = setInterval(() => setCategoryNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [pendingCategoryOrder]);
+  const categoryLeftSec = pendingCategoryOrder?.pending_category_at
+    ? Math.max(0, Math.ceil((new Date(pendingCategoryOrder.pending_category_at).getTime() + 5 * 60 * 1000 - categoryNow) / 1000))
+    : null;
+  const categoryLeftText = categoryLeftSec === null
+    ? ""
+    : `${Math.floor(categoryLeftSec / 60)}:${String(categoryLeftSec % 60).padStart(2, "0")}`;
+
   const categoryPopupEl = pendingCategoryOrder ? (
     <div className="msg-popup-overlay" role="alertdialog" aria-modal="true">
       <div className="msg-popup">
@@ -3917,6 +3931,11 @@ export default function App() {
           {`Ведущий изменил категорию песни „${pendingCategoryOrder.song_title}“ на „${pendingCategoryName}“`}
         </div>
         {pendingCategoryPrice && <div className="msg-popup__text">{pendingCategoryPrice}</div>}
+        {categoryLeftSec !== null && (
+          <div className="msg-popup__text">
+            Ответьте в течение {categoryLeftText}. Если не ответите, категория сменится автоматически.
+          </div>
+        )}
         <div className="msg-popup__actions">
           <button type="button" disabled={categoryBusy} onClick={() => answerCategoryChange(true)}>
             Да
