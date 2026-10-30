@@ -410,7 +410,6 @@ function QueueTable({ queue, token, clubId }) {
 
   return (
     <div className="queue-dropzone" ref={dropzoneRef}>
-      <SkipConsentCheckbox />
       {newHelpPos && (
         <button
           type="button"
