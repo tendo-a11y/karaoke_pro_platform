@@ -3690,6 +3690,9 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [turnToast]);
   const [services, setServices] = useState([]);
+  // Крейзи-плашка (запрос 2026-10-30): показывается, когда в очереди уже достаточно песен.
+  const [crazyOffer, setCrazyOffer] = useState(false);
+  const crazyService = services.find((c) => c.name === "CRAZY") || null;
   // Шаг "категория" (запрос пользователя 2026-10): песня и исполнитель введены, категории ещё нет —
   // на экране только кнопка категории.
   const categoryStep = !CATEGORIES_HIDDEN && Boolean(songTitle.trim() && artist.trim() && !serviceId && !categoryPicking && !typingField) && services.length > 0;
