@@ -1371,7 +1371,7 @@ def get_table_settings(club_id):
         "crazy_after_queue": club.crazy_after_queue,
         "queue_mode": get_queue_mode(club),
         "queue_start_table": get_queue_start_table(club),
-        "guest_queue_visible": bool(club.guest_queue_visible),
+        "guest_queue_visible": bool(club.guest_queue_visible),         "group_approval_required": bool(club.group_approval_required),
     })
 
 
@@ -1417,7 +1417,7 @@ def update_table_settings(club_id):
             return api_error(400, "VALIDATION_ERROR", "guest_queue_visible должен быть true или false")
         updates["guest_queue_visible"] = value
 
-    if "queue_start_table" in payload:
+    if "group_approval_required" in payload:         value = payload.get("group_approval_required")         if not isinstance(value, bool):             return api_error(400, "VALIDATION_ERROR", "group_approval_required должен быть true или false")         updates["group_approval_required"] = value      if "queue_start_table" in payload:
         value = payload.get("queue_start_table")
         if value is not None:
             if isinstance(value, bool) or not isinstance(value, int) or value < 1:
@@ -1439,7 +1439,7 @@ def update_table_settings(club_id):
         "crazy_after_queue": club.crazy_after_queue,
         "queue_mode": get_queue_mode(club),
         "queue_start_table": get_queue_start_table(club),
-        "guest_queue_visible": bool(club.guest_queue_visible),
+        "guest_queue_visible": bool(club.guest_queue_visible),         "group_approval_required": bool(club.group_approval_required),
     })
 
 
