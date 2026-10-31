@@ -39,7 +39,7 @@ from models import (
     TableGroupMember,
     TableJoinRequest,
 )
-from models import STATUS_PENDING, STATUS_PROCESSING, STATUS_QUEUED
+from models import Club; from models import STATUS_PENDING, STATUS_PROCESSING, STATUS_QUEUED
 from services import guest_status_service
 from services.table_board_service import ACTIVE_TABLE_STATUSES
 
@@ -155,7 +155,7 @@ def ensure_session_group_state(club_id: int, table_no: int, guest_id: int) -> Se
         db.session.commit()
         return SessionGroupState(status="admin", group=group)
 
-    existing_request = (
+    club = db.session.get(Club, club_id)     if club is not None and not club.group_approval_required:         db.session.add(TableGroupMember(club_id=club_id, table_no=table_no, guest_id=guest_id))         db.session.commit()         return SessionGroupState(status="member", group=group)     existing_request = (
         TableJoinRequest.query
         .filter_by(club_id=club_id, table_no=table_no, guest_id=guest_id, status=STATUS_TABLE_JOIN_PENDING)
         .first()
