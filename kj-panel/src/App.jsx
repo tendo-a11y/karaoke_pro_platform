@@ -1602,7 +1602,7 @@ function GuestQueueToggle({ token, clubId }) {
   );
 }
 
-function GeneralChatToggle({ token }) {
+function GroupApprovalToggle({ token, clubId }) {   const [enabled, setEnabled] = useState(null);   const [busy, setBusy] = useState(false);   const [error, setError] = useState(null);    useEffect(() => {     api.getTableSettings(token, clubId)       .then((data) => setEnabled(data.group_approval_required === true))       .catch((err) => setError(err instanceof ApiError ? err.message : String(err)));   }, [token, clubId]);    async function toggle() {     setBusy(true);     setError(null);     try {       const data = await api.updateTableSettings(token, clubId, { group_approval_required: !enabled });       setEnabled(data.group_approval_required === true);     } catch (err) {       setError(err instanceof ApiError ? err.message : String(err));     } finally {       setBusy(false);     }   }    return (     <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>       <button type="button" className="btn-link" disabled={busy || enabled == null} onClick={toggle}>         Одобрять присаживание за групповой стол: {enabled == null ? "…" : enabled ? "Вкл" : "Выкл"}       </button>       {error && <span className="banner banner--error">{error}</span>}     </span>   ); }  function GeneralChatToggle({ token }) {
   const [enabled, setEnabled] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -6090,7 +6090,7 @@ export default function App() {
           <section>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
               <h2 style={{ margin: 0 }}>Активная очередь VirtualDJ</h2>
-              <GuestQueueToggle token={token} clubId={me.club_id} />
+              <GuestQueueToggle token={token} clubId={me.club_id} /> <GroupApprovalToggle token={token} clubId={me.club_id} />
             </div>
             <QueueTable queue={queue} token={token} clubId={me.club_id} />
           </section>
