@@ -3596,7 +3596,7 @@ export default function App() {
   // Активная очередь закрывается, если нажали на что-то вне её раздела (запрос 2026-10-28).
   const queueSectionRef = useRef(null);
   // Пока гость не сделал первый заказ, видна только форма "Заказать песню" (запрос 2026-10-28).
-  const showFullUi = guestHasOrdered();
+  const showFullUi = guestHasOrdered(); const limitedView = showFullUi && !meInfo?.has_permanent_profile && readGuestOrderCount() < 3; const unlockNoticeOpen = showFullUi && !meInfo?.has_permanent_profile && readGuestOrderCount() >= 3 && !isUnlockNoticeSeen();
   useEffect(() => {
     if (!queueOpen) return undefined;
     function onOutside(e) {
@@ -4417,13 +4417,13 @@ export default function App() {
       
       {showFullUi && (
       <header className="app-header">
-        <h1>🎤 {meInfo.club_name || "Karaoke"}</h1><span className="app-header__table" style={{ display: guestHasOrdered() ? undefined : "none" }}>
+        {!limitedView && <h1>🎤 {meInfo.club_name || "Karaoke"}</h1>}<span className="app-header__table" style={{ display: guestHasOrdered() ? undefined : "none" }}>
           {meInfo.table_no != null ? `Стол ${tableLabel(meInfo.table_no)}` : "Без стола"}
         </span>
         {activated && (
           <button
             type="button"
-            className="btn-link profile-top-btn"
+            className="btn-link profile-top-btn" style={limitedView ? { display: "none" } : undefined}
             aria-expanded={profileTopOpen}
             onClick={() => setProfileTopOpen((v) => !v)}
           >
@@ -4432,13 +4432,13 @@ export default function App() {
           </button>
         )}
         <LanguageButton />
-        <button type="button" className="btn-link" style={{ display: guestHasOrdered() ? undefined : "none" }} onClick={() => setView("messages")}>
+        <button type="button" className="btn-link" style={{ display: guestHasOrdered() && !limitedView ? undefined : "none" }} onClick={() => setView("messages")}>
           ✏️
         </button>
       </header>
       )}
 
-      {showFullUi && activated && profileTopOpen && (
+      {showFullUi && !limitedView && activated && profileTopOpen && (
         <>
           <ProfileNamePanel token={session.token} meInfo={meInfo} onNameChanged={refreshMe} />
           {/* Групповой стол внутри профиля (запрос 2026-10-28). */}
@@ -4453,8 +4453,8 @@ export default function App() {
         </>
       )}
 
-      {showFullUi && <AddToHomeScreenHint />}<OfflineBanner />
-      {submitOk != null && (
+      {showFullUi && !limitedView && <AddToHomeScreenHint />}<OfflineBanner />
+      {unlockNoticeOpen && submitOk == null && (<section role="alert" style={ORDER_OK_BOX}><p style={{ margin: 0 }}>Спасибо, что поёте с нами! Теперь вам открыт полный вид.</p><button type="button" style={ORDER_OK_BTN} onClick={() => { markUnlockNoticeSeen(); refreshMe(); }}>Заказать</button></section>)}      {submitOk != null && (
         <>
           <div style={ORDER_OK_OVERLAY} />
           <section role="alert" style={ORDER_OK_BOX}>
@@ -4636,7 +4636,7 @@ export default function App() {
             </div>
           </div>
         ) : null}
-        {showFullUi && orderExtra === "fav" ? (
+        {showFullUi && !limitedView && orderExtra === "fav" ? (
           <FavoritesPanel
             token={session.token}
             services={services}
@@ -4646,7 +4646,7 @@ export default function App() {
             embedded
           />
         ) : null}
-        {showFullUi && (orderExtra === "orders" || orderExtra === "history") ? (
+        {showFullUi && !limitedView && (orderExtra === "orders" || orderExtra === "history") ? (
           <div className={`profile-finance pick-scope${reorderPickedId != null ? " orders-block--pick" : ""}`}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}><h2 style={{ margin: 0 }}>{ordersTab === "history" ? "История" : "Мои заказы"}</h2><div style={{ display: "flex", alignItems: "center", gap: 6 }}><button type="button" className="link-btn" onClick={() => setOrdersCollapsed((v) => !v)}>{ordersCollapsed ? "Открыть" : "Закрыть"}</button><button type="button" className="link-btn" aria-label={ordersCollapsed ? "Развернуть" : "Свернуть"} onClick={() => setOrdersCollapsed((v) => !v)}>{ordersCollapsed ? "▲" : "▼"}</button></div></div> 
           {!ordersCollapsed && (<>{ordersTab !== "history" && <GuestPrecheck token={session?.token} />}
@@ -4907,7 +4907,7 @@ export default function App() {
             { key: "orders", label: "Мои заказы" },
             { key: "fav", label: "Избранное" },
             { key: "history", label: "История" },
-          ].filter((b) => !!meInfo.has_permanent_profile || (b.key !== "fav" && b.key !== "history")).map((b) => (
+          ].filter((b) => !limitedView && (!!meInfo.has_permanent_profile || (b.key !== "fav" && b.key !== "history"))).map((b) => (
             <button
               key={b.key}
               type="button"
@@ -5227,8 +5227,8 @@ function guestHasOrdered() {
   }
 }
 
-async function createOrderMarked(...args) {
-  const result = await api.createOrder(...args);
+function readGuestOrderCount() { try { return Number(localStorage.getItem("guest_order_count")) || 0; } catch { return 0; } } function bumpGuestOrderCount() { try { localStorage.setItem("guest_order_count", String(readGuestOrderCount() + 1)); } catch { /* счётчик не растёт */ } } function isUnlockNoticeSeen() { try { return localStorage.getItem("guest_unlock_seen") === "1"; } catch { return false; } } function markUnlockNoticeSeen() { try { localStorage.setItem("guest_unlock_seen", "1"); } catch { /* ignore */ } } async function createOrderMarked(...args) {
+  const result = await api.createOrder(...args); bumpGuestOrderCount();
   try {
     localStorage.setItem("guest_has_ordered", "1");
   } catch {
