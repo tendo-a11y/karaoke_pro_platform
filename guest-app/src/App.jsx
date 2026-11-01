@@ -2716,7 +2716,7 @@ function ScreenshotOrderPanel({ token, services, autoFocus, onFocused }) {
   const sectionRef = useRef(null);
   // Два понятных варианта вместо списка категорий (запрос 2026-11): петь караоке — 35 лей, слушать музыку — 100 лей.
   const karaokeSvc = services.find((c) => c.name === "KARAOKE" || c.description === "Обычное караоке") || null;
-  const listenSvc = services.find((c) => (c.name || "").trim().toUpperCase() === "CRAZY") || null;
+  const listenSvc = services.find((c) => c.link_default) || null;
 
   useEffect(() => {
     if (autoFocus && sectionRef.current) {
