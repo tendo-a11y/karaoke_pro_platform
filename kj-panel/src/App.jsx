@@ -197,9 +197,8 @@ function QueueTable({ queue, token, clubId }) {
       } else {
         left = firstRow.getBoundingClientRect().right - d.left - 40;
       }
-      const anchor = word || firstRow;
-      const ar = anchor.getBoundingClientRect();
-      setNewHelpPos({ left, top: ar.top + ar.height / 2 - d.top });
+      const ar = (word || firstRow).getBoundingClientRect();
+      setNewHelpPos({ left, top: ar.top - d.top - 26 });
     }
     place();
     window.addEventListener("resize", place);
@@ -417,7 +416,7 @@ function QueueTable({ queue, token, clubId }) {
           type="button"
           className="queue-new-help__btn"
           title="Что такое «Новинка»?"
-          style={{ position: "static", transform: "none", display: "block", marginLeft: "auto", marginBottom: 4 }}
+          style={{ left: newHelpPos.left, top: newHelpPos.top, transform: "translateX(-50%)", border: "1px solid currentColor", borderRadius: 6, padding: "0 5px", background: "transparent" }}
           onClick={() => setNewSongHelpOpen(true)}
         >
           ❓
