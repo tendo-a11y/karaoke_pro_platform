@@ -2005,8 +2005,10 @@ function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSu
           </form>
           {mode === "link" && onKaraokeChange ? (
             <label style={{ display: "flex", alignItems: "center", gap: 8, margin: "6px 0" }}>
-              {karaokeBlink && fingerVisible && <span aria-hidden="true" style={{ display: "inline-block", fontSize: 26, lineHeight: 1, transform: "rotate(30deg)" }}>👆</span>}
-              <input type="checkbox" checked={karaokeChecked} onChange={(e) => onKaraokeChange(e.target.checked)} />
+              <span style={{ position: "relative", display: "inline-block" }}>
+                <input type="checkbox" checked={karaokeChecked} onChange={(e) => onKaraokeChange(e.target.checked)} />
+                {karaokeBlink && fingerVisible && <span aria-hidden="true" style={{ position: "absolute", left: -10, top: "100%", fontSize: 26, lineHeight: 1, transform: "rotate(30deg)", pointerEvents: "none" }}>👆</span>}
+              </span>
               Отметьте, если хотите караоке вариант
             </label>
           ) : null}
