@@ -191,14 +191,16 @@ function QueueTable({ queue, token, clubId }) {
       const d = dz.getBoundingClientRect();
       const h = heading.getBoundingClientRect();
       let left;
+      let width;
       if (word) {
         const w = word.getBoundingClientRect();
-        left = w.left + w.width / 2 - d.left;
+        left = w.left - d.left;
+        width = w.width;
       } else {
         left = firstRow.getBoundingClientRect().right - d.left - 40;
+        width = 36;
       }
-      const ar = (word || firstRow).getBoundingClientRect();
-      setNewHelpPos({ left, top: ar.top - d.top - 26 });
+      setNewHelpPos({ left, width });
     }
     place();
     window.addEventListener("resize", place);
@@ -411,17 +413,19 @@ function QueueTable({ queue, token, clubId }) {
 
   return (
     <div className="queue-dropzone" ref={dropzoneRef}>
-      {newHelpPos && (
-        <button
-          type="button"
-          className="queue-new-help__btn"
-          title="Что такое «Новинка»?"
-          style={{ left: newHelpPos.left, top: newHelpPos.top, transform: "translateX(-50%)", border: "1px solid currentColor", borderRadius: 6, padding: "0 5px", background: "transparent" }}
-          onClick={() => setNewSongHelpOpen(true)}
-        >
-          ❓
-        </button>
-      )}
+      <div style={{ position: "relative", height: 26, marginBottom: 6 }}>
+        {newHelpPos && (
+          <button
+            type="button"
+            className="queue-new-help__btn"
+            title="Что такое «Новинка»?"
+            style={{ left: newHelpPos.left, top: 2, width: newHelpPos.width, height: 22, transform: "none", border: "1px solid currentColor", borderRadius: 6, padding: 0, background: "transparent", textAlign: "center" }}
+            onClick={() => setNewSongHelpOpen(true)}
+          >
+            ❓
+          </button>
+        )}
+      </div>
       {newSongHelpOpen && (
         <div className="service-card-overlay" onClick={() => setNewSongHelpOpen(false)}>
           <div className="service-card" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
