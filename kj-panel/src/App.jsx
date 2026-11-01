@@ -197,7 +197,9 @@ function QueueTable({ queue, token, clubId }) {
       } else {
         left = firstRow.getBoundingClientRect().right - d.left - 40;
       }
-      setNewHelpPos({ left, top: h.top + h.height / 2 - d.top });
+      const anchor = word || firstRow;
+      const ar = anchor.getBoundingClientRect();
+      setNewHelpPos({ left, top: ar.top + ar.height / 2 - d.top });
     }
     place();
     window.addEventListener("resize", place);
@@ -6091,8 +6093,9 @@ export default function App() {
           <section>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
               <h2 style={{ margin: 0 }}>Активная очередь VirtualDJ</h2>
-              <GuestQueueToggle token={token} clubId={me.club_id} /> <GroupApprovalToggle token={token} clubId={me.club_id} />
             </div>
+            <div style={{ marginTop: 6 }}><GuestQueueToggle token={token} clubId={me.club_id} /></div>
+            <div style={{ marginTop: 6 }}><GroupApprovalToggle token={token} clubId={me.club_id} /></div>
             <QueueTable queue={queue} token={token} clubId={me.club_id} />
           </section>
         </main>
