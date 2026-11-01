@@ -2717,6 +2717,33 @@ function ScreenshotOrderPanel({ token, services, autoFocus, onFocused }) {
   // Два понятных варианта вместо списка категорий (запрос 2026-11): петь караоке — 35 лей, слушать музыку — 100 лей.
   const karaokeSvc = services.find((c) => c.name === "KARAOKE" || c.description === "Обычное караоке") || null;
   const listenSvc = services.find((c) => c.link_default) || null;
+  // После выбора скриншота палец 👆 по очереди показывает на кнопки (каждые 2,5 сек); нажатие на кнопку и есть выбор.
+  const karaokeBtnRef = useRef(null);
+  const listenBtnRef = useRef(null);
+  const [pointIdx, setPointIdx] = useState(0);
+  const [pointBox, setPointBox] = useState(null);
+  const pointing = !!pendingImage && !serviceId && !busy;
+  useEffect(() => {
+    if (!pointing) return undefined;
+    const t = setInterval(() => setPointIdx((i) => (i + 1) % 2), 2500);
+    return () => clearInterval(t);
+  }, [pointing]);
+  useEffect(() => {
+    if (!pointing) { setPointBox(null); return undefined; }
+    const place = () => {
+      const el = pointIdx === 0 ? karaokeBtnRef.current : listenBtnRef.current;
+      if (!el) { setPointBox(null); return; }
+      const r = el.getBoundingClientRect();
+      setPointBox({ left: r.left + 10, top: r.bottom - 6 });
+    };
+    place();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [pointing, pointIdx]);
 
   useEffect(() => {
     if (autoFocus && sectionRef.current) {
@@ -2827,16 +2854,19 @@ function ScreenshotOrderPanel({ token, services, autoFocus, onFocused }) {
       </label>
       <div className="finder-modes" role="group" aria-label="Что нужно">
         {karaokeSvc && (
-          <button type="button" className={`link-btn${serviceId === String(karaokeSvc.id) ? " finder-modes__active" : ""}`} onClick={() => setServiceId(String(karaokeSvc.id))}>
+          <button ref={karaokeBtnRef} type="button" className={`link-btn${serviceId === String(karaokeSvc.id) ? " finder-modes__active" : ""}`} onClick={() => setServiceId(String(karaokeSvc.id))}>
             🎤 Петь караоке — {karaokeSvc.price} лей
           </button>
         )}
         {listenSvc && (
-          <button type="button" className={`link-btn${serviceId === String(listenSvc.id) ? " finder-modes__active" : ""}`} onClick={() => setServiceId(String(listenSvc.id))}>
+          <button ref={listenBtnRef} type="button" className={`link-btn${serviceId === String(listenSvc.id) ? " finder-modes__active" : ""}`} onClick={() => setServiceId(String(listenSvc.id))}>
             🎧 Слушать музыку — {listenSvc.price} лей
           </button>
         )}
       </div>
+      {pointing && pointBox ? (
+        <div className="guide-finger" style={{ left: pointBox.left, top: pointBox.top }} aria-hidden="true">👆</div>
+      ) : null}
       <input
         type="text"
         value={comment}
