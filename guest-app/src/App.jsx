@@ -1744,6 +1744,7 @@ function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSu
   // "Не эта" под найденной песней: подсказываем другие способы — моргают "Ссылка" и "Скриншот".
   const [suggestOther, setSuggestOther] = useState(false);
   const [karaokeBlink, setKaraokeBlink] = useState(false);
+  const [fingerVisible, setFingerVisible] = useState(false);
   // Неудачный поиск — пусть ещё моргает поле "Название песни" (запрос пользователя 2026-10).
   useEffect(() => {
     if (onSuggestOther) onSuggestOther(suggestOther);
@@ -1804,7 +1805,11 @@ function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSu
       if (data && data.length > 0) {
         setText("");
         setKaraokeBlink(true);
-        await new Promise((r) => setTimeout(r, 5000));
+        for (let i = 0; i < 10; i++) {
+          setFingerVisible(i % 2 === 0);
+          await new Promise((r) => setTimeout(r, 500));
+        }
+        setFingerVisible(false);
         setKaraokeBlink(false);
         onPick({ ...data[0], link: url });
       } else {
@@ -2000,7 +2005,7 @@ function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSu
           </form>
           {mode === "link" && onKaraokeChange ? (
             <label style={{ display: "flex", alignItems: "center", gap: 8, margin: "6px 0" }}>
-              {karaokeBlink && <span aria-hidden="true" style={{ fontSize: 26, lineHeight: 1 }}>👉</span>}
+              {karaokeBlink && fingerVisible && <span aria-hidden="true" style={{ display: "inline-block", fontSize: 26, lineHeight: 1, transform: "rotate(30deg)" }}>👆</span>}
               <input type="checkbox" checked={karaokeChecked} onChange={(e) => onKaraokeChange(e.target.checked)} />
               Отметьте, если хотите караоке вариант
             </label>
