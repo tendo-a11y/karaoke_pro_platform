@@ -1745,6 +1745,8 @@ function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSu
   const [suggestOther, setSuggestOther] = useState(false);
   const [karaokeBlink, setKaraokeBlink] = useState(false);
   const [fingerVisible, setFingerVisible] = useState(false);
+  const [karaokeFinger, setKaraokeFinger] = useState(null);
+  const karaokeInputRef = useRef(null);
   // Неудачный поиск — пусть ещё моргает поле "Название песни" (запрос пользователя 2026-10).
   useEffect(() => {
     if (onSuggestOther) onSuggestOther(suggestOther);
@@ -1805,6 +1807,8 @@ function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSu
       if (data && data.length > 0) {
         setText("");
         setKaraokeBlink(true);
+        const kr = karaokeInputRef.current ? karaokeInputRef.current.getBoundingClientRect() : null;
+        if (kr) setKaraokeFinger({ left: kr.left + 10, top: kr.bottom - 6 });
         for (let i = 0; i < 10; i++) {
           setFingerVisible(i % 2 === 0);
           await new Promise((r) => setTimeout(r, 500));
@@ -2005,12 +2009,12 @@ function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSu
           </form>
           {mode === "link" && onKaraokeChange ? (
             <label style={{ display: "flex", alignItems: "center", gap: 8, margin: "6px 0" }}>
-              <span style={{ position: "relative", display: "inline-block" }}>
-                <input type="checkbox" checked={karaokeChecked} onChange={(e) => onKaraokeChange(e.target.checked)} />
-                {karaokeBlink && fingerVisible && <span aria-hidden="true" style={{ position: "absolute", left: -10, top: "100%", fontSize: 26, lineHeight: 1, transform: "rotate(30deg)", pointerEvents: "none" }}>👆</span>}
-              </span>
+              <input ref={karaokeInputRef} type="checkbox" checked={karaokeChecked} onChange={(e) => onKaraokeChange(e.target.checked)} />
               Отметьте, если хотите караоке вариант
             </label>
+          ) : null}
+          {karaokeBlink && fingerVisible && karaokeFinger ? (
+            <div className="guide-finger" style={{ left: karaokeFinger.left, top: karaokeFinger.top }} aria-hidden="true">👆</div>
           ) : null}
           {error && <div className="banner banner--error">{error}</div>}
           {searched && !searching && results.length === 0 && (
