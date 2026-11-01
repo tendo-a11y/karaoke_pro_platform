@@ -512,6 +512,28 @@ function ServiceSelect({ services, value, onChange, disabled, highlight = false,
   // исполнителю"; "choose" — экран выбора, "link" — поле для ссылки.
   const [linkMode, setLinkMode] = useState("choose");
   const linkService = services.find((s) => String(s.id) === String(linkId));
+  // Палец 👆 у поля «Вставьте ссылку на песню с YouTube» — пока поле пустое (как у остальных полей).
+  const linkFieldRef = useRef(null);
+  const [linkFingerBox, setLinkFingerBox] = useState(null);
+  const linkFingerOn = !!linkService && linkMode === "link" && !linkText.trim() && open;
+  useEffect(() => {
+    if (!linkFingerOn) { setLinkFingerBox(null); return undefined; }
+    const place = () => {
+      const el = linkFieldRef.current;
+      if (!el) { setLinkFingerBox(null); return; }
+      const r = el.getBoundingClientRect();
+      setLinkFingerBox({ left: r.left + 10, top: r.bottom - 6 });
+    };
+    const t = setTimeout(place, 300);
+    place();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [linkFingerOn]);
 
   function choose(service) {
     if (isCrazy(service)) {
@@ -655,6 +677,7 @@ function ServiceSelect({ services, value, onChange, disabled, highlight = false,
             <form className="service-picker__linkbox" onSubmit={submitLink}>
               <div className="service-picker__linkhint">{linkService.name}: вставьте ссылку на песню с YouTube</div>
               <input
+                ref={linkFieldRef}
                 type="url"
                 className="service-picker__linkinput"
                 placeholder="Вставьте ссылку на песню с YouTube"
@@ -671,6 +694,9 @@ function ServiceSelect({ services, value, onChange, disabled, highlight = false,
                 autoFocus
               />
               {linkError ? <div className="service-picker__linkerror">{linkError}</div> : null}
+              {linkFingerOn && linkFingerBox ? (
+                <div className="guide-finger" style={{ left: linkFingerBox.left, top: linkFingerBox.top }} aria-hidden="true">👆</div>
+              ) : null}
               <div className="service-picker__linkbuttons">
                 <button type="button" className="service-picker__linkback" onClick={() => { setLinkMode("choose"); setLinkError(null); }}>Назад</button>
               </div>
