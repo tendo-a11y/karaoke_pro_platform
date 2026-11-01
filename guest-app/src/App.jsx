@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { ApiError, GOOGLE_CLIENT_ID, api, loadStoredSession, storeSession } from "./api";
 import "./App.css";
 import { LANG, LANGS, setLang } from "./i18n.js";
@@ -696,8 +697,9 @@ function ServiceSelect({ services, value, onChange, disabled, highlight = false,
                 autoFocus
               />
               {linkError ? <div className="service-picker__linkerror">{linkError}</div> : null}
-              {linkFingerOn && linkFingerBox ? (
-                <div className="guide-finger" style={{ left: linkFingerBox.left, top: linkFingerBox.top }} aria-hidden="true">👆</div>
+              {linkFingerOn && linkFingerBox ? createPortal(
+                <div className="guide-finger" style={{ left: linkFingerBox.left, top: linkFingerBox.top }} aria-hidden="true">👆</div>,
+                document.body
               ) : null}
               <div className="service-picker__linkbuttons">
                 <button type="button" className="service-picker__linkback" onClick={() => { setLinkMode("choose"); setLinkError(null); }}>Назад</button>
