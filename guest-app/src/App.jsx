@@ -3630,7 +3630,7 @@ export default function App() {
   }, [guideRunning, guideStep]);
   useEffect(() => {
     // Пока гость пишет в наименование, таймер сбрасывается; после паузы — исполнитель.
-    if (!guideRunning || guideStep !== "name") return;
+    if (!guideRunning || guideStep !== "name" || !songTitle.trim()) return;
     const t = setTimeout(() => setGuideStep("artist"), 2000);
     return () => clearTimeout(t);
   }, [guideRunning, guideStep, songTitle]);
