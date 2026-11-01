@@ -420,7 +420,7 @@ function QueueTable({ queue, token, clubId }) {
             type="button"
             className="queue-new-help__btn"
             title="Что такое «Новинка»?"
-            style={{ left: newHelpPos.left, top: 2, width: newHelpPos.width, height: 22, transform: "none", border: "1px solid currentColor", borderRadius: 6, padding: 0, background: "transparent", textAlign: "center" }}
+            style={{ left: newHelpPos.left, top: 2, width: newHelpPos.width, height: 22, transform: "none", border: "1px solid #f5a623", borderRadius: 6, padding: 0, background: "transparent", color: "#f5a623", textAlign: "center" }}
             onClick={() => setNewSongHelpOpen(true)}
           >
             ❓
