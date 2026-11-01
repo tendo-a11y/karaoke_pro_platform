@@ -1740,7 +1740,7 @@ function useTypingPlaceholder(phrases, enabled) {
   return hint;
 }
 
-function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSuggestOther, onSearchStart, onAiStatus, onConfirmChange, active = false, showProfileTabs = true, showExtraRow = true, initialMode = "link" }) {
+function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSuggestOther, onSearchStart, onAiStatus, onConfirmChange, active = false, showProfileTabs = true, showExtraRow = true, initialMode = "link", karaokeChecked = false, onKaraokeChange = null }) {
   // "Не эта" под найденной песней: подсказываем другие способы — моргают "Ссылка" и "Скриншот".
   const [suggestOther, setSuggestOther] = useState(false);
   // Неудачный поиск — пусть ещё моргает поле "Название песни" (запрос пользователя 2026-10).
@@ -1980,6 +1980,12 @@ function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSu
         </div>
       ) : (
         <>
+          {mode === "link" && onKaraokeChange ? (
+            <label style={{ display: "flex", alignItems: "center", gap: 8, margin: "6px 0" }}>
+              <input type="checkbox" checked={karaokeChecked} onChange={(e) => onKaraokeChange(e.target.checked)} />
+              Отметьте, если хотите караоке вариант
+            </label>
+          ) : null}
           <form className="order-form" onSubmit={handleSearch}>
             <input
               type="text"
@@ -4517,6 +4523,8 @@ export default function App() {
         <AiSearch
           key={`${searchKey}-${canOrder ? "ok" : "wait"}`}
           initialMode={finderInit}
+          karaokeChecked={songKaraoke}
+          onKaraokeChange={setSongKaraoke}
           token={session.token}
           onConfirmChange={setSongConfirming}
           active={aiSearchStarted}
@@ -4765,12 +4773,6 @@ export default function App() {
                 required
                 className={guideRunning ? (guideStep === "artist" && !artist.trim() ? "step-blink" : undefined) : (songTitle.trim() && !artist.trim() ? "step-blink" : undefined)}
               />
-              {songUrl ? (
-                <label style={{ display: "flex", alignItems: "center", gap: 8, margin: "6px 0" }}>
-                  <input type="checkbox" checked={songKaraoke} onChange={(e) => setSongKaraoke(e.target.checked)} />
-                  Караоке
-                </label>
-              ) : null}
               {!CATEGORIES_HIDDEN && services.length > 0 && (
                 // "Без тарифа" убран из списка (запрос пользователя
                 // 2026-09-14 — тариф в клубе есть всегда). Значение всегда
