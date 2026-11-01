@@ -4989,6 +4989,7 @@ function OrdersBoardSlot({ slot, categories, busy, onAccept, onReject, onComplet
         )}
         <div className="table-slot__song">{slot.song_title}</div>
         {slot.artist && <div className="table-slot__artist">{slot.artist}</div>}
+        {slot.is_karaoke ? <div className="tone-badge">Караоке</div> : null}
         {slot.tone ? (
           <div className="tone-badge">🎚 Тон {slot.tone > 0 ? `+${slot.tone}` : slot.tone}</div>
         ) : null}
