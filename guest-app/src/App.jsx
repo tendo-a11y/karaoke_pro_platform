@@ -1980,12 +1980,6 @@ function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSu
         </div>
       ) : (
         <>
-          {mode === "link" && onKaraokeChange ? (
-            <label style={{ display: "flex", alignItems: "center", gap: 8, margin: "6px 0" }}>
-              <input type="checkbox" checked={karaokeChecked} onChange={(e) => onKaraokeChange(e.target.checked)} />
-              Отметьте, если хотите караоке вариант
-            </label>
-          ) : null}
           <form className="order-form" onSubmit={handleSearch}>
             <input
               type="text"
@@ -2000,6 +1994,13 @@ function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSu
             </button>
             )}
           </form>
+          {mode === "link" && onKaraokeChange ? (
+            <label style={{ display: "flex", alignItems: "center", gap: 8, margin: "6px 0" }}>
+              <input type="checkbox" checked={karaokeChecked} onChange={(e) => onKaraokeChange(e.target.checked)} />
+              Отметьте, если хотите караоке вариант
+            </label>
+          ) : null}
+          {error && <div className="banner banner--error">{error}</div>}          </form>
           {error && <div className="banner banner--error">{error}</div>}
           {searched && !searching && results.length === 0 && (
             <p className="empty-hint">{emptyHint}</p>
