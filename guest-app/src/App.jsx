@@ -2867,13 +2867,6 @@ function ScreenshotOrderPanel({ token, services, autoFocus, onFocused }) {
       {pointing && pointBox ? (
         <div className="guide-finger" style={{ left: pointBox.left, top: pointBox.top }} aria-hidden="true">👆</div>
       ) : null}
-      <input
-        type="text"
-        value={comment}
-        onChange={(e) => setComment(e.target.value)}
-        placeholder="Комментарий (необязательно)"
-        maxLength={300}
-      />
       <button type="button" disabled={busy || !pendingImage || !serviceId} onClick={handleSend}>
         Отправить ведущему
       </button>
