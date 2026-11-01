@@ -3610,6 +3610,7 @@ export default function App() {
   const [songConfirming, setSongConfirming] = useState(false);
   // Ссылка, по которой гость нашёл песню ("🔗 Ссылка") — уходит с заказом.
   const [songUrl, setSongUrl] = useState(null);
+  const [songKaraoke, setSongKaraoke] = useState(false);
   const nameTypingHint = useTypingPlaceholder(SIMPLE_NAME_PHRASES, !songTitle);
   const artistTypingHint = useTypingPlaceholder(SIMPLE_ARTIST_PHRASES, !artist);
   // Палец 👆 ведёт гостя при первом заказе (запрос 2026-10-28, уточнено):
@@ -4000,10 +4001,12 @@ export default function App() {
         sid ? Number(sid) : null,
         toneOn && tone != null ? tone : null,
         songUrl,
+        songUrl ? songKaraoke : false,
       );
       setSongTitle("");
       setArtist("");
       setSongUrl(null);
+      setSongKaraoke(false);
       setAiSearchStarted(false);
       setFinderInit("link");
       setSearchKey((k) => k + 1);
@@ -4762,6 +4765,12 @@ export default function App() {
                 required
                 className={guideRunning ? (guideStep === "artist" && !artist.trim() ? "step-blink" : undefined) : (songTitle.trim() && !artist.trim() ? "step-blink" : undefined)}
               />
+              {songUrl ? (
+                <label style={{ display: "flex", alignItems: "center", gap: 8, margin: "6px 0" }}>
+                  <input type="checkbox" checked={songKaraoke} onChange={(e) => setSongKaraoke(e.target.checked)} />
+                  Караоке
+                </label>
+              ) : null}
               {!CATEGORIES_HIDDEN && services.length > 0 && (
                 // "Без тарифа" убран из списка (запрос пользователя
                 // 2026-09-14 — тариф в клубе есть всегда). Значение всегда
