@@ -518,21 +518,23 @@ function ServiceSelect({ services, value, onChange, disabled, highlight = false,
   const linkFingerOn = !!linkService && linkMode === "link" && !linkText.trim() && open;
   useEffect(() => {
     if (!linkFingerOn) { setLinkFingerBox(null); return undefined; }
-    const place = () => {
+    // Следим за полем каждый кадр: меню открывается с анимацией и сдвигается, когда открывается клавиатура.
+    let raf = 0;
+    let lastKey = "";
+    const tick = () => {
       const el = linkFieldRef.current;
-      if (!el) { setLinkFingerBox(null); return; }
-      const r = el.getBoundingClientRect();
-      setLinkFingerBox({ left: r.left + 10, top: r.bottom - 6 });
+      if (el) {
+        const r = el.getBoundingClientRect();
+        const key = `${r.left}|${r.bottom}`;
+        if (key !== lastKey) {
+          lastKey = key;
+          setLinkFingerBox({ left: r.left + 10, top: r.bottom - 6 });
+        }
+      }
+      raf = requestAnimationFrame(tick);
     };
-    const t = setTimeout(place, 300);
-    place();
-    window.addEventListener("resize", place);
-    window.addEventListener("scroll", place, true);
-    return () => {
-      clearTimeout(t);
-      window.removeEventListener("resize", place);
-      window.removeEventListener("scroll", place, true);
-    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
   }, [linkFingerOn]);
 
   function choose(service) {
