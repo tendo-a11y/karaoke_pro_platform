@@ -417,7 +417,7 @@ function QueueTable({ queue, token, clubId }) {
           type="button"
           className="queue-new-help__btn"
           title="Что такое «Новинка»?"
-          style={{ left: newHelpPos.left, top: newHelpPos.top }}
+          style={{ position: "static", display: "block", marginLeft: "auto", marginBottom: 4 }}
           onClick={() => setNewSongHelpOpen(true)}
         >
           ❓
