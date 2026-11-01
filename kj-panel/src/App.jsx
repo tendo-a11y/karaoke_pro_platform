@@ -6094,6 +6094,8 @@ export default function App() {
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
               <h2 style={{ margin: 0 }}>Активная очередь VirtualDJ</h2>
               <div style={{ border: "1px solid #ccc", borderRadius: 8, padding: "8px 12px", display: "flex", flexDirection: "column", gap: 6 }}>
+                {/* Ежедневные настройки клуба. Постоянные — в «Настройка клуба». */}
+                <div style={{ fontWeight: 600 }}>Ежедневные настройки клуба</div>
                 <GuestQueueToggle token={token} clubId={me.club_id} />
                 <GroupApprovalToggle token={token} clubId={me.club_id} />
               </div>
