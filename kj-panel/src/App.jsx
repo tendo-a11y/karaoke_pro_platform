@@ -190,14 +190,15 @@ function QueueTable({ queue, token, clubId }) {
       }
       const d = dz.getBoundingClientRect();
       const h = heading.getBoundingClientRect();
+      const sr = dz.firstElementChild ? dz.firstElementChild.getBoundingClientRect() : d;
       let left;
       let width;
       if (word) {
         const w = word.getBoundingClientRect();
-        left = w.left - d.left;
+        left = w.left - sr.left;
         width = w.width;
       } else {
-        left = firstRow.getBoundingClientRect().right - d.left - 40;
+        left = firstRow.getBoundingClientRect().right - sr.left - 40;
         width = 36;
       }
       setNewHelpPos({ left, width });
