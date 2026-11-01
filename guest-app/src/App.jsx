@@ -1861,7 +1861,7 @@ function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSu
         setKaraokeBlink(true);
         const kr = karaokeInputRef.current ? karaokeInputRef.current.getBoundingClientRect() : null;
         if (kr) setKaraokeFinger({ left: kr.left + 10, top: kr.bottom - 6 });
-        for (let i = 0; i < 10; i++) {
+        for (let i = 0; i < 6; i++) {
           setFingerVisible(i % 2 === 0);
           await new Promise((r) => setTimeout(r, 500));
         }
