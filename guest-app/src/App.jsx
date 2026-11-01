@@ -1743,6 +1743,7 @@ function useTypingPlaceholder(phrases, enabled) {
 function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSuggestOther, onSearchStart, onAiStatus, onConfirmChange, active = false, showProfileTabs = true, showExtraRow = true, initialMode = "link", karaokeChecked = false, onKaraokeChange = null }) {
   // "Не эта" под найденной песней: подсказываем другие способы — моргают "Ссылка" и "Скриншот".
   const [suggestOther, setSuggestOther] = useState(false);
+  const [karaokeBlink, setKaraokeBlink] = useState(false);
   // Неудачный поиск — пусть ещё моргает поле "Название песни" (запрос пользователя 2026-10).
   useEffect(() => {
     if (onSuggestOther) onSuggestOther(suggestOther);
@@ -1802,6 +1803,9 @@ function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSu
       const data = await api.aiSearchSongs(token, url);
       if (data && data.length > 0) {
         setText("");
+        setKaraokeBlink(true);
+        await new Promise((r) => setTimeout(r, 3000));
+        setKaraokeBlink(false);
         onPick({ ...data[0], link: url });
       } else {
         setError("По этой ссылке не удалось определить песню — проверьте, что это ссылка на конкретный трек.");
@@ -1995,7 +1999,7 @@ function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSu
             )}
           </form>
           {mode === "link" && onKaraokeChange ? (
-            <label style={{ display: "flex", alignItems: "center", gap: 8, margin: "6px 0" }}>
+            <label className={karaokeBlink ? "step-blink" : undefined} style={{ display: "flex", alignItems: "center", gap: 8, margin: "6px 0" }}>
               <input type="checkbox" checked={karaokeChecked} onChange={(e) => onKaraokeChange(e.target.checked)} />
               Отметьте, если хотите караоке вариант
             </label>
