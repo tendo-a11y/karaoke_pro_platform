@@ -6093,9 +6093,11 @@ export default function App() {
           <section>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
               <h2 style={{ margin: 0 }}>Активная очередь VirtualDJ</h2>
+              <div style={{ border: "1px solid #ccc", borderRadius: 8, padding: "8px 12px", display: "flex", flexDirection: "column", gap: 6 }}>
+                <GuestQueueToggle token={token} clubId={me.club_id} />
+                <GroupApprovalToggle token={token} clubId={me.club_id} />
+              </div>
             </div>
-            <div style={{ marginTop: 6 }}><GuestQueueToggle token={token} clubId={me.club_id} /></div>
-            <div style={{ marginTop: 6 }}><GroupApprovalToggle token={token} clubId={me.club_id} /></div>
             <QueueTable queue={queue} token={token} clubId={me.club_id} />
           </section>
         </main>
