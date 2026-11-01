@@ -4611,6 +4611,7 @@ export default function App() {
             data-guide="simple-search"
             className={`link-btn${searchStyle === "simple" ? " finder-modes__active" : ""}${guideRunning && guideStep === "mode" && !searchStyleTouched ? " search-style-blink" : ""}`}
             onClick={() => setSearchStyle("simple")}
+            style={searchStyle === "smart" ? { display: "none" } : undefined}
           >
             Заказ караоке
           </button>
@@ -5042,7 +5043,7 @@ export default function App() {
 
       )}
       {showFullUi && (
-      <section ref={queueSectionRef} className={`panel${songListsOpen ? " panel--lists-focus" : ""}`}>
+      <section ref={queueSectionRef} className={`panel${songListsOpen ? " panel--lists-focus" : ""}`} style={searchStyle === "smart" ? { display: "none" } : undefined}>
         {turnToast ? (
           <button type="button" className="turn-toast" onClick={() => setTurnToast(null)}>
             {turnToast}
