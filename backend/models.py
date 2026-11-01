@@ -363,6 +363,8 @@ class Order(db.Model):
     # ДОБАВЛЕНО (2026-10-09, запрос пользователя): ссылка YouTube, по которой
     # гость нашёл песню ("🔗 Ссылка"). KJ после "Принять" сразу её открывает.
     song_url = db.Column(db.String(500), nullable=True)
+    # ДОБАВЛЕНО (2026-11): галочка «Караоке» при заказе по ссылке YouTube (по умолчанию выкл).
+    is_karaoke = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
     confirmed_by = db.Column(db.Integer, db.ForeignKey("kj_operators.id"), nullable=True)
 
     # automatic (по VirtualDJ History) | manual (KJ нажал вручную, fallback) — новое ТЗ §14
@@ -415,7 +417,7 @@ class Order(db.Model):
             "priority_slot": self.priority_slot,
             "priority_requested": bool(self.priority_requested),
             "tone": self.tone,
-            "song_url": self.song_url,
+            "song_url": self.song_url, "is_karaoke": bool(self.is_karaoke),
             "completion_source": self.completion_source,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "confirmed_at": self.confirmed_at.isoformat() if self.confirmed_at else None,
