@@ -5109,11 +5109,14 @@ function OrdersBoard({ token, clubId, socket, onOpenGuest, onOpenTable }) {
   const [queueStartTableBusy, setQueueStartTableBusy] = useState(false);
   const [queueStartTableError, setQueueStartTableError] = useState(null);
   const [queueStartTableSaved, setQueueStartTableSaved] = useState(false);
+  const [queueStartTableSet, setQueueStartTableSet] = useState(false);
+  const queueStartRef = useRef(null);
 
   async function loadQueueSettings() {
     try {
       const data = await api.getTableSettings(token, clubId);
       setQueueStartTableDraft(String(data.queue_start_table || 1));
+      setQueueStartTableSet(Boolean(data.queue_start_table));
     } catch {
       // Не критично для этого экрана — просто не покажем поле.
     }
@@ -5139,6 +5142,7 @@ function OrdersBoard({ token, clubId, socket, onOpenGuest, onOpenTable }) {
       const data = await api.updateTableSettings(token, clubId, { queue_start_table: value });
       setQueueStartTableDraft(String(data.queue_start_table || 1));
       setQueueStartTableSaved(true);
+      setQueueStartTableSet(true);
       window.dispatchEvent(new Event("kj-queue-start-saved"));
     } catch (err) {
       setQueueStartTableError(err instanceof ApiError ? err.message : String(err));
@@ -5203,6 +5207,11 @@ function OrdersBoard({ token, clubId, socket, onOpenGuest, onOpenTable }) {
   }, [socket]);
 
   async function handleAccept(orderId) {
+    if (!queueStartTableSet) {
+      setActionError("Сначала укажите стол, с которого начинается очередь");
+      queueStartRef.current?.focus();
+      return;
+    }
     setBusyOrderId(orderId);
     setActionError(null);
     try {
@@ -5347,6 +5356,7 @@ function OrdersBoard({ token, clubId, socket, onOpenGuest, onOpenTable }) {
             <input
               type="number"
               min="1"
+              ref={queueStartRef}
               value={queueStartTableDraft}
               onChange={(e) => {
                 setQueueStartTableDraft(e.target.value);
