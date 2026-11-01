@@ -414,19 +414,7 @@ function QueueTable({ queue, token, clubId }) {
 
   return (
     <div className="queue-dropzone" ref={dropzoneRef}>
-      <div style={{ position: "relative", height: 26, marginBottom: 6 }}>
-        {newHelpPos && (
-          <button
-            type="button"
-            className="queue-new-help__btn"
-            title="Что такое «Новинка»?"
-            style={{ left: newHelpPos.left, top: 2, width: newHelpPos.width, height: 22, transform: "none", border: "1px solid #f5a623", borderRadius: 6, padding: 0, background: "transparent", color: "#f5a623", textAlign: "center" }}
-            onClick={() => setNewSongHelpOpen(true)}
-          >
-            ❓
-          </button>
-        )}
-      </div>
+      <div style={{ height: 26, marginBottom: 6 }} />
       {newSongHelpOpen && (
         <div className="service-card-overlay" onClick={() => setNewSongHelpOpen(false)}>
           <div className="service-card" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
@@ -485,7 +473,11 @@ function QueueTable({ queue, token, clubId }) {
                     className={`queue-row__new-word${
                       idx === queue.findIndex((q) => q.song_title) ? " queue-row__new-word--first" : ""
                     }`}
+                    style={{ position: "relative", display: "inline-block" }}
                   >
+                  {idx === queue.findIndex((q) => q.song_title) && (
+                    <button type="button" className="queue-new-help__btn" title="Что такое «Новинка»?" style={{ position: "absolute", left: 0, right: 0, bottom: "100%", marginBottom: 2, height: 22, width: "100%", transform: "none", top: "auto", border: "1px solid #f5a623", borderRadius: 6, padding: 0, background: "transparent", color: "#f5a623", textAlign: "center", zIndex: 5 }} onClick={() => setNewSongHelpOpen(true)}>❓</button>
+                  )}
                     Новинка
                   </span>
                 </label>
