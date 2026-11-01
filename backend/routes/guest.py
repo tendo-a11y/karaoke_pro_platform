@@ -337,6 +337,7 @@ def create_order():
         song_url = None
     else:
         song_url = song_url.strip()
+    is_karaoke = payload.get("is_karaoke") is True and song_url is not None
 
     active_count = vip_service.count_active_orders(g.club_id, g.guest_id)
     max_active = current_app.config["MAX_ACTIVE_SONGS_PER_GUEST"]
@@ -375,7 +376,7 @@ def create_order():
         artist=artist,
         service_id=service_id,
         tone=tone,
-        song_url=song_url,
+        song_url=song_url, is_karaoke=is_karaoke,
         source="guest",
         channel="webapp",
         **_auto_accept_fields(g.club_id, g.guest_id, guest_type),
