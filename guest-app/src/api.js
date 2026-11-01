@@ -103,9 +103,9 @@ export const api = { getGuestPrecheck: (token) => request("/api/guest/precheck",
   // Вход без Google (2026-10): гость выбирает только стол, без постоянного профиля.
   chooseTableNoLogin: (token, tableNo) =>
     request("/api/guest/profile/table-no-login", { method: "POST", token, body: { table_no: tableNo } }),
-  createOrder: (token, songTitle, artist, serviceId, tone = null, songUrl = null) =>
+  createOrder: (token, songTitle, artist, serviceId, tone = null, songUrl = null, isKaraoke = false) =>
     request("/api/guest/order", {
-      method: "POST", token, body: { song_title: songTitle, artist, service_id: serviceId, tone, song_url: songUrl },
+      method: "POST", token, body: { song_title: songTitle, artist, service_id: serviceId, tone, song_url: songUrl, is_karaoke: isKaraoke },
     }),
   // ИЗМЕНЕНО (2026-09-24, запрос пользователя "правильно разделить на две
   // вкладки история и мои заказы. Мои заказы это то что происходит в рамках
