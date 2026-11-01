@@ -2000,7 +2000,7 @@ function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSu
               Отметьте, если хотите караоке вариант
             </label>
           ) : null}
-          {error && <div className="banner banner--error">{error}</div>}          </form>
+          </form>
           {error && <div className="banner banner--error">{error}</div>}
           {searched && !searching && results.length === 0 && (
             <p className="empty-hint">{emptyHint}</p>
