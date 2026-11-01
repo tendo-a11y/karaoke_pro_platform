@@ -1757,6 +1757,28 @@ function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSu
   const [results, setResults] = useState([]);
   const [searching, setSearching] = useState(false);
   const [searched, setSearched] = useState(false);
+  // Палец 👆 у поля «Вставьте ссылку на песню с YouTube» — пока поле пустое (как у остальных полей).
+  const linkInputRef = useRef(null);
+  const [linkFingerBox, setLinkFingerBox] = useState(null);
+  const linkFingerOn = mode === "link" && !text.trim() && !searching && !karaokeBlink;
+  useEffect(() => {
+    if (!linkFingerOn) { setLinkFingerBox(null); return undefined; }
+    const place = () => {
+      const el = linkInputRef.current;
+      if (!el) { setLinkFingerBox(null); return; }
+      const r = el.getBoundingClientRect();
+      setLinkFingerBox({ left: r.left + 10, top: r.bottom - 6 });
+    };
+    const t = setTimeout(place, 300);
+    place();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [linkFingerOn]);
   const [error, setError] = useState(null);
   const screenshotInputRef = useRef(null);
   // Пока гость подтверждает найденную песню ("Эта? / Не эта"), на экране только она.
@@ -1995,6 +2017,7 @@ function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSu
         <>
           <form className="order-form" onSubmit={handleSearch}>
             <input
+              ref={linkInputRef}
               type="text"
               value={text}
               onChange={(e) => onInputTyped(e.target.value)}
@@ -2007,6 +2030,9 @@ function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSu
             </button>
             )}
           </form>
+          {linkFingerOn && linkFingerBox ? (
+            <div className="guide-finger" style={{ left: linkFingerBox.left, top: linkFingerBox.top }} aria-hidden="true">👆</div>
+          ) : null}
           {mode === "link" && onKaraokeChange ? (
             <label style={{ display: "flex", alignItems: "center", gap: 8, margin: "6px 0" }}>
               <input ref={karaokeInputRef} type="checkbox" checked={karaokeChecked} onChange={(e) => onKaraokeChange(e.target.checked)} />
