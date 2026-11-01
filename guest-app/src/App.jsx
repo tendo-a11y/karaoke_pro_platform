@@ -2714,6 +2714,9 @@ function ScreenshotOrderPanel({ token, services, autoFocus, onFocused }) {
   const [error, setError] = useState(null);
   const [sent, setSent] = useState(false);
   const sectionRef = useRef(null);
+  // Два понятных варианта вместо списка категорий (запрос 2026-11): петь караоке — 35 лей, слушать музыку — 100 лей.
+  const karaokeSvc = services.find((c) => c.name === "KARAOKE" || c.description === "Обычное караоке") || null;
+  const listenSvc = services.find((c) => (c.name || "").trim().toUpperCase() === "CRAZY") || null;
 
   useEffect(() => {
     if (autoFocus && sectionRef.current) {
@@ -2822,9 +2825,18 @@ function ScreenshotOrderPanel({ token, services, autoFocus, onFocused }) {
           }}
         />
       </label>
-      {services.length > 0 && (
-        <ServiceSelect services={services} value={serviceId} onChange={setServiceId} />
-      )}
+      <div className="finder-modes" role="group" aria-label="Что нужно">
+        {karaokeSvc && (
+          <button type="button" className={`link-btn${serviceId === String(karaokeSvc.id) ? " finder-modes__active" : ""}`} onClick={() => setServiceId(String(karaokeSvc.id))}>
+            🎤 Петь караоке — {karaokeSvc.price} лей
+          </button>
+        )}
+        {listenSvc && (
+          <button type="button" className={`link-btn${serviceId === String(listenSvc.id) ? " finder-modes__active" : ""}`} onClick={() => setServiceId(String(listenSvc.id))}>
+            🎧 Слушать музыку — {listenSvc.price} лей
+          </button>
+        )}
+      </div>
       <input
         type="text"
         value={comment}
