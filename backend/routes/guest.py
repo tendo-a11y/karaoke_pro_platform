@@ -179,6 +179,8 @@ def me():
         # Google" (см. POST /profile/link-google) — до входа стола нет и
         # заказ недоступен, независимо от того, каким QR открыто приложение.
         "has_permanent_profile": has_permanent_profile,
+        # Сколько заказов сделал гость (все время): после второго без профиля приложение просит войти через Google.
+        "orders_count": Order.query.filter(Order.club_id == g.club_id, Order.telegram_user_id == g.guest_id).count(),
         # Имя, которое гость сам себе задал (запрос пользователя 2026-09,
         # "самопереименование гостя") — null, пока не задано или пока нет
         # постоянного профиля вообще, см. PUT /profile/name ниже.
