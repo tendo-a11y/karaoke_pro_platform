@@ -3842,6 +3842,8 @@ export default function App() {
   const [showActivation, setShowActivation] = useState(false);
   // Вход через Google: после второго заказа (без постоянного профиля) — плашка «Подробнее» → полное описание.
   const [googleGate, setGoogleGate] = useState(null);
+  // Вход через Google из профиля (открывает тот же экран «стол + Google»).
+  const [profileLogin, setProfileLogin] = useState(false);
   const ordersNeedGoogle = !!meInfo && !meInfo.has_permanent_profile && (meInfo.orders_count ?? 0) >= 2;
   // Категорию без песни и исполнителя не открываем: показываем короткую подсказку (запрос 2026-10-28).
   const [categoryNotice, setCategoryNotice] = useState(null);
@@ -4541,7 +4543,7 @@ export default function App() {
                 </div>
                 <div className="msg-popup__actions">
                   <button type="button" onClick={() => setGoogleGate(null)}>Закрыть</button>
-                  <button type="button" onClick={() => { setGoogleGate(null); setShowActivation(true); }}>Войти через Google</button>
+                  <button type="button" onClick={() => { setGoogleGate(null); setProfileTopOpen(true); setTimeout(() => document.querySelector(".profile-panel")?.scrollIntoView({ behavior: "smooth", block: "start" }), 150); }}>Перейти в профиль</button>
                 </div>
               </>
             )}
@@ -4581,7 +4583,7 @@ export default function App() {
         {activated && (
           <button
             type="button"
-            className="btn-link profile-top-btn" style={limitedView ? { display: "none" } : undefined}
+            className="btn-link profile-top-btn"
             aria-expanded={profileTopOpen}
             onClick={() => setProfileTopOpen((v) => !v)}
           >
@@ -4596,9 +4598,12 @@ export default function App() {
       </header>
       )}
 
-      {showFullUi && !limitedView && activated && profileTopOpen && (
+      {showFullUi && activated && profileTopOpen && (
         <>
-          <ProfileNamePanel token={session.token} meInfo={meInfo} onNameChanged={refreshMe} onGoogleLogin={() => setGoogleGate("long")} />
+          <ProfileNamePanel token={session.token} meInfo={meInfo} onNameChanged={refreshMe} onGoogleLogin={() => setProfileLogin(true)} />
+          {profileLogin && (
+            <ActivationPanel token={session.token} onActivated={handleActivated} onCancel={() => setProfileLogin(false)} />
+          )}
           {/* Групповой стол внутри профиля (запрос 2026-10-28). */}
           <TableGroupPanel
             token={session.token}
