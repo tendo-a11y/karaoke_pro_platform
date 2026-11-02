@@ -1550,6 +1550,43 @@ def send_chat_message():
         if service is None:
             return api_error(400, "VALIDATION_ERROR", "Такой категории нет")
 
+    # Скриншот с выбранной категорией (запрос пользователя 2026-11): сразу создаём заказ
+    # «Скриншот, стол N» с этой категорией и её ценой. Повтор названия не проверяем,
+    # иначе второй скриншот за тот же стол не прошёл бы.
+    screenshot_order = None
+    if image_data_url and service_id is not None:
+        if g.table_no is None:
+            return api_error(409, "TABLE_REQUIRED", "Чтобы заказать песню, сначала выберите стол")
+        if not table_group_service.is_member(g.club_id, g.table_no, g.guest_id):
+            return api_error(
+                403, "TABLE_ACCESS_REQUIRED",
+                "У вас нет доступа к заказам за этим столом — нужно быть одобренным участником группы",
+            )
+        active_count = vip_service.count_active_orders(g.club_id, g.guest_id)
+        max_active = current_app.config["MAX_ACTIVE_SONGS_PER_GUEST"]
+        if active_count >= max_active:
+            return api_error(
+                409, "ACTIVE_SONGS_LIMIT",
+                f"Можно иметь не более {max_active} заказов одновременно — дождитесь, пока сыграет текущий",
+            )
+        detected_guest_type, _vip = _guest_type_and_vip(g.club_id, g.guest_id)
+        screenshot_guest_type = detected_guest_type or "client"
+        balance_check = billing_service.check_vip_balance(g.club_id, g.guest_id, screenshot_guest_type, service)
+        if balance_check.blocked:
+            return api_error(409, "VIP_BALANCE_NEGATIVE", "Пополните баланс, чтобы заказать ещё одну песню")
+        screenshot_order = Order(
+            telegram_user_id=g.guest_id,
+            club_id=g.club_id,
+            table_no=g.table_no,
+            guest_type=screenshot_guest_type,
+            song_title=f"Скриншот, стол {g.table_no}",
+            artist="",
+            service_id=service_id,
+            source="guest",
+            channel="webapp",
+            **_auto_accept_fields(g.club_id, g.guest_id, screenshot_guest_type),
+        )
+        db.session.add(screenshot_order)
     message = ChatMessage(
         club_id=g.club_id,
         telegram_user_id=g.guest_id,
@@ -1563,6 +1600,8 @@ def send_chat_message():
     db.session.commit()
 
     emit_chat_message(message)
+    if screenshot_order is not None:
+        emit_order_created(screenshot_order)
 
     return api_ok(message.to_dict(), status_code=201)
 
