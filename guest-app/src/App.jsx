@@ -2862,12 +2862,14 @@ function ScreenshotOrderPanel({ token, services, autoFocus, onFocused }) {
     }
   }
 
-  async function handleSend() {
-    if (!pendingImage || !serviceId) return;
+  // Выбор варианта («Петь караоке» или «Слушать музыку») сразу отправляет скриншот ведущему.
+  async function handlePick(id) {
+    if (!pendingImage || busy) return;
+    setServiceId(String(id));
     setBusy(true);
     setError(null);
     try {
-      await api.sendChatMessage(token, comment.trim(), pendingImage, Number(serviceId));
+      await api.sendChatMessage(token, "", pendingImage, Number(id));
       setPendingImage(null);
       setComment("");
       setServiceId("");
@@ -2910,12 +2912,12 @@ function ScreenshotOrderPanel({ token, services, autoFocus, onFocused }) {
       </label>
       <div className="finder-modes" role="group" aria-label="Что нужно">
         {karaokeSvc && (
-          <button ref={karaokeBtnRef} type="button" className={`link-btn${serviceId === String(karaokeSvc.id) ? " finder-modes__active" : ""}`} onClick={() => setServiceId(String(karaokeSvc.id))}>
+          <button ref={karaokeBtnRef} type="button" className={`link-btn${serviceId === String(karaokeSvc.id) ? " finder-modes__active" : ""}`} disabled={busy || !pendingImage} onClick={() => handlePick(karaokeSvc.id)}>
             🎤 Петь караоке — {karaokeSvc.price} лей
           </button>
         )}
         {listenSvc && (
-          <button ref={listenBtnRef} type="button" className={`link-btn${serviceId === String(listenSvc.id) ? " finder-modes__active" : ""}`} onClick={() => setServiceId(String(listenSvc.id))}>
+          <button ref={listenBtnRef} type="button" className={`link-btn${serviceId === String(listenSvc.id) ? " finder-modes__active" : ""}`} disabled={busy || !pendingImage} onClick={() => handlePick(listenSvc.id)}>
             🎧 Слушать музыку — {listenSvc.price} лей
           </button>
         )}
@@ -2923,9 +2925,6 @@ function ScreenshotOrderPanel({ token, services, autoFocus, onFocused }) {
       {pointing && pointBox ? (
         <div className="guide-finger" style={{ left: pointBox.left, top: pointBox.top }} aria-hidden="true">👆</div>
       ) : null}
-      <button type="button" disabled={busy || !pendingImage || !serviceId} onClick={handleSend}>
-        Отправить ведущему
-      </button>
     </section>
   );
 }
