@@ -4522,8 +4522,8 @@ export default function App() {
                 <div className="msg-popup__title">Войдите через Google</div>
                 <div className="msg-popup__text">Чтобы заказать больше песен, войдите через Google. Так сохранятся ваши заказы и профиль.</div>
                 <div className="msg-popup__actions">
-                  <button type="button" onClick={() => setGoogleGate(null)}>Закрыть</button>
-                  <button type="button" onClick={() => setGoogleGate("long")}>Подробнее</button>
+                  <button type="button" style={{ background: "#c62828", borderColor: "#c62828", color: "#fff" }} onClick={() => setGoogleGate(null)}>Закрыть</button>
+                  <button type="button" style={{ background: "#2e7d32", borderColor: "#2e7d32", color: "#fff" }} onClick={() => setGoogleGate("long")}>Подробнее</button>
                 </div>
               </>
             ) : (
@@ -4542,8 +4542,8 @@ export default function App() {
                   </ol>
                 </div>
                 <div className="msg-popup__actions">
-                  <button type="button" onClick={() => setGoogleGate(null)}>Закрыть</button>
-                  <button type="button" onClick={() => { setGoogleGate(null); setProfileTopOpen(true); setTimeout(() => document.querySelector(".profile-panel")?.scrollIntoView({ behavior: "smooth", block: "start" }), 150); }}>Перейти в профиль</button>
+                  <button type="button" style={{ background: "#c62828", borderColor: "#c62828", color: "#fff" }} onClick={() => setGoogleGate(null)}>Закрыть</button>
+                  <button type="button" style={{ background: "#2e7d32", borderColor: "#2e7d32", color: "#fff" }} onClick={() => { setGoogleGate(null); setProfileTopOpen(true); setTimeout(() => document.querySelector(".profile-panel")?.scrollIntoView({ behavior: "smooth", block: "start" }), 150); }}>Перейти в профиль</button>
                 </div>
               </>
             )}
