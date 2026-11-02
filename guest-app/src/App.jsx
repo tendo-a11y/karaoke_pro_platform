@@ -3842,9 +3842,11 @@ export default function App() {
   const [showActivation, setShowActivation] = useState(false);
   // Вход через Google: после второго заказа (без постоянного профиля) — плашка «Подробнее» → полное описание.
   const [googleGate, setGoogleGate] = useState(null);
+  const [gateDontShow, setGateDontShow] = useState(false);
   // Вход через Google из профиля (открывает тот же экран «стол + Google»).
   const [profileLogin, setProfileLogin] = useState(false);
-  const ordersNeedGoogle = !!meInfo && !meInfo.has_permanent_profile && (meInfo.orders_count ?? 0) >= 2;
+  // Показываем после двух активных заказов, потом повтор каждые 5 песен; «Больше не показывать» — навсегда.
+  const ordersNeedGoogle = !!meInfo && !meInfo.has_permanent_profile && (meInfo.orders_count ?? 0) >= 2 && !isGoogleGateDismissed() && readGuestOrderCount() >= readGoogleGateNext();
   // Категорию без песни и исполнителя не открываем: показываем короткую подсказку (запрос 2026-10-28).
   const [categoryNotice, setCategoryNotice] = useState(null);
   // Плашка "Сначала выберите наименование песни и исполнителя" (запрос 2026-10-29).
@@ -4226,7 +4228,7 @@ export default function App() {
     // через Google заказ фактически не отправляется — вместо запроса
     // открывается единственный экран активации (см. ActivationPanel и
     // handleActivated выше), который сам довершит именно это действие.
-    if (ordersNeedGoogle) { setGoogleGate("short"); return; }
+    if (ordersNeedGoogle) { scheduleGoogleGate(); setGoogleGate("short"); return; }
     if (!activated) {
       setSubmitError(null);
       setShowActivation(true);
@@ -4521,9 +4523,13 @@ export default function App() {
               <>
                 <div className="msg-popup__title">Войдите через Google</div>
                 <div className="msg-popup__text">Чтобы заказать больше песен, войдите через Google. Так сохранятся ваши заказы и профиль.</div>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, margin: "8px 0" }}>
+                  <input type="checkbox" checked={gateDontShow} onChange={(e) => setGateDontShow(e.target.checked)} />
+                  Больше не показывать
+                </label>
                 <div className="msg-popup__actions">
-                  <button type="button" style={{ background: "#c62828", borderColor: "#c62828", color: "#fff" }} onClick={() => setGoogleGate(null)}>Закрыть</button>
-                  <button type="button" style={{ background: "#2e7d32", borderColor: "#2e7d32", color: "#fff" }} onClick={() => setGoogleGate("long")}>Подробнее</button>
+                  <button type="button" style={{ background: "#c62828", borderColor: "#c62828", color: "#fff" }} onClick={() => { if (gateDontShow) setGoogleGateDismissed(); setGoogleGate(null); }}>Закрыть</button>
+                  <button type="button" style={{ background: "#2e7d32", borderColor: "#2e7d32", color: "#fff" }} onClick={() => { if (gateDontShow) setGoogleGateDismissed(); setGoogleGate("long"); }}>Подробнее</button>
                 </div>
               </>
             ) : (
@@ -4968,7 +4974,7 @@ export default function App() {
                       setTimeout(() => setTitleHint(false), 6000);
                       return;
                     }
-                    if (ordersNeedGoogle) { setGoogleGate("short"); return; }
+                    if (ordersNeedGoogle) { scheduleGoogleGate(); setGoogleGate("short"); return; }
                     if (!activated) {
                       setShowActivation(true);
                       return;
@@ -5394,6 +5400,11 @@ function guestHasOrdered() {
   }
 }
 
+const GOOGLE_GATE_STEP = 5;
+function isGoogleGateDismissed() { try { return localStorage.getItem("google_gate_dismissed") === "1"; } catch { return false; } }
+function setGoogleGateDismissed() { try { localStorage.setItem("google_gate_dismissed", "1"); } catch {} }
+function readGoogleGateNext() { try { return Number(localStorage.getItem("google_gate_next_count")) || 0; } catch { return 0; } }
+function scheduleGoogleGate() { try { localStorage.setItem("google_gate_next_count", String(readGuestOrderCount() + GOOGLE_GATE_STEP)); } catch {} }
 function readGuestOrderCount() { try { return Number(localStorage.getItem("guest_order_count")) || 0; } catch { return 0; } } function bumpGuestOrderCount() { try { localStorage.setItem("guest_order_count", String(readGuestOrderCount() + 1)); } catch { /* счётчик не растёт */ } } function isUnlockNoticeSeen() { try { return localStorage.getItem("guest_unlock_seen") === "1"; } catch { return false; } } function markUnlockNoticeSeen() { try { localStorage.setItem("guest_unlock_seen", "1"); } catch { /* ignore */ } } async function createOrderMarked(...args) {
   const result = await api.createOrder(...args); bumpGuestOrderCount();
   try {
