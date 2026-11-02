@@ -2938,7 +2938,7 @@ function ScreenshotOrderPanel({ token, services, autoFocus, onFocused }) {
 // менять сколько угодно раз — это переименование, а не разовая настройка.
 const MAX_DISPLAY_NAME_LEN = 40;
 
-function ProfileNamePanel({ token, meInfo, onNameChanged }) {
+function ProfileNamePanel({ token, meInfo, onNameChanged, onGoogleLogin }) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(meInfo.display_name || "");
   const [busy, setBusy] = useState(false);
@@ -3128,6 +3128,9 @@ function ProfileNamePanel({ token, meInfo, onNameChanged }) {
   return (
     <section className="panel profile-panel">
       <h2>👤 Ваше имя</h2>
+      {!meInfo.has_permanent_profile && (
+        <button type="button" className="btn-link" onClick={() => onGoogleLogin?.()}>Войти через Google</button>
+      )}
       {error && <div className="banner banner--error">{error}</div>}
       <form className="order-form" onSubmit={handleSave}>
         <input
@@ -3837,6 +3840,9 @@ export default function App() {
   // (см. handleSubmitOrder), закрывается после успешной активации (см.
   // handleActivated) или если гость сам передумал.
   const [showActivation, setShowActivation] = useState(false);
+  // Вход через Google: после второго заказа (без постоянного профиля) — плашка «Подробнее» → полное описание.
+  const [googleGate, setGoogleGate] = useState(null);
+  const ordersNeedGoogle = !!meInfo && !meInfo.has_permanent_profile && (meInfo.orders_count ?? 0) >= 2;
   // Категорию без песни и исполнителя не открываем: показываем короткую подсказку (запрос 2026-10-28).
   const [categoryNotice, setCategoryNotice] = useState(null);
   // Плашка "Сначала выберите наименование песни и исполнителя" (запрос 2026-10-29).
@@ -4218,6 +4224,7 @@ export default function App() {
     // через Google заказ фактически не отправляется — вместо запроса
     // открывается единственный экран активации (см. ActivationPanel и
     // handleActivated выше), который сам довершит именно это действие.
+    if (ordersNeedGoogle) { setGoogleGate("short"); return; }
     if (!activated) {
       setSubmitError(null);
       setShowActivation(true);
@@ -4505,6 +4512,40 @@ export default function App() {
       {guideBox && guideTarget ? (
         <div className="guide-finger" style={{ left: guideBox.left, top: guideBox.top }} aria-hidden="true">👆</div>
       ) : null}
+      {googleGate && (
+        <div className="msg-popup-overlay" role="dialog" aria-modal="true">
+          <div className="msg-popup">
+            {googleGate === "short" ? (
+              <>
+                <div className="msg-popup__title">Войдите через Google</div>
+                <div className="msg-popup__text">Чтобы заказать больше песен, войдите через Google. Так сохранятся ваши заказы и профиль.</div>
+                <div className="msg-popup__actions">
+                  <button type="button" onClick={() => setGoogleGate(null)}>Закрыть</button>
+                  <button type="button" onClick={() => setGoogleGate("long")}>Подробнее</button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="msg-popup__title">Вход через Google</div>
+                <div className="msg-popup__text">
+                  <p>Что даёт вход через Google:</p>
+                  <ol>
+                    <li>Создать список избранных любимых песен.</li>
+                    <li>Сохранять историю заказов и повторить трек из истории.</li>
+                    <li>Доступ к личному профилю и сообщениям.</li>
+                    <li>Доступ к групповому чату.</li>
+                    <li>Возможность стать VIP-клиентом и получить доступ к VIP-функциям.</li>
+                  </ol>
+                </div>
+                <div className="msg-popup__actions">
+                  <button type="button" onClick={() => setGoogleGate(null)}>Закрыть</button>
+                  <button type="button" onClick={() => { setGoogleGate(null); setShowActivation(true); }}>Войти через Google</button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
       {songWarning && (
         <div className="msg-popup-overlay" role="alertdialog" aria-modal="true">
           <div className="msg-popup">
@@ -4555,7 +4596,7 @@ export default function App() {
 
       {showFullUi && !limitedView && activated && profileTopOpen && (
         <>
-          <ProfileNamePanel token={session.token} meInfo={meInfo} onNameChanged={refreshMe} />
+          <ProfileNamePanel token={session.token} meInfo={meInfo} onNameChanged={refreshMe} onGoogleLogin={() => setGoogleGate("long")} />
           {/* Групповой стол внутри профиля (запрос 2026-10-28). */}
           <TableGroupPanel
             token={session.token}
@@ -4920,6 +4961,7 @@ export default function App() {
                       setTimeout(() => setTitleHint(false), 6000);
                       return;
                     }
+                    if (ordersNeedGoogle) { setGoogleGate("short"); return; }
                     if (!activated) {
                       setShowActivation(true);
                       return;
