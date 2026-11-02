@@ -656,9 +656,6 @@ def link_google():
     except GoogleAuthError as exc:
         return api_error(401, "GOOGLE_AUTH_FAILED", exc.message)
 
-    if table_group_service.no_login_admin_locked(g.club_id, effective_table_no, g.guest_id):
-        return api_error(409, "TABLE_LOCKED_BY_ORDERS", table_group_service.TABLE_LOCKED_BY_ORDERS_MESSAGE)
-
     result = guest_account_service.link_google(g.club_id, g.guest_id, identity["sub"], identity.get("email"))
     new_guest_id = result.account.telegram_user_id
 
@@ -746,9 +743,6 @@ def choose_table_without_login():
     club = db.session.get(Club, g.club_id)
     if club is not None and not extra_table_service.is_valid_table(club, table_no):
         return api_error(400, "TABLE_OUT_OF_RANGE", extra_table_service.out_of_range_message(club))
-
-    if table_group_service.no_login_admin_locked(g.club_id, table_no, g.guest_id):
-        return api_error(409, "TABLE_LOCKED_BY_ORDERS", table_group_service.TABLE_LOCKED_BY_ORDERS_MESSAGE)
 
     table_group_state = table_group_service.ensure_session_group_state(g.club_id, table_no, g.guest_id)
     guest_status_service.set_table(g.club_id, g.guest_id, table_no)
