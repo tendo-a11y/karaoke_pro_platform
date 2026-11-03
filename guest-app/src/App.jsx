@@ -4579,8 +4579,8 @@ export default function App() {
           <div className="msg-popup">
             {googleGate === "short" ? (
               <>
-                <div className="msg-popup__title">Войдите через Google</div>
-                <div className="msg-popup__text">Чтобы заказать больше песен, войдите через Google. Так сохранятся ваши заказы и профиль.</div>
+                <div className="msg-popup__title">Спасибо, что поёте с нами!</div>
+                <div className="msg-popup__text">Теперь вам доступны больше функций.</div>
                 <label style={{ display: "flex", alignItems: "center", gap: 8, margin: "8px 0" }}>
                   <input type="checkbox" checked={gateDontShow} onChange={(e) => setGateDontShow(e.target.checked)} />
                   Больше не показывать
@@ -4607,7 +4607,7 @@ export default function App() {
                 </div>
                 <div className="msg-popup__actions">
                   <button type="button" style={{ background: "#c62828", borderColor: "#c62828", color: "#fff" }} onClick={() => setGoogleGate(null)}>Закрыть</button>
-                  <button type="button" style={{ background: "#2e7d32", borderColor: "#2e7d32", color: "#fff" }} onClick={() => { setGoogleGate(null); setProfileLogin(true); }}>Перейти в профиль</button>
+                  <button type="button" style={{ background: "#2e7d32", borderColor: "#2e7d32", color: "#fff" }} onClick={() => { setGoogleGate(null); setProfileLogin(true); }}>Перейти в Google</button>
                 </div>
               </>
             )}
@@ -4696,7 +4696,7 @@ export default function App() {
       )}
 
       {showFullUi && !limitedView && <AddToHomeScreenHint />}<OfflineBanner />
-      {unlockNoticeOpen && submitOk == null && (<section role="alert" style={ORDER_OK_BOX}><p style={{ margin: 0 }}>Спасибо, что поёте с нами! Теперь вам открыт полный вид.</p><button type="button" style={ORDER_OK_BTN} onClick={() => { markUnlockNoticeSeen(); refreshMe(); }}>Заказать</button></section>)}      {submitOk != null && (
+            {submitOk != null && (
         <>
           <div style={ORDER_OK_OVERLAY} />
           <section role="alert" style={ORDER_OK_BOX}>
