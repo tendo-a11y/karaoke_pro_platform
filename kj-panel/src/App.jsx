@@ -3674,6 +3674,7 @@ function GuestCard({ token, clubId, guestId, onBack, onChanged }) {
   const [actionError, setActionError] = useState(null);
   const [busy, setBusy] = useState(false);
   const [nameDraft, setNameDraft] = useState("");
+  const [kjNameDraft, setKjNameDraft] = useState("");
   const [nameBusy, setNameBusy] = useState(false);
   const [photoBusy, setPhotoBusy] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -3710,6 +3711,7 @@ function GuestCard({ token, clubId, guestId, onBack, onChanged }) {
 
   useEffect(() => {
     if (guest) setNameDraft(guest.display_name || "");
+      if (guest) setKjNameDraft(guest.kj_name || "");
   }, [guest]);
 
   function toggleFavSelected(favId, checked) {
@@ -3820,6 +3822,17 @@ function GuestCard({ token, clubId, guestId, onBack, onChanged }) {
     }
   }
 
+  async function handleSaveKjName() {
+    setActionError(null);
+    try {
+      await api.setGuestKjName(token, clubId, guestId, kjNameDraft.trim());
+      await reload();
+      onChanged?.();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+    }
+  }
+
   async function handleSaveName() {
     const name = nameDraft.trim();
     if (!name) return;
@@ -3912,6 +3925,13 @@ function GuestCard({ token, clubId, guestId, onBack, onChanged }) {
               <> · последняя песня: {guest.last_artist ? `${guest.last_artist} — ` : ""}{guest.last_song_title}</>
             )}
           </p>
+          <div className="guest-kj-name">
+            <p className="empty-hint">Имя от ведущего (работает и без входа через Google): {guest.kj_name || "не задано"}</p>
+            <div className="order-form">
+              <input value={kjNameDraft} onChange={(e) => setKjNameDraft(e.target.value)} placeholder="Например: Петя, стол у бара" maxLength={64} />
+              <button type="button" className="btn-link" onClick={handleSaveKjName} disabled={!kjNameDraft.trim()}>Сохранить имя</button>
+            </div>
+          </div>
 
           {guest.vip_balance != null && (
             <p className="empty-hint">
