@@ -3197,7 +3197,7 @@ const ORDER_OK_OVERLAY = { position: "fixed", top: 0, left: 0, right: 0, bottom:
 
 const DEFAULT_ENTRY_NOTICE = "Введите номер стола. Он написан на бумажке на столе, либо спросите у диджея.";
 
-function ActivationPanel({ token, onActivated, onCancel, firstStep = false }) {
+function ActivationPanel({ token, onActivated, onCancel, firstStep = false, knownTableNo = null, googleOnly = false }) {
   const [tableNo, setTableNo] = useState("");
   // Доп. столы клуба ("7/1 (Vip)", 2026-10-13) — гость выбирает их кнопкой.
   const [extraTables, setExtraTables] = useState([]);
@@ -3222,9 +3222,9 @@ function ActivationPanel({ token, onActivated, onCancel, firstStep = false }) {
     panelRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
   }, []);
 
-  const parsedTableNo = selectedExtra != null ? selectedExtra : Number(tableNo);
+  const parsedTableNo = knownTableNo != null ? knownTableNo : selectedExtra != null ? selectedExtra : Number(tableNo);
   const tableNoValid =
-    selectedExtra != null || (tableNo.trim() !== "" && Number.isInteger(parsedTableNo) && parsedTableNo > 0);
+    knownTableNo != null || selectedExtra != null || (tableNo.trim() !== "" && Number.isInteger(parsedTableNo) && parsedTableNo > 0);
 
   const [firstTarget, setFirstTarget] = useState("table");
   const [fingerBox, setFingerBox] = useState(null);
@@ -3256,6 +3256,22 @@ function ActivationPanel({ token, onActivated, onCancel, firstStep = false }) {
     };
   }, [firstStep, busy, firstTarget, tableNoValid]);
 
+  // Вход через Google из профиля: номер стола уже известен, поэтому показываем только кнопку Google.
+  useEffect(() => {
+    if (!googleOnly) return undefined;
+    let cancelled = false;
+    const draw = () => {
+      if (cancelled) return;
+      const gid = window.google && window.google.accounts && window.google.accounts.id;
+      if (!gid || !googleButtonRef.current) { setTimeout(draw, 300); return; }
+      gid.initialize({ client_id: GOOGLE_CLIENT_ID, callback: handleGoogleCredential });
+      gid.renderButton(googleButtonRef.current, { theme: "outline", size: "large", text: "signin_with", width: 280 });
+    };
+    draw();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [googleOnly]);
+
   const stateRef = useRef({ tableNoValid, parsedTableNo, busy });
   useEffect(() => {
     stateRef.current = { tableNoValid, parsedTableNo, busy };
@@ -3263,7 +3279,7 @@ function ActivationPanel({ token, onActivated, onCancel, firstStep = false }) {
 
   // Ввод номера стола сразу переводит на «Заказ караоке» (запрос 2026-10-30): вход без Google.
   useEffect(() => {
-    if (busy || !tableNoValid) return undefined;
+    if (googleOnly || busy || !tableNoValid) return undefined;
     const t = setTimeout(() => { handleNoLogin(); }, 0);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -3313,12 +3329,20 @@ function ActivationPanel({ token, onActivated, onCancel, firstStep = false }) {
       {firstStep && fingerBox ? (
         <div className="guide-finger" style={{ left: fingerBox.left, top: fingerBox.top }} aria-hidden="true">👆</div>
       ) : null}
-      {firstStep ? null : (
+      {firstStep || googleOnly ? null : (
         <>
           <h2>Введите номер стола</h2>
         </>
       )}
       {error && <div className="banner banner--error">{error}</div>}
+      {googleOnly ? (
+        <div className="order-form">
+          <p className="empty-hint">Ваш стол: {knownTableNo}</p>
+          <div ref={googleButtonRef} />
+          {busy && <p className="empty-hint">Входим…</p>}
+          <button type="button" className="link-btn" onClick={onCancel} disabled={busy}>Отмена</button>
+        </div>
+      ) : (
       <div className="order-form">
         <input
           type="number"
@@ -3367,6 +3391,7 @@ function ActivationPanel({ token, onActivated, onCancel, firstStep = false }) {
           Отмена
         </button>
       </div>
+      )}
     </section>
   );
 }
@@ -4637,7 +4662,7 @@ export default function App() {
         <>
           <ProfileNamePanel token={session.token} meInfo={meInfo} onNameChanged={refreshMe} onGoogleLogin={() => setProfileLogin(true)} />
           {profileLogin && (
-            <ActivationPanel token={session.token} onActivated={handleActivated} onCancel={() => setProfileLogin(false)} />
+            <ActivationPanel token={session.token} onActivated={handleActivated} onCancel={() => setProfileLogin(false)} knownTableNo={meInfo.table_no} googleOnly />
           )}
           {/* Групповой стол внутри профиля (запрос 2026-10-28). */}
           <TableGroupPanel
