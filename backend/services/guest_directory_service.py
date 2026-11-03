@@ -191,6 +191,7 @@ def get_guest_detail(club_id: int, guest_id: int) -> dict:
     status = GuestStatus.query.filter_by(club_id=club_id, telegram_user_id=guest_id).first()
     vip = VipClient.query.filter_by(club_id=club_id, telegram_user_id=guest_id).first()
     account = GuestAccount.query.filter_by(club_id=club_id, telegram_user_id=guest_id).first()
+    kj_row = GuestKjName.query.filter_by(club_id=club_id, telegram_user_id=guest_id).first()
 
     if entry["last_activity_at"] is None and status is None and vip is None and account is None:
         raise GuestDirectoryError("GUEST_NOT_FOUND", "Гость не найден")
@@ -212,6 +213,7 @@ def get_guest_detail(club_id: int, guest_id: int) -> dict:
         "is_blocked": bool(status.is_blocked) if status else False, "trusted": bool(status.trusted) if status else False,
         "email": account.email if account else None,
         "display_name": account.display_name if account else None,
+        "kj_name": kj_row.kj_name if kj_row else None,
         # ДОБАВЛЕНО (запрос пользователя 2026-10: "Kj должен иметь
         # возможность сам... добавить его фото") — поле уже существовало
         # (GuestAccount.photo_data_url, см. routes/kj.py::set_guest_photo),
