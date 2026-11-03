@@ -22,6 +22,7 @@ club_service.py про это решение.
 from datetime import date, datetime, time, timedelta, timezone
 
 from auth import is_guest_app_open
+from extensions import db
 from models import Favorite, GuestAccount, GuestStatus, Order, STATUS_COMPLETED, Service, TableGroupMember, VipClient
 
 WINDOW_EVENING_DAYS = 1
@@ -139,6 +140,9 @@ def list_guests(club_id: int, guest_type_filter: str | None = None) -> list[dict
         guest_type = _guest_type(status, vip is not None, entry["latest_table_no"])
         current_table_no = status.table_no if status is not None else entry["latest_table_no"]
 
+        # Гости без стола не показываем и не считаем в статистике (запрос 2026-10).
+        if guest_type == "no_table":
+            continue
         if guest_type_filter and guest_type != guest_type_filter:
             continue
 
@@ -286,3 +290,21 @@ def get_guest_song_history(club_id: int, guest_id: int, date_from: date | None, 
         "total_amount": total_amount,
         "days": sorted(days.values(), key=lambda d: d["date"], reverse=True),
     }
+
+
+# KJ: удалить гостей без стола, у которых нет заказов, баланса, VIP, Google-профиля и блокировки.
+def delete_no_table_guests(club_id: int) -> int:
+    vip_ids = {v.telegram_user_id for v in VipClient.query.filter_by(club_id=club_id).all()}
+    account_ids = {a.telegram_user_id for a in GuestAccount.query.filter_by(club_id=club_id).all()}
+    ordered_ids = {r[0] for r in db.session.query(Order.telegram_user_id).filter(Order.club_id == club_id).distinct().all()}
+    removed = 0
+    for status in GuestStatus.query.filter_by(club_id=club_id).all():
+        gid = status.telegram_user_id
+        if status.table_no is not None or status.is_blocked:
+            continue
+        if gid in vip_ids or gid in account_ids or gid in ordered_ids:
+            continue
+        db.session.delete(status)
+        removed += 1
+    db.session.commit()
+    return removed
