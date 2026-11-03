@@ -1528,3 +1528,15 @@ class ExtraTable(db.Model):
             "name": self.name,
             "title": f"{self.label} ({self.name})" if self.name else self.label,
         }
+
+
+class GuestKjName(db.Model):
+    """Имя гостя, которое задал ведущий (работает и без входа через Google)."""
+
+    __tablename__ = "guest_kj_names"
+    __table_args__ = (db.UniqueConstraint("club_id", "telegram_user_id", name="uq_guest_kj_names_club_guest"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    club_id = db.Column(db.Integer, db.ForeignKey("clubs.club_id"), nullable=False, index=True)
+    telegram_user_id = db.Column(db.BigInteger, nullable=False)
+    kj_name = db.Column(db.String(64), nullable=False)
