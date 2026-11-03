@@ -1089,3 +1089,7 @@ img { max-width: 100%; }
 .guests-lists .app-main > section { display: flex; flex-direction: column; gap: 14px; }
 .guests-lists h2 { margin: 0; font-size: 16px; }
 .guests-lists .guest-type-filters { margin: 0; padding-bottom: 0; border-bottom: none; }
+
+/* Размеры в разделе «Гости»: кнопка списков крупнее, заголовок внутри списков — чуть меньше. */
+.guests-panel > section > .btn-link { font-size: 16px; font-weight: 600; padding: 10px 18px; }
+.guests-lists h2 { font-size: 14px; letter-spacing: 0.04em; }
