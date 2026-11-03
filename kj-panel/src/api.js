@@ -304,6 +304,9 @@ export const api = {
         service_id: serviceId,
       },
     }),
+  // KJ: имя гостя от ведущего (работает и без входа через Google).
+  setGuestKjName: (token, clubId, guestId, kjName) =>
+    request(`/api/kj/guests/${clubId}/${encodeURIComponent(guestId)}/kj-name`, { method: "PUT", token, body: { kj_name: kjName } }),
   // KJ: удалить гостей без стола (без заказов, баланса и VIP).
   cleanupNoTableGuests: (token, clubId) =>
     request(`/api/kj/guests/${clubId}/cleanup-no-table`, { method: "POST", token }),
