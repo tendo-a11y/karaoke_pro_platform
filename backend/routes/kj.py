@@ -1735,6 +1735,17 @@ def list_guests(club_id):
     return api_ok(guest_directory_service.list_guests(club_id, guest_type))
 
 
+@bp.post("/guests/<int:club_id>/cleanup-no-table")
+@require_kj
+def cleanup_no_table_guests(club_id):
+    """KJ: удалить гостей без стола без заказов, баланса и VIP (запрос 2026-10)."""
+    denied = _ensure_own_club(club_id)
+    if denied:
+        return denied
+    removed = guest_directory_service.delete_no_table_guests(club_id)
+    return api_ok({"removed": removed})
+
+
 @bp.get("/guests/<int:club_id>/<guest_id>")
 @require_kj
 def get_guest(club_id, guest_id):
