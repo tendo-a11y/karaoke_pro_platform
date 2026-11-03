@@ -4853,6 +4853,22 @@ function GuestsPanel({ token, clubId }) {
             <SongListsAdminPanel token={token} />
           </div>
         )}
+        <button
+          type="button"
+          className="btn-link"
+          onClick={async () => {
+            if (!window.confirm("Удалить гостей без стола, у которых нет заказов, баланса и VIP? Отменить будет нельзя.")) return;
+            try {
+              const r = await api.cleanupNoTableGuests(token, clubId);
+              window.alert(`Удалено гостей: ${r.removed}`);
+              reload();
+            } catch (err) {
+              window.alert(err instanceof ApiError ? err.message : String(err));
+            }
+          }}
+        >
+          🗑 Удалить гостей без стола
+        </button>
         <div className="guest-type-filters">
           {GUEST_TYPE_FILTERS.map((f) => (
             <button
