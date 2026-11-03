@@ -40,34 +40,41 @@ def _renorm_stored_key(stored: str) -> str:
     return f"{_norm_text(artist)}|{_norm_text(title)}"
 
 
-# Одна и та же песня может быть записана по-разному («Рюмка водки - Лепс» и «Рюмка водки на столе - Лепс»).
-def _same_title(a: str, b: str) -> bool:
-    if a == b:
-        return True
+# Одна и та же песня может быть записана по-разному: порядок слов и место исполнителя не важны
+# («Рюмка водки - Лепс», «Рюмка водки на столе - Лепс», «Лепс Рюмка водки»).
+def _same_song_tokens(a: set, b: set) -> bool:
     if not a or not b:
         return False
-    shorter, longer = sorted((a, b), key=len)
-    # Одно название целиком входит в другое, если короткое состоит минимум из двух слов.
-    if len(shorter.split()) >= 2 and f" {shorter} " in f" {longer} ":
+    if a == b:
         return True
-    return difflib.SequenceMatcher(None, a, b).ratio() >= 0.9
+    shorter, longer = (a, b) if len(a) <= len(b) else (b, a)
+    # Короткое название (минимум два слова) целиком входит в длинное.
+    if len(shorter) >= 2 and shorter <= longer:
+        return True
+    # Небольшие опечатки: слова почти совпадают.
+    return difflib.SequenceMatcher(None, " ".join(sorted(a)), " ".join(sorted(b))).ratio() >= 0.9
 
 
 class _SongGroups:
-    """Группирует записи одной песни: одинаковый исполнитель и похожее название — один ключ."""
+    """Группирует записи одной песни: исполнитель не должен отличаться, а слова названия и исполнителя сравниваются без учёта порядка."""
 
     def __init__(self):
         self.groups = []
 
     def key_for(self, song_title, artist):
-        title = _norm_text(song_title)
-        if not title:
+        title_n = _norm_text(song_title)
+        if not title_n:
             return None
         artist_n = _norm_text(artist)
+        title_words = set(title_n.split())
+        # Исполнителя, написанного в названии, не сравниваем: остаются только слова песни.
+        core = (title_words - set(artist_n.split())) or title_words
         for g in self.groups:
-            if (artist_n == g["artist"] or not artist_n or not g["artist"]) and _same_title(title, g["title"]):
+            if artist_n and g["artist"] and artist_n != g["artist"]:
+                continue
+            if _same_song_tokens(core, g["core"]):
                 return g["key"]
-        self.groups.append({"artist": artist_n, "title": title, "key": norm_key(song_title, artist)})
+        self.groups.append({"artist": artist_n, "core": core, "key": norm_key(song_title, artist)})
         return self.groups[-1]["key"]
 
 
