@@ -304,6 +304,9 @@ export const api = {
         service_id: serviceId,
       },
     }),
+  // KJ: удалить гостей без стола (без заказов, баланса и VIP).
+  cleanupNoTableGuests: (token, clubId) =>
+    request(`/api/kj/guests/${clubId}/cleanup-no-table`, { method: "POST", token }),
   listGuests: (token, clubId, guestType) =>
     request(`/api/kj/guests/${clubId}${guestType ? `?type=${encodeURIComponent(guestType)}` : ""}`, { token }),
   getGuest: (token, clubId, guestId) =>
