@@ -4917,7 +4917,7 @@ function GuestsPanel({ token, clubId }) {
             {onlineGuests.map((guest) => (
               <li key={guest.guest_id} className="vip-row vip-row--client">
                 <div>
-                  {guest.display_name || `Гость #${guest.guest_id}`} · {GUEST_TYPE_BADGE[guest.guest_type] || guest.guest_type}
+                  {guest.kj_name && <>{guest.kj_name} (ведущий) · </>}{guest.display_name || `Гость #${guest.guest_id}`} · {GUEST_TYPE_BADGE[guest.guest_type] || guest.guest_type}
                   {guest.is_blocked && <span className="guest-type-badge guest-type-badge--blocked"> 🚫 Заблокирован</span>}
                   <br />
                   <span className="empty-hint">
@@ -4946,7 +4946,7 @@ function GuestsPanel({ token, clubId }) {
             {otherGuests.map((guest) => (
               <li key={guest.guest_id} className="vip-row vip-row--client">
                 <div>
-                  {guest.display_name || `Гость #${guest.guest_id}`} · {GUEST_TYPE_BADGE[guest.guest_type] || guest.guest_type}
+                  {guest.kj_name && <>{guest.kj_name} (ведущий) · </>}{guest.display_name || `Гость #${guest.guest_id}`} · {GUEST_TYPE_BADGE[guest.guest_type] || guest.guest_type}
                   {guest.is_blocked && <span className="guest-type-badge guest-type-badge--blocked"> 🚫 Заблокирован</span>}
                   <br />
                   <span className="empty-hint">
