@@ -181,6 +181,7 @@ def me():
         "has_permanent_profile": has_permanent_profile,
         # Сколько активных заказов у гостя (не сыгранных, пока ведущий не нажал «Готово»): после второго без профиля приложение просит войти через Google.
         "orders_count": vip_service.count_active_orders(g.club_id, g.guest_id),
+        "orders_total": vip_service.count_all_orders(g.club_id, g.guest_id),
         # Имя, которое гость сам себе задал (запрос пользователя 2026-09,
         # "самопереименование гостя") — null, пока не задано или пока нет
         # постоянного профиля вообще, см. PUT /profile/name ниже.
