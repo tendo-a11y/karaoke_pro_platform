@@ -1059,7 +1059,6 @@ const SETTINGS_TABS = [
   { key: "stats", label: "Статистика" },
   { key: "vip", label: "⭐ VIP" },
   { key: "guests", label: "👥 Гости" },
-  { key: "song-lists", label: "🎵 Списки гостей" },
 ];
 
 
@@ -4801,6 +4800,7 @@ function GuestsPanel({ token, clubId }) {
   const [typeFilter, setTypeFilter] = useState("");
   const [guests, setGuests] = useState(null);
   const [loadError, setLoadError] = useState(null);
+  const [showSongLists, setShowSongLists] = useState(false);
   const [selectedGuestId, setSelectedGuestId] = useState(null);
 
   async function reload() {
@@ -4845,7 +4845,10 @@ function GuestsPanel({ token, clubId }) {
   return (
     <div className="guests-panel">
       <section>
-        <h2>Гости</h2>
+        <button type="button" className="btn-link" onClick={() => setShowSongLists((v) => !v)}>
+          🎵 Списки песен гостей {showSongLists ? "▲" : "▼"}
+        </button>
+        {showSongLists && <SongListsAdminPanel token={token} />}
         <div className="guest-type-filters">
           {GUEST_TYPE_FILTERS.map((f) => (
             <button
