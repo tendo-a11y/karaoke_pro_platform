@@ -1082,3 +1082,10 @@ img { max-width: 100%; }
 .guests-panel > section > .btn-link { align-self: flex-start; padding: 8px 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel-alt); }
 .guests-section-title { margin: 26px 0 10px; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; }
 .guest-card { padding: 18px 20px; gap: 6px; border-radius: 12px; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06); }
+
+/* Списки песен гостей внутри раздела «Гости»: один общий стиль с остальным разделом. */
+.guests-lists { display: flex; flex-direction: column; gap: 14px; padding: 16px 18px; border: 1px solid var(--border); border-radius: 12px; background: var(--panel); }
+.guests-lists .app-main { padding: 0; margin: 0; max-width: none; border: none; background: none; }
+.guests-lists .app-main > section { display: flex; flex-direction: column; gap: 14px; }
+.guests-lists h2 { margin: 0; font-size: 16px; }
+.guests-lists .guest-type-filters { margin: 0; padding-bottom: 0; border-bottom: none; }
