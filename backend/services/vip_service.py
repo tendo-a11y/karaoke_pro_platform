@@ -81,6 +81,18 @@ def count_active_orders(club_id: int, guest_id: int) -> int:
     )
 
 
+def count_all_orders(club_id: int, guest_id: int) -> int:
+    """Все заказы гостя за всё время (не только активные) — для предложения стать VIP."""
+    return (
+        Order.query
+        .filter(
+            Order.club_id == club_id,
+            Order.telegram_user_id == guest_id,
+        )
+        .count()
+    )
+
+
 def has_active_duplicate(club_id: int, guest_id: int, song_title, artist, table_no=None) -> bool:
     """
     ДОБАВЛЕНО (2026-10, запрос пользователя "запрещать случайные повторы"):
