@@ -23,7 +23,7 @@ from datetime import date, datetime, time, timedelta, timezone
 
 from auth import is_guest_app_open
 from extensions import db
-from models import Favorite, GuestAccount, GuestStatus, Order, STATUS_COMPLETED, Service, TableGroupMember, VipClient
+from models import Favorite, GuestAccount, GuestStatus, Order, STATUS_COMPLETED, Service, TableGroupMember, VipClient, GuestKjName
 
 WINDOW_EVENING_DAYS = 1
 WINDOW_WEEK_DAYS = 7
@@ -118,6 +118,7 @@ def list_guests(club_id: int, guest_type_filter: str | None = None) -> list[dict
     vip_clients = {v.telegram_user_id: v for v in VipClient.query.filter_by(club_id=club_id).all()}
     statuses = {s.telegram_user_id: s for s in GuestStatus.query.filter_by(club_id=club_id).all()}
     accounts = {a.telegram_user_id: a for a in GuestAccount.query.filter_by(club_id=club_id).all()}
+    kj_names = {n.telegram_user_id: n.kj_name for n in GuestKjName.query.filter_by(club_id=club_id).all()}
 
     # VIP без единого заказа (только что одобрен) и гости, над которыми KJ
     # уже что-то делал (блок/снятие со стола), должны быть в списке тоже —
@@ -163,6 +164,7 @@ def list_guests(club_id: int, guest_type_filter: str | None = None) -> list[dict
             # не входил через Google или ещё не задал имя, см.
             # routes/guest.py::set_display_name.
             "display_name": account.display_name if account else None,
+            "kj_name": kj_names.get(gid),
             "last_song_title": entry["last_song_title"],
             "last_artist": entry["last_artist"],
             "last_activity_at": entry["last_activity_at"].isoformat() if entry["last_activity_at"] else None,
@@ -308,3 +310,19 @@ def delete_no_table_guests(club_id: int) -> int:
         removed += 1
     db.session.commit()
     return removed
+
+
+# KJ: задать имя гостя (работает и без входа через Google). Пустое имя — убрать.
+def set_kj_name(club_id: int, guest_id: int, name):
+    row = GuestKjName.query.filter_by(club_id=club_id, telegram_user_id=guest_id).first()
+    if not name:
+        if row is not None:
+            db.session.delete(row)
+            db.session.commit()
+        return None
+    if row is None:
+        db.session.add(GuestKjName(club_id=club_id, telegram_user_id=guest_id, kj_name=name))
+    else:
+        row.kj_name = name
+    db.session.commit()
+    return name
