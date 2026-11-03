@@ -3264,7 +3264,7 @@ function ActivationPanel({ token, onActivated, onCancel, firstStep = false }) {
   // Ввод номера стола сразу переводит на «Заказ караоке» (запрос 2026-10-30): вход без Google.
   useEffect(() => {
     if (busy || !tableNoValid) return undefined;
-    const t = setTimeout(() => { handleNoLogin(); }, selectedExtra != null ? 0 : 500);
+    const t = setTimeout(() => { handleNoLogin(); }, 0);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tableNoValid, parsedTableNo]);
