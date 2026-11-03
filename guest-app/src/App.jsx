@@ -4591,7 +4591,7 @@ export default function App() {
                 </div>
                 <div className="msg-popup__actions">
                   <button type="button" style={{ background: "#c62828", borderColor: "#c62828", color: "#fff" }} onClick={() => setGoogleGate(null)}>Закрыть</button>
-                  <button type="button" style={{ background: "#2e7d32", borderColor: "#2e7d32", color: "#fff" }} onClick={() => { setGoogleGate(null); setProfileTopOpen(true); setProfileLogin(true); setTimeout(() => document.querySelector(".profile-panel")?.scrollIntoView({ behavior: "smooth", block: "start" }), 150); }}>Перейти в профиль</button>
+                  <button type="button" style={{ background: "#2e7d32", borderColor: "#2e7d32", color: "#fff" }} onClick={() => { setGoogleGate(null); setProfileLogin(true); }}>Перейти в профиль</button>
                 </div>
               </>
             )}
@@ -4658,6 +4658,9 @@ export default function App() {
       </header>
       )}
 
+      {showFullUi && activated && profileLogin && !profileTopOpen && (
+        <ActivationPanel token={session.token} onActivated={handleActivated} onCancel={() => setProfileLogin(false)} knownTableNo={meInfo.table_no} googleOnly />
+      )}
       {showFullUi && activated && profileTopOpen && (
         <>
           <ProfileNamePanel token={session.token} meInfo={meInfo} onNameChanged={refreshMe} onGoogleLogin={() => setProfileLogin(true)} />
