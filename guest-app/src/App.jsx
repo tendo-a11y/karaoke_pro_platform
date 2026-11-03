@@ -3054,6 +3054,16 @@ function ProfileNamePanel({ token, meInfo, onNameChanged, onGoogleLogin }) {
     return (
       <section className="panel profile-panel">
         <>
+          {!meInfo.has_permanent_profile && (
+            <button
+              type="button"
+              className="step-blink"
+              style={{ display: "block", width: "100%", background: "#2e7d32", borderColor: "#2e7d32", color: "#fff", borderRadius: 10, padding: "12px 16px", fontWeight: 600, marginBottom: 12 }}
+              onClick={() => onGoogleLogin?.()}
+            >
+              Войти через Google
+            </button>
+          )}
         <p className="empty-hint">
           {meInfo.display_name
             ? <>Ведущий видит вас как «{meInfo.display_name}».</>
