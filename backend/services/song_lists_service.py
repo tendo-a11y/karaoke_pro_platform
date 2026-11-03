@@ -8,6 +8,7 @@
 "Готово" вручную или автоматически по истории VirtualDJ). Заказы, которые
 только засчитаны при закрытии стола, сюда не попадают.
 """
+import difflib
 import re
 from collections import Counter
 from datetime import datetime, timedelta, timezone
@@ -37,6 +38,37 @@ def _renorm_stored_key(stored: str) -> str:
     # Ключи, сохранённые до смены правила (с знаками препинания), приводим к новому виду на лету.
     artist, _, title = (stored or "").partition("|")
     return f"{_norm_text(artist)}|{_norm_text(title)}"
+
+
+# Одна и та же песня может быть записана по-разному («Рюмка водки - Лепс» и «Рюмка водки на столе - Лепс»).
+def _same_title(a: str, b: str) -> bool:
+    if a == b:
+        return True
+    if not a or not b:
+        return False
+    shorter, longer = sorted((a, b), key=len)
+    # Одно название целиком входит в другое, если короткое состоит минимум из двух слов.
+    if len(shorter.split()) >= 2 and f" {shorter} " in f" {longer} ":
+        return True
+    return difflib.SequenceMatcher(None, a, b).ratio() >= 0.9
+
+
+class _SongGroups:
+    """Группирует записи одной песни: одинаковый исполнитель и похожее название — один ключ."""
+
+    def __init__(self):
+        self.groups = []
+
+    def key_for(self, song_title, artist):
+        title = _norm_text(song_title)
+        if not title:
+            return None
+        artist_n = _norm_text(artist)
+        for g in self.groups:
+            if (artist_n == g["artist"] or not artist_n or not g["artist"]) and _same_title(title, g["title"]):
+                return g["key"]
+        self.groups.append({"artist": artist_n, "title": title, "key": norm_key(song_title, artist)})
+        return self.groups[-1]["key"]
 
 
 def _hidden_history_ids(club_id: int) -> set:
@@ -82,25 +114,26 @@ def popular(club_id: int, now=None) -> list[dict]:
         )
         .all()
     )
-    counter = Counter()
-    label = {}
     hidden = _hidden_popular_keys(club_id)
+    groups = _SongGroups()
+    counter = Counter()
+    variants = {}
     for song_title, artist in rows:
-        key = norm_key(song_title, artist)
-        if key == "|" or key in hidden:
+        key = groups.key_for(song_title, artist)
+        if key is None or norm_key(song_title, artist) in hidden:
             continue
         counter[key] += 1
-        label.setdefault(key, (song_title, artist))
-    return [
-        {"song_title": label[key][0], "artist": label[key][1], "count": count}
-        for key, count in counter.most_common(POPULAR_LIMIT)
-    ]
+        variants.setdefault(key, Counter())[(song_title, artist)] += 1
+    result = []
+    for key, count in counter.most_common(POPULAR_LIMIT):
+        title, artist = variants[key].most_common(1)[0][0]
+        result.append({"song_title": title, "artist": artist, "count": count})
+    return result
 
 
 def new_songs(club_id: int, now=None) -> list[dict]:
-    # ДОБАВЛЕНО (2026-10, запрос пользователя "сортировка по частоте в Новинках"):
-    # у каждой новинки — число воспроизведений за тот же период, что и у
-    # "Популярных" (POPULAR_DAYS дней), чтобы гость мог отсортировать по частоте.
+    # У каждой новинки — число воспроизведений за тот же период, что и у "Популярных".
+    # Одна и та же песня в разных написаниях считается одной (см. _SongGroups).
     now = now or datetime.now(timezone.utc)
     played = (
         Order.query.with_entities(Order.song_title, Order.artist)
@@ -111,12 +144,13 @@ def new_songs(club_id: int, now=None) -> list[dict]:
         )
         .all()
     )
-    counter = Counter(norm_key(song_title, artist) for song_title, artist in played)
+    groups = _SongGroups()
+    counter = Counter(groups.key_for(song_title, artist) for song_title, artist in played)
     rows = NewSong.query.filter_by(club_id=club_id).order_by(NewSong.created_at.desc(), NewSong.id.desc()).all()
     result = []
     for r in rows:
         item = r.to_dict()
-        item["count"] = counter.get(norm_key(r.song_title, r.artist), 0)
+        item["count"] = counter.get(groups.key_for(r.song_title, r.artist), 0)
         result.append(item)
     return result
 
