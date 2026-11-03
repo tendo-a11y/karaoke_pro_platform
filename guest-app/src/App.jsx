@@ -3108,7 +3108,7 @@ function ProfileNamePanel({ token, meInfo, onNameChanged, onGoogleLogin }) {
 
         {/* Финансы VIP-гостя — внутри профиля (запрос пользователя 2026-10). */}
         {meInfo.is_vip && <VipHistoryPanel token={token} embedded />}
-        <VipPanel token={token} meInfo={meInfo} embedded />
+        {/* VIP-блок в профиле скрыт: предложение VIP — отдельной плашкой после 30 заказов */}
 
         {/* ДОБАВЛЕНО (запрос пользователя 2026-10-04) — ссылки на
         политику конфиденциальности/условия использования и кнопка
@@ -3855,6 +3855,8 @@ export default function App() {
   const [gateDontShow, setGateDontShow] = useState(false);
   // Вход через Google из профиля (открывает тот же экран «стол + Google»).
   const [profileLogin, setProfileLogin] = useState(false);
+  const [vipOfferHidden, setVipOfferHidden] = useState(false);
+  const vipOfferNeeded = !!meInfo && !meInfo.is_vip && (meInfo.orders_total ?? 0) >= 30 && !meInfo.vip_request_pending && !vipOfferHidden && !isVipOfferDismissed();
   // Показываем после двух активных заказов, потом повтор каждые 5 песен; «Больше не показывать» — навсегда.
   const ordersNeedGoogle = !!meInfo && !meInfo.has_permanent_profile && (meInfo.orders_count ?? 0) >= 2 && !isGoogleGateDismissed() && readGuestOrderCount() >= readGoogleGateNext();
   // Категорию без песни и исполнителя не открываем: показываем короткую подсказку (запрос 2026-10-28).
@@ -4346,6 +4348,11 @@ export default function App() {
     storeSession(clubId, activatedSession);
     setSession(activatedSession);
     setShowActivation(false);
+    if (profileLogin) {
+      setProfileLogin(false);
+      setProfileTopOpen(true);
+      setTimeout(() => setProfileTopOpen(false), 10000);
+    }
     try {
       const me = await api.me(result.token);
       setMeInfo(me);
@@ -4559,10 +4566,22 @@ export default function App() {
                 </div>
                 <div className="msg-popup__actions">
                   <button type="button" style={{ background: "#c62828", borderColor: "#c62828", color: "#fff" }} onClick={() => setGoogleGate(null)}>Закрыть</button>
-                  <button type="button" style={{ background: "#2e7d32", borderColor: "#2e7d32", color: "#fff" }} onClick={() => { setGoogleGate(null); setProfileTopOpen(true); setTimeout(() => document.querySelector(".profile-panel")?.scrollIntoView({ behavior: "smooth", block: "start" }), 150); }}>Перейти в профиль</button>
+                  <button type="button" style={{ background: "#2e7d32", borderColor: "#2e7d32", color: "#fff" }} onClick={() => { setGoogleGate(null); setProfileTopOpen(true); setProfileLogin(true); setTimeout(() => document.querySelector(".profile-panel")?.scrollIntoView({ behavior: "smooth", block: "start" }), 150); }}>Перейти в профиль</button>
                 </div>
               </>
             )}
+          </div>
+        </div>
+      )}
+      {!googleGate && vipOfferNeeded && (
+        <div className="msg-popup-overlay" role="dialog" aria-modal="true">
+          <div className="msg-popup">
+            <div className="msg-popup__title">Предлагаем стать VIP</div>
+            <div className="msg-popup__text">У вас уже более 30 заказов. Предлагаем стать VIP-клиентом.</div>
+            <div className="msg-popup__actions">
+              <button type="button" style={{ background: "#c62828", borderColor: "#c62828", color: "#fff" }} onClick={() => { setVipOfferDismissed(); setVipOfferHidden(true); }}>Закрыть</button>
+              <button type="button" style={{ background: "#2e7d32", borderColor: "#2e7d32", color: "#fff" }} onClick={async () => { setVipOfferDismissed(); setVipOfferHidden(true); try { await api.requestVip(session.token); } catch { /* заявка не ушла */ } }}>Стать VIP</button>
+            </div>
           </div>
         </div>
       )}
@@ -5411,6 +5430,8 @@ function guestHasOrdered() {
 }
 
 const GOOGLE_GATE_STEP = 5;
+function isVipOfferDismissed() { try { return localStorage.getItem("vip_offer_dismissed") === "1"; } catch { return false; } }
+function setVipOfferDismissed() { try { localStorage.setItem("vip_offer_dismissed", "1"); } catch { /* без хранилища */ } }
 function isGoogleGateDismissed() { try { return localStorage.getItem("google_gate_dismissed") === "1"; } catch { return false; } }
 function setGoogleGateDismissed() { try { localStorage.setItem("google_gate_dismissed", "1"); } catch {} }
 function readGoogleGateNext() { try { return Number(localStorage.getItem("google_gate_next_count")) || 0; } catch { return 0; } }
