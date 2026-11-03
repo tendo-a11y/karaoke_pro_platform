@@ -4848,7 +4848,11 @@ function GuestsPanel({ token, clubId }) {
         <button type="button" className="btn-link" onClick={() => setShowSongLists((v) => !v)}>
           🎵 Списки песен гостей {showSongLists ? "▲" : "▼"}
         </button>
-        {showSongLists && <SongListsAdminPanel token={token} />}
+        {showSongLists && (
+          <div className="guests-lists">
+            <SongListsAdminPanel token={token} />
+          </div>
+        )}
         <div className="guest-type-filters">
           {GUEST_TYPE_FILTERS.map((f) => (
             <button
