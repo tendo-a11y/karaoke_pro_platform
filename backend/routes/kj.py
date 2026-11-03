@@ -1746,6 +1746,23 @@ def cleanup_no_table_guests(club_id):
     return api_ok({"removed": removed})
 
 
+@bp.put("/guests/<int:club_id>/<guest_id>/kj-name")
+@require_kj
+def set_guest_kj_name(club_id, guest_id):
+    """KJ: имя гостя от ведущего — работает и без входа через Google."""
+    denied = _ensure_own_club(club_id)
+    if denied:
+        return denied
+    parsed_id = _parse_guest_id(guest_id)
+    if parsed_id is None:
+        return api_error(400, "VALIDATION_ERROR", "guest_id должен быть числом")
+    payload = request.get_json(silent=True) or {}
+    raw_name = payload.get("kj_name")
+    name = raw_name.strip()[:64] if isinstance(raw_name, str) else ""
+    saved = guest_directory_service.set_kj_name(club_id, parsed_id, name or None)
+    return api_ok({"guest_id": str(parsed_id), "kj_name": saved})
+
+
 @bp.get("/guests/<int:club_id>/<guest_id>")
 @require_kj
 def get_guest(club_id, guest_id):
