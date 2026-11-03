@@ -2762,7 +2762,7 @@ function ChatPanel({ token }) {
 // Технически сообщение всё равно uходит в ту же переписку ChatMessage,
 // что и обычный чат — чтобы у ведущего было одно место, где смотреть все
 // сообщения от гостя, см. KjChatPanel в kj-panel.
-function ScreenshotOrderPanel({ token, services, autoFocus, onFocused }) {
+function ScreenshotOrderPanel({ token, services, autoFocus, onFocused, onNeedGoogle }) {
   const [pendingImage, setPendingImage] = useState(null);
   const [comment, setComment] = useState("");
   const [serviceId, setServiceId] = useState("");
@@ -2865,6 +2865,7 @@ function ScreenshotOrderPanel({ token, services, autoFocus, onFocused }) {
   // Выбор варианта («Петь караоке» или «Слушать музыку») сразу отправляет скриншот ведущему.
   async function handlePick(id, label) {
     if (!pendingImage || busy) return;
+    if (onNeedGoogle && (await onNeedGoogle())) return;
     setServiceId(String(id));
     setBusy(true);
     setError(null);
@@ -4258,6 +4259,21 @@ export default function App() {
     proceedSubmitOrder();
   }
 
+  // Плашка «Спасибо, что поёте с нами»: берём свежие данные гостя с сервера, чтобы не опираться на старый счётчик.
+  async function googleGateDue() {
+    let count = meInfo?.orders_count ?? 0;
+    let hasProfile = !!meInfo?.has_permanent_profile;
+    if (session?.token) {
+      try {
+        const fresh = await api.me(session.token);
+        setMeInfo(fresh);
+        count = fresh.orders_count ?? 0;
+        hasProfile = !!fresh.has_permanent_profile;
+      } catch { /* нет связи — берём то, что уже есть */ }
+    }
+    return !hasProfile && count >= 2 && !isGoogleGateDismissed() && readGuestOrderCount() >= readGoogleGateNext();
+  }
+
   async function proceedSubmitOrder() {
     if (!session || !songTitle.trim()) return;
 
@@ -4265,7 +4281,7 @@ export default function App() {
     // через Google заказ фактически не отправляется — вместо запроса
     // открывается единственный экран активации (см. ActivationPanel и
     // handleActivated выше), который сам довершит именно это действие.
-    if (ordersNeedGoogle) { scheduleGoogleGate(); setGoogleGate("short"); return; }
+    if (await googleGateDue()) { scheduleGoogleGate(); setGoogleGate("short"); return; }
     if (!activated) {
       setSubmitError(null);
       setShowActivation(true);
@@ -4499,7 +4515,7 @@ export default function App() {
             ← Назад
           </button>
         </header>
-        <ScreenshotOrderPanel token={session.token} services={services} />
+        <ScreenshotOrderPanel token={session.token} services={services} onNeedGoogle={async () => { if (await googleGateDue()) { scheduleGoogleGate(); setGoogleGate("short"); return true; } return false; }} />
       </div>
     );
   }
@@ -5019,7 +5035,7 @@ export default function App() {
                     setServiceId(String(linkCat.id));
                     setInternetHint({ name: linkCat.name, price: linkCat.price, fromLink: true });
                   }}
-                  onChange={(v) => {
+                  onChange={async (v) => {
                     setServiceId(v);
                     // Выбор категории и есть заказ (запрос 2026-10): если вход и стол уже есть, заказ уходит сразу.
                     // Ссылочный заказ и первое предупреждение об заказе не трогаем — у них свой путь.
@@ -5031,7 +5047,7 @@ export default function App() {
                       setTimeout(() => setTitleHint(false), 6000);
                       return;
                     }
-                    if (ordersNeedGoogle) { scheduleGoogleGate(); setGoogleGate("short"); return; }
+                    if (await googleGateDue()) { scheduleGoogleGate(); setGoogleGate("short"); return; }
                     if (!activated) {
                       setShowActivation(true);
                       return;
