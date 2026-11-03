@@ -1059,6 +1059,7 @@ const SETTINGS_TABS = [
   { key: "stats", label: "Статистика" },
   { key: "vip", label: "⭐ VIP" },
   { key: "guests", label: "👥 Гости" },
+  { key: "song-lists", label: "🎵 Списки гостей" },
 ];
 
 
