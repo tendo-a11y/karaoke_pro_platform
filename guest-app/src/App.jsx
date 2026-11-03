@@ -4567,6 +4567,20 @@ export default function App() {
     );
   }
 
+  // Вход через Google из профиля: только кнопка входа, остальной экран скрыт.
+  if (showFullUi && activated && profileLogin && !profileTopOpen) {
+    return (
+      <div className="app-shell">
+        {chatPopupEl}
+        <header className="app-header">
+          <h1>🎤 {meInfo.club_name || "Karaoke"}</h1>
+          <span className="app-header__table">Стол {tableLabel(meInfo.table_no)}</span>
+        </header>
+        <ActivationPanel token={session.token} onActivated={handleActivated} onCancel={() => setProfileLogin(false)} knownTableNo={meInfo.table_no} googleOnly />
+      </div>
+    );
+  }
+
   return (
     <div className={`app-shell${favPicking || reorderPickedId != null ? " app-shell--fav-pick" : ""}${categoryPicking ? " app-shell--picking" : ""}${songConfirming || showActivation || categoryStep ? " app-shell--focus" : ""}${songListsOpen ? " app-shell--lists" : ""}`}>
       {chatPopupEl}
