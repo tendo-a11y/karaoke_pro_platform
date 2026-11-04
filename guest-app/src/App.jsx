@@ -4749,9 +4749,8 @@ export default function App() {
           <button
             type="button"
             data-guide="simple-search"
-            className={`link-btn${searchStyle === "simple" ? " finder-modes__active" : ""}${guideRunning && guideStep === "mode" && !searchStyleTouched ? " search-style-blink" : ""}`}
+            className={`link-btn${searchStyle === "simple" ? " finder-modes__active" : ""}${guideRunning && guideStep === "mode" && !searchStyleTouched ? " search-style-blink" : ""}${searchStyle === "smart" ? " search-style-glow" : ""}`}
             onClick={() => setSearchStyle("simple")}
-            style={searchStyle === "smart" ? { display: "none" } : undefined}
           >
             Заказ караоке
           </button>
