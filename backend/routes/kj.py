@@ -1519,6 +1519,29 @@ def set_new_song():
     return api_ok(song_lists_service.new_songs(g.club_id) + song_lists_service.new_songs(g.club_id, kind="duet"))
 
 
+# Массовое добавление песен списком в "Новинки" или "Дуэты".
+@bp.post("/new-songs/bulk")
+@require_kj
+def bulk_new_songs():
+    from services import song_lists_service
+    payload = request.get_json(silent=True) or {}
+    lines = payload.get("lines")
+    kind = payload.get("kind") or "new"
+    if not isinstance(lines, list) or not all(isinstance(x, str) for x in lines):
+        return api_error(400, "VALIDATION_ERROR", "lines должен быть списком строк")
+    if len(lines) > 500:
+        return api_error(400, "VALIDATION_ERROR", "За раз можно добавить не больше 500 строк")
+    if kind not in ("new", "duet"):
+        return api_error(400, "VALIDATION_ERROR", "kind должен быть new или duet")
+    added, skipped = song_lists_service.bulk_add(g.club_id, lines, kind=kind)
+    return api_ok({
+        "added": added,
+        "skipped": skipped,
+        "new": song_lists_service.new_songs(g.club_id),
+        "duet": song_lists_service.new_songs(g.club_id, kind="duet"),
+    })
+
+
 # ДОБАВЛЕНО (2026-10, запрос пользователя): KJ управляет списками гостя
 # "История за час" / "Популярные" / "Новинки" — скрыть / вернуть песню.
 @bp.get("/song-lists")
