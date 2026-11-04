@@ -4744,7 +4744,7 @@ export default function App() {
         ограничивается (веткой ниже) только форма ввода со кнопкой
         "Заказать". */}
         <div className="search-style-choice" role="group" aria-label="Способ поиска">
-          <h2 className="search-style-title">Петь караоке</h2>
+          <h2 className="search-style-title" style={searchStyle === "smart" ? { display: "none" } : undefined}>Петь караоке</h2>
           <h2 className="search-style-plus-caption">Слушать песню</h2>
           <button
             type="button"
