@@ -215,9 +215,9 @@ export const api = {
   unhideSongListItem: (token, id) => request(`/api/kj/song-lists/unhide/${id}`, { method: "POST", token }),
   clearPopularHidden: (token) => request("/api/kj/song-lists/clear-popular-hidden", { method: "POST", token }),
   listNewSongs: (token) => request("/api/kj/new-songs", { token }),
-  setNewSong: (token, songTitle, artist, isNew) =>
+  setNewSong: (token, songTitle, artist, isNew, kind = "new") =>
     request("/api/kj/new-songs", {
-      method: "PUT", token, body: { song_title: songTitle, artist: artist || null, is_new: isNew },
+      method: "PUT", token, body: { song_title: songTitle, artist: artist || null, is_new: isNew, kind },
     }),
   getAutoClose: (token) => request("/api/kj/auto-close", { token }),
   setAutoClose: (token, enabled, time) =>
