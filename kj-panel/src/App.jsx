@@ -2881,6 +2881,26 @@ function CategoriesPanel({ token, clubId }) {
   const [busyKey, setBusyKey] = useState(null);
   const [drafts, setDrafts] = useState({});
   const [newDraft, setNewDraft] = useState({ name: "", description: "", price: "", isFree: false, section: "main" });
+  // ДОБАВЛЕНО (2026-11-04, запрос KJ): переключатели разделов "Основные" / "Дополнительные" для гостей.
+  const [sectionVisible, setSectionVisible] = useState({ main: true, extra: true });
+  const [sectionBusy, setSectionBusy] = useState(null);
+  useEffect(() => {
+    api.getTableSettings(token, clubId)
+      .then((s) => setSectionVisible({ main: s.guest_main_categories_visible !== false, extra: s.guest_extra_categories_visible !== false }))
+      .catch(() => {});
+  }, [clubId]);
+  async function handleToggleSection(sectionKey, value) {
+    const field = sectionKey === "main" ? "guest_main_categories_visible" : "guest_extra_categories_visible";
+    setSectionBusy(sectionKey);
+    try {
+      const s = await api.updateTableSettings(token, clubId, { [field]: value });
+      setSectionVisible({ main: s.guest_main_categories_visible !== false, extra: s.guest_extra_categories_visible !== false });
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setSectionBusy(null);
+    }
+  }
 
   async function reload() {
     try {
@@ -3078,6 +3098,17 @@ function CategoriesPanel({ token, clubId }) {
         return (
       <section key={sectionKey}>
         <h2>{sectionTitle} ({sectionCats.length})</h2>
+        <div className="section-visibility">
+          <span>Гости видят этот раздел:</span>
+          <button
+            type="button"
+            className="btn-link"
+            disabled={sectionBusy === sectionKey}
+            onClick={() => handleToggleSection(sectionKey, !sectionVisible[sectionKey])}
+          >
+            {sectionVisible[sectionKey] ? "Вкл" : "Выкл"}
+          </button>
+        </div>
         <ul className="categories-list">
           {sectionCats.map((category) => {
             const draft = draftFor(category);
