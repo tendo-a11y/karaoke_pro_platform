@@ -4748,14 +4748,13 @@ export default function App() {
           <div
             role="group"
             aria-label="Дополнительные категории"
-            style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, margin: "8px 0" }}
+            style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, gridColumn: "1 / -1", margin: "8px 0" }}
           >
             {services.filter((s) => s.section === "extra").map((s) => (
               <button
                 key={s.id}
                 type="button"
                 className={`link-btn${String(serviceId) === String(s.id) ? " finder-modes__active" : ""}`}
-                style={{ width: "100%", height: 56, boxSizing: "border-box", margin: 0, padding: "6px 8px", display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center", lineHeight: 1.2, whiteSpace: "normal" }}
                 onClick={() => setServiceId(String(s.id))}
               >
                 {s.name} — {s.price} лей
