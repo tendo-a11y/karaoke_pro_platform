@@ -1960,7 +1960,7 @@ function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSu
               { key: "orders", label: "Мои заказы" },
               { key: "fav", label: "Избранное" },
               { key: "history", label: "История" },
-            ].filter((b) => showProfileTabs || (b.key !== "fav" && b.key !== "history")).map((b) => (
+            ].filter((b) => showProfileTabs || b.key !== "fav").map((b) => (
               <button
                 key={b.key}
                 type="button"
@@ -3471,6 +3471,22 @@ function TableCloseReceiptBanner({ closeRequest, onDismiss }) {
 // адрес в нём перепутает клуб при автоустановке. Обычное "На экран
 // Домой" браузера сохраняет именно текущую ссылку гостя (с его клубом),
 // поэтому это просто подсказка из двух шагов, без автоматизации.
+function FadingHint({ text, ms = 6000 }) {
+  const [fading, setFading] = useState(false);
+  const [gone, setGone] = useState(false);
+  useEffect(() => {
+    const t1 = setTimeout(() => setFading(true), ms);
+    const t2 = setTimeout(() => setGone(true), ms + 800);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, [ms]);
+  if (gone) return null;
+  return (
+    <p className="empty-hint" style={{ transition: "opacity 0.8s ease", opacity: fading ? 0 : 1 }}>
+      {text}
+    </p>
+  );
+}
+
 const FIRST_ORDER_NOTICE_KEY = "first_order_notice_seen";
 function isFirstOrderNoticeSeen() {
   try {
@@ -4944,7 +4960,9 @@ export default function App() {
         )}
         {favoriteMessage && <div className="banner banner--ok">{favoriteMessage}</div>}
         {cancelError && <div className="banner banner--error">{cancelError}</div>}
-        {orders.length === 0 ? (
+        {orders.length === 0 && ordersTab === "history" && (meInfo?.orders_total ?? 0) === 0 ? (
+          <FadingHint text="История станет доступна после первого заказа" />
+        ) : orders.length === 0 ? (
           <p className="empty-hint">
             {ordersTab === "current"
               ? "Заказов пока нет — закажите первую песню выше."
