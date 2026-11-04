@@ -1662,6 +1662,7 @@ def song_lists():
         "recent": song_lists_service.recent_hour(g.club_id),
         "popular": song_lists_service.popular(g.club_id),
         "new": song_lists_service.new_songs(g.club_id),
+        "duet": song_lists_service.new_songs(g.club_id, kind="duet"),
     })
 
 
