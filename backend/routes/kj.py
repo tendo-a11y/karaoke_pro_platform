@@ -1512,8 +1512,11 @@ def set_new_song():
         return api_error(400, "VALIDATION_ERROR", "song_title обязателен")
     if artist is not None and not isinstance(artist, str):
         return api_error(400, "VALIDATION_ERROR", "artist должен быть строкой")
-    song_lists_service.set_new(g.club_id, song_title, artist, bool(payload.get("is_new")))
-    return api_ok(song_lists_service.new_songs(g.club_id))
+    kind = payload.get("kind") or "new"
+    if kind not in ("new", "duet"):
+        return api_error(400, "VALIDATION_ERROR", "kind должен быть new или duet")
+    song_lists_service.set_new(g.club_id, song_title, artist, bool(payload.get("is_new")), kind=kind)
+    return api_ok(song_lists_service.new_songs(g.club_id) + song_lists_service.new_songs(g.club_id, kind="duet"))
 
 
 # ДОБАВЛЕНО (2026-10, запрос пользователя): KJ управляет списками гостя
@@ -1526,6 +1529,7 @@ def kj_song_lists():
         "recent": song_lists_service.recent_hour(g.club_id),
         "popular": song_lists_service.popular(g.club_id),
         "new": song_lists_service.new_songs(g.club_id),
+        "duet": song_lists_service.new_songs(g.club_id, kind="duet"),
         "hidden_popular": song_lists_service.hidden_popular(g.club_id),
     })
 
