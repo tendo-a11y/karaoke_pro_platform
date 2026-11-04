@@ -4941,7 +4941,7 @@ function GuestsPanel({ token, clubId }) {
     <div className="guests-panel">
       <section>
         <button type="button" className="btn-link" onClick={() => setShowSongLists((v) => !v)}>
-          🎵 Списки песен гостей {showSongLists ? "Закрыть ▲" : "Открыть ▼"}
+          🎵 Списки песен гостей {showSongLists ? "▲" : "▼"}
         </button>
         {showSongLists && (
           <div className="guests-lists">
