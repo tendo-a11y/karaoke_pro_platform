@@ -794,7 +794,7 @@ function SongListsPanel({ token, onPick, tab, onTab }) {
       <div className="song-lists">
         <div className="finder-modes song-lists__modes">
           <button type="button" className="link-btn song-lists__collapse" onClick={toggleCollapsed} aria-expanded="false">
-            Списки песен ▼
+            Списки песен — Открыть ▼
           </button>
         </div>
       </div>
@@ -835,12 +835,12 @@ function SongListsPanel({ token, onPick, tab, onTab }) {
             >
               {t.label}{" "}
               <span className={`collapsible-caret${tab === t.key ? " collapsible-caret--blink" : ""}`}>
-                {tab === t.key ? "▲" : "▼"}
+                {tab === t.key ? "Закрыть ▲" : "Открыть ▼"}
               </span>
             </button>
           ))}
           <button type="button" className="link-btn song-lists__collapse" onClick={toggleCollapsed} aria-expanded="true" aria-label="Свернуть списки">
-            ▲
+            Закрыть ▲
           </button>
         </div>
       </div>
@@ -1277,7 +1277,7 @@ function VipHistoryPanel({ token, embedded = false }) {
         }}
       >
         🧾 Финансы
-        <span className="collapsible-caret">{open ? "▲" : "▼"}</span>
+        <span className="collapsible-caret">{open ? "Закрыть ▲" : "Открыть ▼"}</span>
       </h2>
       {open && (
         <>
@@ -1441,7 +1441,7 @@ function FavoritesPanel({ token, services, onOrdered, orderingDisabled, embedded
         }}
       >
         Избранное ({favorites.length})
-        <span className="collapsible-caret">{open ? "▲" : "▼"}</span>
+        <span className="collapsible-caret">{open ? "Закрыть ▲" : "Открыть ▼"}</span>
       </h2>
       )}
       {error && <div className="banner banner--error">{error}</div>}
@@ -2373,7 +2373,7 @@ function TableGroupPanel({ token, guestId, hasTable, status, onGroupChanged, tab
         }}
       >
         👥 Групповой стол{tableNo != null ? ` · ${tableLabel(tableNo)}` : ""}
-        <span className={`collapsible-caret${open ? " collapsible-caret--blink" : ""}`}>{open ? "▲" : "▼"}</span>
+        <span className={`collapsible-caret${open ? " collapsible-caret--blink" : ""}`}>{open ? "Закрыть ▲" : "Открыть ▼"}</span>
       </h2>
       {adminLine && <p className="table-admin-line">{adminLine}</p>}
       {open && (
