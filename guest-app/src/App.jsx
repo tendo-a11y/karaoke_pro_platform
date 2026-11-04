@@ -4752,7 +4752,7 @@ export default function App() {
             className={`link-btn${searchStyle === "simple" ? " finder-modes__active" : ""}${guideRunning && guideStep === "mode" && !searchStyleTouched ? " search-style-blink" : ""}${searchStyle === "smart" ? " search-style-glow" : ""}`}
             onClick={() => setSearchStyle("simple")}
           >
-            Заказ караоке
+            {searchStyle === "smart" ? null : "Заказ караоке"}
           </button>
           <button
             type="button"
