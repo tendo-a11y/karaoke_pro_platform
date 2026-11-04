@@ -1435,6 +1435,9 @@ function SongListsAdminPanel({ token }) {
   const [busy, setBusy] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [newArtist, setNewArtist] = useState("");
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkText, setBulkText] = useState("");
+  const [bulkReport, setBulkReport] = useState(null);
 
   const load = useCallback(async () => {
     try {
@@ -1496,6 +1499,47 @@ function SongListsAdminPanel({ token }) {
         </div>
         {error && <div className="banner banner--error">{error}</div>}
         {!data && !error && <p className="empty-hint">Загрузка…</p>}
+        {(tab === "new" || tab === "duet") && (
+          <div className="song-admin__bulk">
+            <button
+              type="button"
+              className="btn-link"
+              disabled={busy}
+              onClick={() => { setBulkOpen((v) => !v); setBulkReport(null); }}
+            >
+              {bulkOpen ? "Скрыть окно списком" : "Добавить списком"}
+            </button>
+            {bulkOpen && (
+              <div>
+                <textarea
+                  rows={8}
+                  style={{ width: "100%" }}
+                  placeholder={"Название — Исполнитель\nкаждая песня с новой строки"}
+                  value={bulkText}
+                  onChange={(e) => setBulkText(e.target.value)}
+                />
+                <button
+                  type="button"
+                  className="btn-link"
+                  disabled={busy || !bulkText.trim()}
+                  onClick={() => run(async () => {
+                    const res = await api.bulkAddNewSongs(token, bulkText.split("\n"), tab);
+                    setBulkReport(res);
+                    if (res.added.length) setBulkText("");
+                  })}
+                >
+                  {tab === "duet" ? "Добавить все в дуэты" : "Добавить все в новинки"}
+                </button>
+                {bulkReport && (
+                  <p className="empty-hint">
+                    Добавлено: {bulkReport.added.length}.
+                    {bulkReport.skipped.length ? " Пропущено (уже есть в списках или повтор): " + bulkReport.skipped.join("; ") + "." : ""}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        )}
         {(tab === "new" || tab === "duet") && (
           <form
             className="song-admin__add"
