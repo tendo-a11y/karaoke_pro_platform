@@ -516,7 +516,7 @@ function ServiceSelect({ services, value, onChange, disabled, highlight = false,
   // Палец 👆 у поля «Вставьте ссылку на песню с YouTube» — пока поле пустое (как у остальных полей).
   const linkFieldRef = useRef(null);
   const [linkFingerBox, setLinkFingerBox] = useState(null);
-  const linkFingerOn = !!linkService && linkMode === "link" && !linkText.trim() && open;
+  const linkFingerOn = !!linkService && linkMode === "link" && !linkText.trim();
   useEffect(() => {
     if (!linkFingerOn) { setLinkFingerBox(null); return undefined; }
     // Следим за полем каждый кадр: меню открывается с анимацией и сдвигается, когда открывается клавиатура.
@@ -584,24 +584,11 @@ function ServiceSelect({ services, value, onChange, disabled, highlight = false,
         value={value || ""}
         onChange={() => {}}
       />
-      <button
-        type="button"
-        className={`service-picker__toggle${highlight && !value && !open ? " step-blink" : ""}`}
-        disabled={disabled}
-        aria-expanded={open}
-        onClick={() => {
-          // Категории открываются только после входа за стол (запрос 2026-10-27):
-          // если гость ещё не вошёл, gate открывает экран входа вместо списка.
-          if (!open && gate?.()) return;
-          if (!open) onOpen?.();
-          setOpen(!open);
-        }}
-      >
-        <span>{selected ? labelOf(selected) : "Выберите категорию…"}</span>
-        <span>{open ? "▲" : "▼"}</span>
-      </button>
-      {open && (
-        <div className="service-picker__list">
+      {(
+        <div
+          className="service-picker__list"
+          style={{ position: "static", boxShadow: "none", border: "none", background: "transparent", maxHeight: "none", overflow: "visible", padding: 0, marginTop: 8 }}
+        >
           {/* Пока открыто поле ссылки (EXCLUSIVE), список категорий скрыт; "Назад" возвращает его. */}
           {!linkService && SECTION_KEYS.map((sectionKey) => {
             const group = services
@@ -611,41 +598,20 @@ function ServiceSelect({ services, value, onChange, disabled, highlight = false,
             return (
             <div className="service-picker__section" key={sectionKey}>
             <div className="service-picker__section-title">{SECTION_TITLES[sectionKey]}</div>
-            <ul className="service-picker__group">
-              {group.map(({ s, index }) => (
+            <ul className="service-picker__group" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, padding: 0, margin: 0 }}>
+              {group.map(({ s }, gi) => (
                 <li
                   key={s.id}
-                  className={
-                    selected && selected.id === s.id
-                      ? "service-picker__item--selected"
-                      : highlight && !value
-                        ? "step-blink-item"
-                        : undefined
-                  }
-                  style={highlight && !value ? { animationDelay: `${index}s `, animationDuration: `${Math.max(services.length, 3)}s ` } : undefined}
+                  style={{ listStyle: "none", gridColumn: group.length % 2 === 1 && gi === group.length - 1 ? "1 / -1" : undefined }}
                 >
-                  <div className="service-picker__row">
-                    <button
-                      type="button"
-                      className="service-picker__order"
-                      title="Заказать эту категорию"
-                      onClick={() => choose(s)}
-                    >
-                      Заказ
-                    </button>
-                    <button type="button" className="service-picker__option" style={s.display_color ? { color: s.display_color } : undefined} onClick={() => choose(s)}>
-                      {labelOf(s)}
-                      {s.description ? ` (${s.description})` : ""}
-                    </button>
-                    <button
-                      type="button"
-                      className="service-picker__info"
-                      title="Описание категории"
-                      onClick={() => setCardId(s.id)}
-                    >
-                      ❓
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    className={`link-btn${selected && selected.id === s.id ? " finder-modes__active" : ""}`}
+                    style={{ width: "100%", ...(s.display_color ? { color: s.display_color } : {}) }}
+                    onClick={() => choose(s)}
+                  >
+                    {labelOf(s)}
+                  </button>
                 </li>
               ))}
             </ul>
