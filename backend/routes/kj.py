@@ -1498,7 +1498,7 @@ def set_general_chat():
 @require_kj
 def list_new_songs():
     from services import song_lists_service
-    return api_ok(song_lists_service.new_songs(g.club_id))
+    return api_ok(song_lists_service.new_songs(g.club_id) + song_lists_service.new_songs(g.club_id, kind="duet"))
 
 
 @bp.put("/new-songs")
