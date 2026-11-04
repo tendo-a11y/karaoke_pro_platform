@@ -410,10 +410,17 @@ def list_services():
     не попадает вообще — такую категорию гость не должен ни видеть в форме
     заказа, ни выбрать. Ставить её можно только самому KJ, отдельно на уже
     принятом заказе (см. routes/kj.py::update_order_category_route)."""
-    services = (
-        Service.query.filter_by(club_id=g.club_id, kj_only=False, temp_hidden=False)
-        .order_by(Service.id.asc()).all()
-    )
+    club = db.session.get(Club, g.club_id)
+    query = Service.query.filter_by(club_id=g.club_id, kj_only=False, temp_hidden=False)
+    # ДОБАВЛЕНО (2026-11-04, запрос KJ): выключенный раздел (Основные / Дополнительные) гостям не отдаём.
+    hidden_sections = []
+    if club is not None and not club.guest_main_categories_visible:
+        hidden_sections.append("main")
+    if club is not None and not club.guest_extra_categories_visible:
+        hidden_sections.append("extra")
+    if hidden_sections:
+        query = query.filter(Service.section.notin_(hidden_sections))
+    services = query.order_by(Service.id.asc()).all()
     return api_ok([s.to_dict() for s in services])
 
 
