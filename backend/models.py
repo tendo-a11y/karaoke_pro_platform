@@ -1353,12 +1353,15 @@ class NewSong(db.Model):
     artist = db.Column(db.String(500), nullable=True)
     norm_key = db.Column(db.String(1100), nullable=False)
     created_at = db.Column(db.DateTime(timezone=True), default=utcnow, nullable=False)
+    # ДОБАВЛЕНО (2026-11-04, запрос пользователя): в каком списке песня: "new" — Новинки (до 30), "duet" — Дуэты (без лимита, постоянный).
+    kind = db.Column(db.String(16), nullable=False, default="new", server_default="new")
 
     def to_dict(self):
         return {
             "id": self.id,
             "song_title": self.song_title,
             "artist": self.artist,
+            "kind": self.kind,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
