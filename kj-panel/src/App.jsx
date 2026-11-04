@@ -2881,24 +2881,17 @@ function CategoriesPanel({ token, clubId }) {
   const [busyKey, setBusyKey] = useState(null);
   const [drafts, setDrafts] = useState({});
   const [newDraft, setNewDraft] = useState({ name: "", description: "", price: "", isFree: false, section: "main" });
-  // ДОБАВЛЕНО (2026-11-04, запрос KJ): переключатели разделов "Основные" / "Дополнительные" для гостей.
-  const [sectionVisible, setSectionVisible] = useState({ main: true, extra: true });
-  const [sectionBusy, setSectionBusy] = useState(null);
-  useEffect(() => {
-    api.getTableSettings(token, clubId)
-      .then((s) => setSectionVisible({ main: s.guest_main_categories_visible !== false, extra: s.guest_extra_categories_visible !== false }))
-      .catch(() => {});
-  }, [clubId]);
-  async function handleToggleSection(sectionKey, value) {
-    const field = sectionKey === "main" ? "guest_main_categories_visible" : "guest_extra_categories_visible";
-    setSectionBusy(sectionKey);
+  // Переключатель "Вкл / Выкл" у каждой категории: выключенная не показывается гостям.
+  async function handleToggleEnabled(category, checked) {
+    setBusyKey(`enabled-${category.id}`);
+    setActionError(null);
     try {
-      const s = await api.updateTableSettings(token, clubId, { [field]: value });
-      setSectionVisible({ main: s.guest_main_categories_visible !== false, extra: s.guest_extra_categories_visible !== false });
+      await api.updateCategory(token, clubId, category.id, { is_enabled: checked });
+      await reload();
     } catch (err) {
       setActionError(err instanceof ApiError ? err.message : String(err));
     } finally {
-      setSectionBusy(null);
+      setBusyKey(null);
     }
   }
 
@@ -3098,17 +3091,6 @@ function CategoriesPanel({ token, clubId }) {
         return (
       <section key={sectionKey}>
         <h2>{sectionTitle} ({sectionCats.length})</h2>
-        <div className="section-visibility">
-          <span>Гости видят этот раздел:</span>
-          <button
-            type="button"
-            className="btn-link"
-            disabled={sectionBusy === sectionKey}
-            onClick={() => handleToggleSection(sectionKey, !sectionVisible[sectionKey])}
-          >
-            {sectionVisible[sectionKey] ? "Вкл" : "Выкл"}
-          </button>
-        </div>
         <ul className="categories-list">
           {sectionCats.map((category) => {
             const draft = draftFor(category);
@@ -3159,6 +3141,15 @@ function CategoriesPanel({ token, clubId }) {
                     disabled={saving || deleting || busyKey === `hide-${category.id}`}
                   />
                   Временно убрать
+                </label>
+                <label className="category-row__free" title="Выключенная категория не показывается гостям">
+                  <input
+                    type="checkbox"
+                    checked={category.is_enabled !== false}
+                    onChange={(e) => handleToggleEnabled(category, e.target.checked)}
+                    disabled={saving || deleting || busyKey === `enabled-${category.id}`}
+                  />
+                  {category.is_enabled !== false ? "Вкл" : "Выкл"}
                 </label>
                 <label className="category-row__color" title="Цвет текста категории в очереди и у гостя">
                   <input
