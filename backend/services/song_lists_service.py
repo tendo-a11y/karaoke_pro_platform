@@ -238,3 +238,32 @@ def set_new(club_id: int, song_title: str, artist, is_new: bool, kind: str = "ne
         db.session.delete(existing)
         db.session.commit()
     return is_new
+
+
+def _split_title_artist(text: str):
+    """Строка "Название — Исполнитель" (тире с пробелами; также - и –). Без тире — только название."""
+    parts = re.split(r"\s+[—–-]\s+", text.strip(), maxsplit=1)
+    title = parts[0].strip()
+    artist = parts[1].strip() if len(parts) > 1 and parts[1].strip() else None
+    return title, artist
+
+
+def bulk_add(club_id: int, lines: list, kind: str = "new"):
+    """Массовое добавление в "Новинки" или "Дуэты". Песня, которая уже есть в каком-либо списке
+    или повторяется в самом списке строк, пропускается. Возвращает (добавлено, пропущено)."""
+    added, skipped, seen = [], [], set()
+    for raw in lines:
+        if not isinstance(raw, str) or not raw.strip():
+            continue
+        title, artist = _split_title_artist(raw)
+        if not title:
+            continue
+        label = f"{title} — {artist}" if artist else title
+        key = norm_key(title, artist)
+        if key in seen or NewSong.query.filter_by(club_id=club_id, norm_key=key).first() is not None:
+            skipped.append(label)
+            continue
+        seen.add(key)
+        set_new(club_id, title, artist, True, kind=kind)
+        added.append(label)
+    return added, skipped
