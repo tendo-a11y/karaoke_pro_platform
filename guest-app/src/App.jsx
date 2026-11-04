@@ -756,6 +756,7 @@ function SongListsPanel({ token, onPick, tab, onTab }) {
   const [error, setError] = useState(null);
   const [page, setPage] = useState(0);
   const [sortBy, setSortBy] = useState(null);
+  const [artistQuery, setArtistQuery] = useState("");
   // ДОБАВЛЕНО (2026-10, запрос пользователя "свернуть всю панель"): один
   // треугольник сворачивает весь блок; выбранная вкладка запоминается.
   const [collapsed, setCollapsed] = useState(false);
@@ -804,7 +805,7 @@ function SongListsPanel({ token, onPick, tab, onTab }) {
   const rawItems = (lists && tab && lists[tab]) || [];
   const sortOptions = (tab && SONG_LIST_SORTS[tab]) || [];
   const activeSort = sortOptions.some((o) => o.key === sortBy) ? sortBy : sortOptions[0] && sortOptions[0].key;
-  const items = activeSort === "alpha"
+  const sortedItems = activeSort === "alpha"
     ? [...rawItems].sort((a, b) => {
         const name = (x) => `${x.song_title || ""}${x.artist ? ` — ${x.artist}` : ""}`;
         return name(a).localeCompare(name(b), undefined, { sensitivity: "base" });
@@ -812,6 +813,9 @@ function SongListsPanel({ token, onPick, tab, onTab }) {
     : activeSort === "freq"
       ? [...rawItems].sort((a, b) => (b.count || 0) - (a.count || 0))
       : rawItems;
+  const items = tab === "duet" && artistQuery.trim()
+    ? sortedItems.filter((s) => (s.artist || "").toLowerCase().includes(artistQuery.trim().toLowerCase()))
+    : sortedItems;
   const pages = tab === "popular" ? Math.ceil(items.length / SONG_LIST_PAGE) : 1;
   const shown = tab === "popular" ? items.slice(page * SONG_LIST_PAGE, (page + 1) * SONG_LIST_PAGE) : items;
 
@@ -857,11 +861,22 @@ function SongListsPanel({ token, onPick, tab, onTab }) {
           ))}
         </div>
       )}
+      {tab === "duet" && (
+        <div className="song-lists__sort">
+          <input
+            type="text"
+            value={artistQuery}
+            onChange={(e) => { setArtistQuery(e.target.value); setPage(0); }}
+            placeholder="Поиск по исполнителю"
+            style={{ width: "100%", boxSizing: "border-box", padding: "6px 8px" }}
+          />
+        </div>
+      )}
       {current && (
         <div className="song-lists__body">
           {error && <div className="banner banner--error">{error}</div>}
           {!lists && !error && <p className="empty-hint">Загрузка…</p>}
-          {lists && items.length === 0 && <p className="empty-hint">{current.empty}</p>}
+          {lists && items.length === 0 && <p className="empty-hint">{tab === "duet" && artistQuery.trim() ? "Песен такого исполнителя нет." : current.empty}</p>}
           {shown.length > 0 && (
             <ol className="song-lists__list" start={tab === "popular" ? page * SONG_LIST_PAGE + 1 : 1}>
               {shown.map((song, i) => (
