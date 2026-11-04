@@ -707,6 +707,7 @@ const SONG_LIST_TABS = [
   { key: "recent", label: "История за час", empty: "За последний час ещё ничего не спели." },
   { key: "popular", label: "Популярные", empty: "Пока нет данных." },
   { key: "new", label: "Новинки", empty: "Новинок пока нет." },
+  { key: "duet", label: "Дуэты", empty: "Дуэтов пока нет." },
 ];
 const SONG_LIST_PAGE = 10;
 // ДОБАВЛЕНО (2026-10, запрос пользователя "сортировка по алфавиту и по частоте"):
@@ -718,6 +719,10 @@ const SONG_LIST_SORTS = {
     { key: "alpha", label: "А–Я" },
   ],
   new: [
+    { key: "freq", label: "По частоте" },
+    { key: "alpha", label: "А–Я" },
+  ],
+  duet: [
     { key: "freq", label: "По частоте" },
     { key: "alpha", label: "А–Я" },
   ],
