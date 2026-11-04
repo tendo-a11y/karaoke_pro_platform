@@ -138,7 +138,7 @@ def popular(club_id: int, now=None) -> list[dict]:
     return result
 
 
-def new_songs(club_id: int, now=None) -> list[dict]:
+def new_songs(club_id: int, now=None, kind: str = "new") -> list[dict]:
     # У каждой новинки — число воспроизведений за тот же период, что и у "Популярных".
     # Одна и та же песня в разных написаниях считается одной (см. _SongGroups).
     now = now or datetime.now(timezone.utc)
@@ -153,7 +153,7 @@ def new_songs(club_id: int, now=None) -> list[dict]:
     )
     groups = _SongGroups()
     counter = Counter(groups.key_for(song_title, artist) for song_title, artist in played)
-    rows = NewSong.query.filter_by(club_id=club_id).order_by(NewSong.created_at.desc(), NewSong.id.desc()).all()
+    rows = NewSong.query.filter_by(club_id=club_id, kind=kind).order_by(NewSong.created_at.desc(), NewSong.id.desc()).all()
     result = []
     for r in rows:
         item = r.to_dict()
@@ -208,26 +208,33 @@ def hidden_popular(club_id: int) -> list[dict]:
     return [r.to_dict() for r in rows]
 
 
-def set_new(club_id: int, song_title: str, artist, is_new: bool) -> bool:
-    """Отметить / снять "Новинку". Повторно одна и та же песня не добавляется."""
+def set_new(club_id: int, song_title: str, artist, is_new: bool, kind: str = "new") -> bool:
+    """Отметить / снять песню в списке "new" (Новинки) или "duet" (Дуэты).
+    Одна песня в клубе — только в одном списке."""
     key = norm_key(song_title, artist)
     existing = NewSong.query.filter_by(club_id=club_id, norm_key=key).first()
-    if is_new and existing is None:
-        db.session.add(NewSong(club_id=club_id, song_title=song_title.strip(), artist=(artist or "").strip() or None, norm_key=key))
-        db.session.commit()
-        # ДОБАВЛЕНО (2026-10, запрос пользователя): в "Новинках" не больше
-        # NEW_SONGS_LIMIT песен — новая вытесняет самую старую.
-        extra = (
-            NewSong.query.filter_by(club_id=club_id)
-            .order_by(NewSong.created_at.desc(), NewSong.id.desc())
-            .offset(NEW_SONGS_LIMIT)
-            .all()
-        )
-        if extra:
-            for row in extra:
-                db.session.delete(row)
+    if is_new:
+        if existing is not None and existing.kind == kind:
+            return True
+        if existing is not None:
+            db.session.delete(existing)
             db.session.commit()
-    elif not is_new and existing is not None:
+        db.session.add(NewSong(club_id=club_id, song_title=song_title.strip(), artist=(artist or "").strip() or None, norm_key=key, kind=kind))
+        db.session.commit()
+        # Лимит только у "Новинок" (до NEW_SONGS_LIMIT, новая вытесняет самую старую).
+        # "Дуэты" без лимита — постоянный список, песню убирает ведущий.
+        if kind == "new":
+            extra = (
+                NewSong.query.filter_by(club_id=club_id, kind="new")
+                .order_by(NewSong.created_at.desc(), NewSong.id.desc())
+                .offset(NEW_SONGS_LIMIT)
+                .all()
+            )
+            if extra:
+                for row in extra:
+                    db.session.delete(row)
+                db.session.commit()
+    elif existing is not None and existing.kind == kind:
         db.session.delete(existing)
         db.session.commit()
     return is_new
