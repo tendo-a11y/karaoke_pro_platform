@@ -171,6 +171,7 @@ function QueueTable({ queue, token, clubId }) {
   // ДОБАВЛЕНО (2026-10, запрос пользователя): галочка "Новинка" у песни —
   // такие песни гость видит в списке "Новинки" над живой очередью.
   const [newSongKeys, setNewSongKeys] = useState(() => new Set());
+  const [pickListKey, setPickListKey] = useState(null);
   const [newSongHelpOpen, setNewSongHelpOpen] = useState(false);
   // Знак вопроса "Новинка" — на одной линии с заголовком "Живая очередь
   // VirtualDJ" и ровно над словом "Новинка" (запрос пользователя 2026-10).
@@ -222,9 +223,9 @@ function QueueTable({ queue, token, clubId }) {
       clearInterval(id);
     };
   }, [token]);
-  async function toggleNewSong(item, checked) {
+  async function toggleNewSong(item, checked, kind = "new") {
     try {
-      const list = await api.setNewSong(token, item.song_title, item.artist, checked);
+      const list = await api.setNewSong(token, item.song_title, item.artist, checked, kind);
       setNewSongKeys(new Set((list || []).map((s) => newSongKey(s.song_title, s.artist))));
     } catch {
       // не критично — галочка просто не поменяется
@@ -467,7 +468,7 @@ function QueueTable({ queue, token, clubId }) {
                     type="checkbox"
                     checked={false}
                     disabled={newSongKeys.has(newSongKey(item.song_title, item.artist))}
-                    onChange={(e) => toggleNewSong(item, e.target.checked)}
+                    onChange={(e) => { if (e.target.checked) setPickListKey(newSongKey(item.song_title, item.artist)); }}
                   />
                   <span
                     className={`queue-row__new-word${
@@ -481,6 +482,13 @@ function QueueTable({ queue, token, clubId }) {
                     Новинка
                   </span>
                 </label>
+              )}
+              {pickListKey === newSongKey(item.song_title, item.artist) && (
+                <span className="queue-row__pick" style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+                  <button type="button" className="btn-link" onClick={() => { setPickListKey(null); toggleNewSong(item, true, "new"); }}>В Новинки</button>
+                  <button type="button" className="btn-link" onClick={() => { setPickListKey(null); toggleNewSong(item, true, "duet"); }}>В Дуэты</button>
+                  <button type="button" className="btn-link" onClick={() => setPickListKey(null)}>Отмена</button>
+                </span>
               )}
               {item.orphaned && (
                 <span className="queue-row__orphaned-badge" title="Эта песня больше не найдена в самом VirtualDJ — например, из-за перезапуска сервера. Можно только удалить.">
@@ -1417,6 +1425,7 @@ const SONG_ADMIN_TABS = [
   { key: "recent", label: "История за час" },
   { key: "popular", label: "Популярные" },
   { key: "new", label: "Новинки" },
+  { key: "duet", label: "Дуэты" },
 ];
 
 function SongListsAdminPanel({ token }) {
@@ -1456,7 +1465,7 @@ function SongListsAdminPanel({ token }) {
   }
 
   function removeItem(song) {
-    if (tab === "new") return run(() => api.setNewSong(token, song.song_title, song.artist, false));
+    if (tab === "new" || tab === "duet") return run(() => api.setNewSong(token, song.song_title, song.artist, false, tab));
     if (tab === "popular") {
       return run(() => api.hideSongListItem(token, { kind: "popular", song_title: song.song_title, artist: song.artist || null }));
     }
@@ -1487,14 +1496,14 @@ function SongListsAdminPanel({ token }) {
         </div>
         {error && <div className="banner banner--error">{error}</div>}
         {!data && !error && <p className="empty-hint">Загрузка…</p>}
-        {tab === "new" && (
+        {(tab === "new" || tab === "duet") && (
           <form
             className="song-admin__add"
             onSubmit={(e) => {
               e.preventDefault();
               if (!newTitle.trim()) return;
               run(async () => {
-                await api.setNewSong(token, newTitle.trim(), newArtist.trim() || null, true);
+                await api.setNewSong(token, newTitle.trim(), newArtist.trim() || null, true, tab);
                 setNewTitle("");
                 setNewArtist("");
               });
@@ -1503,7 +1512,7 @@ function SongListsAdminPanel({ token }) {
             <input type="text" placeholder="Исполнитель" value={newArtist} onChange={(e) => setNewArtist(e.target.value)} />
             <input type="text" placeholder="Название песни" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} />
             <button type="submit" className="btn-link" disabled={busy || !newTitle.trim()}>
-              Добавить в новинки
+              {tab === "duet" ? "Добавить в дуэты" : "Добавить в новинки"}
             </button>
           </form>
         )}
