@@ -1320,7 +1320,7 @@ function StatsPanel({ token, clubId }) {
                     {r.receipt.items.map((it, idx) => (
                       <li key={idx} className="precheck__item">
                         <span>
-                          {it.artist ? `${it.artist} — ` : ""}{it.song_title}
+                          {it.song_title}{it.artist ? ` — ${it.artist}` : ""}
                           <span className="empty-hint">
                             {" "}· {it.category}{it.guest_name ? ` · ${it.guest_name}` : ""}
                             {it.paid ? " · оплачено с VIP" : ""}
@@ -1473,7 +1473,7 @@ function SongListsAdminPanel({ token }) {
   }
 
   const items = (data && data[tab]) || [];
-  const label = (s) => (s.artist ? `${s.artist} — ${s.song_title}` : s.song_title);
+  const label = (s) => (s.artist ? `${s.song_title} — ${s.artist}` : s.song_title);
 
   return (
     <main className="app-main">
@@ -3953,7 +3953,7 @@ function GuestCard({ token, clubId, guestId, onBack, onChanged }) {
           <p className="empty-hint">
             Стол: {tableLabel(guest.table_no)}
             {guest.last_song_title && (
-              <> · последняя песня: {guest.last_artist ? `${guest.last_artist} — ` : ""}{guest.last_song_title}</>
+              <> · последняя песня: {guest.last_song_title}{guest.last_artist ? ` — ${guest.last_artist}` : ""}</>
             )}
           </p>
           <div className="guest-kj-name">
@@ -4137,7 +4137,7 @@ function GuestCard({ token, clubId, guestId, onBack, onChanged }) {
                       <ul className="song-search__results">
                         {day.songs.map((s) => (
                           <li key={s.order_id} style={{ padding: "6px 12px" }}>
-                            {s.artist ? `${s.artist} — ${s.song_title}` : s.song_title}
+                            {s.artist ? `${s.song_title} — ${s.artist}` : s.song_title}
                             {s.category ? ` · ${s.category}` : ""} · стол {tableLabel(s.table_no)}
                           </li>
                         ))}
@@ -4161,7 +4161,7 @@ function GuestCard({ token, clubId, guestId, onBack, onChanged }) {
               {guest.favorites.map((f) => (
                 <li key={f.id} style={{ padding: "8px 12px" }}>
                   <input type="checkbox" checked={favSelected.includes(f.id)} disabled={favBusy} onChange={(e) => toggleFavSelected(f.id, e.target.checked)} style={{ marginRight: 8 }} />
-                  {f.artist ? `${f.artist} — ${f.song_title}` : f.song_title}
+                  {f.artist ? `${f.song_title} — ${f.artist}` : f.song_title}
                 </li>
               ))}
             </ul>
@@ -4585,7 +4585,7 @@ function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged, auto
                     {r.receipt.items.map((it, idx) => (
                       <li key={idx} className="precheck__item">
                         <span>
-                          {it.artist ? `${it.artist} — ` : ""}{it.song_title}
+                          {it.song_title}{it.artist ? ` — ${it.artist}` : ""}
                           <span className="empty-hint">
                             {" "}· {it.category}{it.guest_name ? ` · ${it.guest_name}` : ""}
                             {it.paid ? " · оплачено с VIP" : ""}
@@ -4744,7 +4744,7 @@ function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged, auto
                       {precheck.items.map((it) => (
                         <li key={it.order_id} className="precheck__item">
                           <span>
-                            {it.sung ? "✅" : "⏳"} {it.artist ? `${it.artist} — ` : ""}{it.song_title}
+                            {it.sung ? "✅" : "⏳"} {it.song_title}{it.artist ? ` — ${it.artist}` : ""}
                             <span className="empty-hint">
                               {" "}· {it.category}{it.guest_name ? ` · ${it.guest_name}` : ""}
                               {it.paid ? " · оплачено с VIP" : ""}
@@ -6214,7 +6214,7 @@ function NewOrderBanner({ socket }) {
       <span>
         🎤 Новый заказ · {table}
         <br />
-        {order.artist ? `${order.artist} — ` : ""}{order.song_title}
+        {order.song_title}{order.artist ? ` — ${order.artist}` : ""}
       </span>
       <button type="button" onClick={() => setOrder(null)} style={{ fontSize: 22, background: "transparent", border: "none", cursor: "pointer", color: "#111" }}>✕</button>
     </div>
