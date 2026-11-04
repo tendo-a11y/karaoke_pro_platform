@@ -219,6 +219,8 @@ export const api = {
     request("/api/kj/new-songs", {
       method: "PUT", token, body: { song_title: songTitle, artist: artist || null, is_new: isNew, kind },
     }),
+  bulkAddNewSongs: (token, lines, kind = "new") =>
+    request("/api/kj/new-songs/bulk", { method: "POST", token, body: { lines, kind } }),
   getAutoClose: (token) => request("/api/kj/auto-close", { token }),
   setAutoClose: (token, enabled, time) =>
     request("/api/kj/auto-close", {
