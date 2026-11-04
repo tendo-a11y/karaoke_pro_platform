@@ -736,8 +736,7 @@ function SongListRow({ song, onPick }) {
     <li className="song-lists__row">
       <div className="song-lists__line">
         <span className="song-lists__title" role="button" tabIndex={0} onClick={() => onPick(song)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onPick(song); } }}>
-          {song.artist ? `${song.artist} — ` : ""}
-          {song.song_title}
+          {song.song_title}{song.artist ? ` — ${song.artist}` : ""}
         </span>
         {typeof song.count === "number" && (
           <span className="song-lists__count">{song.count}</span>
@@ -807,7 +806,7 @@ function SongListsPanel({ token, onPick, tab, onTab }) {
   const activeSort = sortOptions.some((o) => o.key === sortBy) ? sortBy : sortOptions[0] && sortOptions[0].key;
   const items = activeSort === "alpha"
     ? [...rawItems].sort((a, b) => {
-        const name = (x) => `${x.artist ? `${x.artist} — ` : ""}${x.song_title || ""}`;
+        const name = (x) => `${x.song_title || ""}${x.artist ? ` — ${x.artist}` : ""}`;
         return name(a).localeCompare(name(b), undefined, { sensitivity: "base" });
       })
     : activeSort === "freq"
@@ -1610,7 +1609,7 @@ function SongSearch({ token, onPick }) {
                   setResults([]);
                 }}
               >
-                🎵 {s.artist ? `${s.artist} — ${s.title}` : s.title}
+                🎵 {s.artist ? `${s.title} — ${s.artist}` : s.title}
                 {s.ordered_today && <span className="song-search__ordered-badge"> · уже заказана сегодня</span>}
               </button>
             </li>
@@ -1973,7 +1972,7 @@ function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSu
                       if (screenshotInputRef.current) screenshotInputRef.current.value = "";
                     }}
                   >
-                    🎵 {s.artist ? `${s.artist} — ${s.title}` : s.title}
+                    🎵 {s.artist ? `${s.title} — ${s.artist}` : s.title}
                     {s.ordered_today && <span className="song-search__ordered-badge"> · уже заказана сегодня</span>}
                   </button>
                   <div className="song-confirm-row">
@@ -2057,7 +2056,7 @@ function AiSearch({ token, onPick, onScreenshotHelp, extra = null, onExtra, onSu
                       setSearched(false);
                     }}
                   >
-                    🎵 {s.artist ? `${s.artist} — ${s.title}` : s.title}
+                    🎵 {s.artist ? `${s.title} — ${s.artist}` : s.title}
                     {s.ordered_today && <span className="song-search__ordered-badge"> · уже заказана сегодня</span>}
                   </button>
                   <div className="song-confirm-row">
@@ -5257,8 +5256,7 @@ export default function App() {
                   style={item.category_color ? { borderLeft: "4px solid " + item.category_color } : undefined}>
                   {item.is_vip ? "👑 " : ""}
                   {item.is_crazy ? "🔥 " : ""}
-                  🎵 {item.artist ? `${item.artist} — ` : ""}
-                  {item.song_title}
+                  🎵 {item.song_title}{item.artist ? ` — ${item.artist}` : ""}
                   {item.is_crazy ? " — CRAZY 🔥" : ""}
                   {item.is_mine ? (
                     <span className="queue-item__mine-badge"> — {index + 1} в очереди · ваша песня</span>
@@ -5321,7 +5319,7 @@ function GuestPrecheck({ token }) {
                   {data.items.map((it) => (
                     <li key={it.order_id} className="precheck__item">
                       <span>
-                        {it.sung ? "✅" : "⏳"} {it.artist ? `${it.artist} — ` : ""}{it.song_title}
+                        {it.sung ? "✅" : "⏳"} {it.song_title}{it.artist ? ` — ${it.artist}` : ""}
                         <span className="empty-hint">
                           {" "}· {it.category}{it.paid ? " · оплачено с VIP" : ""}
                         </span>
