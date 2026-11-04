@@ -4782,6 +4782,24 @@ export default function App() {
           >
             +
           </button>
+        {services.some((s) => s.section === "extra") ? (
+          <div
+            role="group"
+            aria-label="Дополнительные категории"
+            style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center", margin: "8px 0" }}
+          >
+            {services.filter((s) => s.section === "extra").map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                className={`link-btn${String(serviceId) === String(s.id) ? " finder-modes__active" : ""}`}
+                onClick={() => setServiceId(String(s.id))}
+              >
+                {s.name} — {s.price} лей
+              </button>
+            ))}
+          </div>
+        ) : null}
         </div>
         <div style={searchStyle === "simple" ? { display: "none" } : undefined}>
         <AiSearch
