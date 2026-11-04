@@ -598,23 +598,19 @@ function ServiceSelect({ services, value, onChange, disabled, highlight = false,
             return (
             <div className="service-picker__section" key={sectionKey}>
             <div className="service-picker__section-title">{SECTION_TITLES[sectionKey]}</div>
-            <ul className="service-picker__group" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, padding: 0, margin: 0 }}>
-              {group.map(({ s }, gi) => (
-                <li
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, width: "100%" }}>
+              {group.map(({ s }) => (
+                <button
                   key={s.id}
-                  style={{ listStyle: "none", gridColumn: group.length % 2 === 1 && gi === group.length - 1 ? "1 / -1" : undefined }}
+                  type="button"
+                  className={`link-btn${selected && selected.id === s.id ? " finder-modes__active" : ""}`}
+                  style={{ width: "100%", height: 56, boxSizing: "border-box", margin: 0, padding: "6px 8px", display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center", lineHeight: 1.2, whiteSpace: "normal", ...(s.display_color ? { color: s.display_color } : {}) }}
+                  onClick={() => choose(s)}
                 >
-                  <button
-                    type="button"
-                    className={`link-btn${selected && selected.id === s.id ? " finder-modes__active" : ""}`}
-                    style={{ width: "100%", ...(s.display_color ? { color: s.display_color } : {}) }}
-                    onClick={() => choose(s)}
-                  >
-                    {labelOf(s)}
-                  </button>
-                </li>
+                  {labelOf(s)}
+                </button>
               ))}
-            </ul>
+            </div>
             </div>
             );
           })}
