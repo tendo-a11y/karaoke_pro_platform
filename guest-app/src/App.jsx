@@ -5218,7 +5218,7 @@ export default function App() {
           onClick={() => setQueueOpen((v) => !v)}
         >
           Активная очередь
-          <span className="collapsible-caret">{queueOpen ? "▲" : "▼"}</span>
+          <span className="collapsible-caret">{queueOpen ? "Закрыть ▲" : "Открыть ▼"}</span>
         </button>
         {queueOpen && (
         <>
