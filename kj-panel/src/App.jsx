@@ -134,7 +134,7 @@ function QueueTable({ queue, token, clubId }) {
   const [copiedIdx, setCopiedIdx] = useState(null);
   async function copySong(item, idx) {
     // Без тире: "Исполнитель Название" (отдельно стоящие - и — убираются).
-    const text = `${item.artist || ""} ${item.song_title || ""}`
+    const text = `${item.song_title || ""} ${item.artist || ""}`
       .replace(/(^|\s)[—–-]+(?=\s|$)/g, " ")
       .replace(/\s+/g, " ")
       .trim();
@@ -1509,8 +1509,8 @@ function SongListsAdminPanel({ token }) {
               });
             }}
           >
-            <input type="text" placeholder="Исполнитель" value={newArtist} onChange={(e) => setNewArtist(e.target.value)} />
             <input type="text" placeholder="Название песни" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} />
+            <input type="text" placeholder="Исполнитель" value={newArtist} onChange={(e) => setNewArtist(e.target.value)} />
             <button type="submit" className="btn-link" disabled={busy || !newTitle.trim()}>
               {tab === "duet" ? "Добавить в дуэты" : "Добавить в новинки"}
             </button>
