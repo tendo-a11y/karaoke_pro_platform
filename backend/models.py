@@ -119,10 +119,6 @@ class Club(db.Model):
     # Вкл/Выкл): False — гости не видят живую очередь клуба (отдаётся пустой
     # список). Переключается KJ справа от "Активная очередь VirtualDJ".
     guest_queue_visible = db.Column(db.Boolean, nullable=False, default=True, server_default=db.true())
-    # ДОБАВЛЕНО (2026-11-04, запрос KJ): раздел "Основные категории" виден гостям (Вкл) или нет (Выкл).
-    guest_main_categories_visible = db.Column(db.Boolean, nullable=False, default=True, server_default=db.true())
-    # ДОБАВЛЕНО (2026-11-04, запрос KJ): раздел "Дополнительные категории" виден гостям (Вкл) или нет (Выкл).
-    guest_extra_categories_visible = db.Column(db.Boolean, nullable=False, default=True, server_default=db.true())
     group_approval_required = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
     # Плашка на экране входа (стол + Google), меняется в KJ (запрос 2026-10-27). None — текст по умолчанию.
     entry_notice = db.Column(db.Text, nullable=True)
@@ -470,6 +466,8 @@ class Service(db.Model):
     # KJ: "Временно убрать" — категория не показывается гостям (GET /api/guest/services),
     # пока галочка стоит. Сбрасывается сама при закрытии вечера (см. table_close_service.close_all_tables).
     temp_hidden = db.Column(db.Boolean, nullable=False, default=False)
+    # ДОБАВЛЕНО (2026-11-04, запрос KJ): категория включена (гости её видят) или выключена (гости не видят).
+    is_enabled = db.Column(db.Boolean, nullable=False, default=True, server_default=db.true())
     # Цвет текста категории в очереди и у гостя (например, "#2563eb"); пусто — цвет по умолчанию.
     color = db.Column(db.String(16), nullable=True)
     # Отсек в списке категорий: "main" — Основные, "extra" — Дополнительные.
@@ -490,6 +488,7 @@ class Service(db.Model):
             "is_free": self.is_free,
             "kj_only": self.kj_only,
             "temp_hidden": self.temp_hidden,
+            "is_enabled": self.is_enabled,
             "color": self.color,
             "section": self.section,
             "link_default": self.link_default,
