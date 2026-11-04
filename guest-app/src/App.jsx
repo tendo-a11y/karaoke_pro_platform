@@ -813,7 +813,7 @@ function SongListsPanel({ token, onPick, tab, onTab }) {
     : activeSort === "freq"
       ? [...rawItems].sort((a, b) => (b.count || 0) - (a.count || 0))
       : rawItems;
-  const items = tab === "duet" && artistQuery.trim()
+  const items = artistQuery.trim()
     ? sortedItems.filter((s) => ((s.song_title || "") + " " + (s.artist || "")).toLowerCase().includes(artistQuery.trim().toLowerCase()))
     : sortedItems;
   const pages = tab === "popular" ? Math.ceil(items.length / SONG_LIST_PAGE) : 1;
@@ -861,7 +861,7 @@ function SongListsPanel({ token, onPick, tab, onTab }) {
           ))}
         </div>
       )}
-      {tab === "duet" && (
+      {current && (
         <div className="song-lists__sort">
           <input
             type="text"
@@ -876,7 +876,7 @@ function SongListsPanel({ token, onPick, tab, onTab }) {
         <div className="song-lists__body">
           {error && <div className="banner banner--error">{error}</div>}
           {!lists && !error && <p className="empty-hint">Загрузка…</p>}
-          {lists && items.length === 0 && <p className="empty-hint">{tab === "duet" && artistQuery.trim() ? "Ничего не найдено." : current.empty}</p>}
+          {lists && items.length === 0 && <p className="empty-hint">{artistQuery.trim() ? "Ничего не найдено." : current.empty}</p>}
           {shown.length > 0 && (
             <ol className="song-lists__list" start={tab === "popular" ? page * SONG_LIST_PAGE + 1 : 1}>
               {shown.map((song, i) => (
