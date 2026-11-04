@@ -1245,6 +1245,17 @@ button.step-blink-fill { animation: button-fill-blink 2s ease-in-out infinite; }
   animation: step-blink 2.4s ease-in-out infinite;
 }
 
+/* Кнопка "Петь караоке" светится и тихо моргает, когда открыт поиск по описанию ("+"). */
+.search-style-choice .search-style-glow {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  animation: search-style-glow 2.4s ease-in-out infinite;
+}
+@keyframes search-style-glow {
+  0%, 100% { opacity: 1; box-shadow: 0 0 6px 1px rgba(255, 176, 32, 0.45); }
+  50% { opacity: 0.6; box-shadow: 0 0 14px 4px rgba(255, 176, 32, 0.9); }
+}
+
 /* Палец-подсказка при первом заходе: указывает, куда нажать (запрос 2026-10-28). */
 .guide-finger {
   position: fixed;
