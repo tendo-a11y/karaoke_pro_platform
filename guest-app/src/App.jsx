@@ -4755,6 +4755,7 @@ export default function App() {
                 key={s.id}
                 type="button"
                 className={`link-btn${String(serviceId) === String(s.id) ? " finder-modes__active" : ""}`}
+                style={{ height: 46, boxSizing: "border-box", margin: 0, padding: "4px 8px", display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center", lineHeight: 1.15, whiteSpace: "normal" }}
                 onClick={() => setServiceId(String(s.id))}
               >
                 {s.name} — {s.price} лей
