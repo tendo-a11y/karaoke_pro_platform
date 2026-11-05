@@ -187,3 +187,20 @@ def delete_category(club_id: int, category_id: int) -> None:
         )
     db.session.delete(category)
     db.session.commit()
+
+
+def reset_extra_categories_for_day(club_id: int) -> None:
+    """Дополнительные категории выключаются один раз в начале нового дня (день начинается
+    в 06:00 по Кишинёву). Дальше ведущий включает нужную категорию сам, и до следующего дня
+    она не выключается."""
+    from datetime import datetime, timedelta
+    from zoneinfo import ZoneInfo
+    from models import Club
+
+    today = (datetime.now(ZoneInfo("Europe/Chisinau")) - timedelta(hours=6)).date()
+    club = db.session.get(Club, club_id)
+    if club is None or club.extra_categories_reset_day == today:
+        return
+    Service.query.filter_by(club_id=club_id, section="extra").update({"is_enabled": False}, synchronize_session=False)
+    club.extra_categories_reset_day = today
+    db.session.commit()
