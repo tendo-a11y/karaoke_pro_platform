@@ -499,6 +499,9 @@ function ServiceSelect({ services, value, onChange, disabled, highlight = false,
     onOpenChange?.(open);
   }, [open]);
   const [cardId, setCardId] = useState(null);
+  // После выбора категории остальные прячутся (видна только выбранная); "Другая категория" возвращает список.
+  const [listExpanded, setListExpanded] = useState(true);
+  useEffect(() => { setListExpanded(!value); }, [value]);
   const selected = services.find((s) => String(s.id) === String(value));
   const card = services.find((s) => String(s.id) === String(cardId));
   const isCrazy = (s) => (s.name || "").trim().toUpperCase() === "CRAZY";
@@ -593,7 +596,7 @@ function ServiceSelect({ services, value, onChange, disabled, highlight = false,
           {!linkService && SECTION_KEYS.map((sectionKey) => {
             const group = services
               .map((s, index) => ({ s, index }))
-              .filter(({ s }) => (s.section || "main") === sectionKey);
+              .filter(({ s }) => (s.section || "main") === sectionKey && (listExpanded || (selected && selected.id === s.id)));
             if (group.length === 0) return null;
             return (
             <div className="service-picker__section" key={sectionKey}>
@@ -614,6 +617,11 @@ function ServiceSelect({ services, value, onChange, disabled, highlight = false,
             </div>
             );
           })}
+          {!listExpanded && selected && !linkService && (
+            <button type="button" className="link-btn" style={{ width: "100%", marginTop: 8 }} onClick={() => setListExpanded(true)}>
+              Другая категория
+            </button>
+          )}
           {linkService && linkMode === "choose" && (
             <div className="service-picker__linkbox">
               <div className="service-picker__linkhint">{linkService.name}: как хотите заказать?</div>
