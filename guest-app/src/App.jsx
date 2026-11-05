@@ -4959,90 +4959,6 @@ export default function App() {
             embedded
           />
         ) : null}
-        {showFullUi && !limitedView && (orderExtra === "orders" || orderExtra === "history") ? (
-          <div className={`profile-finance pick-scope${reorderPickedId != null ? " orders-block--pick" : ""}`}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}><h2 style={{ margin: 0 }}>{ordersTab === "history" ? "История" : "Мои заказы"}</h2><div style={{ display: "flex", alignItems: "center", gap: 6 }}><button type="button" className="link-btn" onClick={() => setOrdersCollapsed((v) => !v)}>{ordersCollapsed ? "Открыть" : "Закрыть"}</button><button type="button" className="link-btn" aria-label={ordersCollapsed ? "Развернуть" : "Свернуть"} onClick={() => setOrdersCollapsed((v) => !v)}>{ordersCollapsed ? "▲" : "▼"}</button></div></div> 
-          {!ordersCollapsed && (<>{ordersTab !== "history" && <GuestPrecheck token={session?.token} />}
-        {ordersTab !== "history" && orders.some((o) => o.status === "pending" || o.status === "queued") && (
-          <button
-            type="button"
-            className="link-btn bulk-cancel-btn"
-            disabled={bulkCancelBusy}
-            onClick={handleCancelUnplayed}
-          >
-            {bulkCancelBusy ? "Удаляем…" : "🗑 Удалить все не спетые"}
-          </button>
-        )}
-        {bulkCancelInfo && <div className="empty-hint">{bulkCancelInfo}</div>}
-        {ordersTab === "history" && (
-          <ClearStatsControl
-            onClear={async (period) => {
-              await api.clearMyHistory(session.token, "history", period);
-              await refreshOrders();
-            }}
-          />
-        )}
-        {ordersTab === "history" && (
-          <div className="order-history-periods">
-            {ORDER_HISTORY_PERIODS.map((p) => (
-              <button
-                key={p.label}
-                type="button"
-                className={`link-btn${orderHistoryDays === p.days ? " order-history-periods__active" : ""}`}
-                onClick={() => setOrderHistoryDays(p.days)}
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
-        )}
-        {favoriteMessage && <div className="banner banner--ok">{favoriteMessage}</div>}
-        {cancelError && <div className="banner banner--error">{cancelError}</div>}
-        {orders.length === 0 && ordersTab === "history" && (meInfo?.orders_total ?? 0) === 0 ? (
-          <FadingHint text="История станет доступна после первого заказа" />
-        ) : orders.length === 0 ? (
-          <p className="empty-hint">
-            {ordersTab === "current"
-              ? "Заказов пока нет — закажите первую песню выше."
-              : orderHistoryDays === null
-                ? "Заказов пока нет."
-                : "Заказов за этот период нет."}
-          </p>
-        ) : (
-          <ul className="order-list">
-            {orders.map((o) => (
-              <OrderRow
-                key={o.id}
-                order={o}
-                token={session.token}
-                services={services}
-                isReplacing={replacingOrderId === o.id}
-                onToggleReplace={handleToggleReplace}
-                onReplace={handleReplaceOrder}
-                replaceBusy={replaceBusyOrderId === o.id}
-                onCancel={handleCancelOrder}
-                cancelBusy={cancelBusyOrderId === o.id}
-                // ДОБАВЛЕНО (2026-09-29, жалоба пользователя "нет
-                // возможности добавить песню в избранное из Мои заказы и из
-                // истории"): кнопка "➕ В избранное" в OrderRow уже была
-                // готова (как и handleAddFavorite ниже) — не хватало только
-                // этих двух свойств, чтобы она показалась в обоих списках
-                // (эта секция рендерит и "Мои заказы", и "Историю" —
-                // переключение между ними меняет только сам список orders).
-                // Показывается у каждой песни без исключений.
-                onFavorite={handleAddFavorite}
-                favoriteBusy={favoriteBusyOrderId === o.id}
-                reorder={ordersTab === "history" && canOrder}
-                onReordered={refreshOrders}
-                reorderPickedId={reorderPickedId}
-                onReorderPick={setReorderPickedId}
-              />
-            ))}
-          </ul>
-        )}
-          </>)}
-          </div>
-        ) : null}
         {activated && !groupOk ? (
           <p className="empty-hint">
             Пока вы не одобренный участник группового стола — см. панель «Групповой стол» выше.
@@ -5213,6 +5129,90 @@ export default function App() {
             )}
           </>
         )}
+        {showFullUi && !limitedView && (orderExtra === "orders" || orderExtra === "history") ? (
+          <div className={`profile-finance pick-scope${reorderPickedId != null ? " orders-block--pick" : ""}`}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}><h2 style={{ margin: 0 }}>{ordersTab === "history" ? "История" : "Мои заказы"}</h2><div style={{ display: "flex", alignItems: "center", gap: 6 }}><button type="button" className="link-btn" onClick={() => setOrdersCollapsed((v) => !v)}>{ordersCollapsed ? "Открыть" : "Закрыть"}</button><button type="button" className="link-btn" aria-label={ordersCollapsed ? "Развернуть" : "Свернуть"} onClick={() => setOrdersCollapsed((v) => !v)}>{ordersCollapsed ? "▲" : "▼"}</button></div></div> 
+          {!ordersCollapsed && (<>{ordersTab !== "history" && <GuestPrecheck token={session?.token} />}
+        {ordersTab !== "history" && orders.some((o) => o.status === "pending" || o.status === "queued") && (
+          <button
+            type="button"
+            className="link-btn bulk-cancel-btn"
+            disabled={bulkCancelBusy}
+            onClick={handleCancelUnplayed}
+          >
+            {bulkCancelBusy ? "Удаляем…" : "🗑 Удалить все не спетые"}
+          </button>
+        )}
+        {bulkCancelInfo && <div className="empty-hint">{bulkCancelInfo}</div>}
+        {ordersTab === "history" && (
+          <ClearStatsControl
+            onClear={async (period) => {
+              await api.clearMyHistory(session.token, "history", period);
+              await refreshOrders();
+            }}
+          />
+        )}
+        {ordersTab === "history" && (
+          <div className="order-history-periods">
+            {ORDER_HISTORY_PERIODS.map((p) => (
+              <button
+                key={p.label}
+                type="button"
+                className={`link-btn${orderHistoryDays === p.days ? " order-history-periods__active" : ""}`}
+                onClick={() => setOrderHistoryDays(p.days)}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+        )}
+        {favoriteMessage && <div className="banner banner--ok">{favoriteMessage}</div>}
+        {cancelError && <div className="banner banner--error">{cancelError}</div>}
+        {orders.length === 0 && ordersTab === "history" && (meInfo?.orders_total ?? 0) === 0 ? (
+          <FadingHint text="История станет доступна после первого заказа" />
+        ) : orders.length === 0 ? (
+          <p className="empty-hint">
+            {ordersTab === "current"
+              ? "Заказов пока нет — закажите первую песню выше."
+              : orderHistoryDays === null
+                ? "Заказов пока нет."
+                : "Заказов за этот период нет."}
+          </p>
+        ) : (
+          <ul className="order-list">
+            {orders.map((o) => (
+              <OrderRow
+                key={o.id}
+                order={o}
+                token={session.token}
+                services={services}
+                isReplacing={replacingOrderId === o.id}
+                onToggleReplace={handleToggleReplace}
+                onReplace={handleReplaceOrder}
+                replaceBusy={replaceBusyOrderId === o.id}
+                onCancel={handleCancelOrder}
+                cancelBusy={cancelBusyOrderId === o.id}
+                // ДОБАВЛЕНО (2026-09-29, жалоба пользователя "нет
+                // возможности добавить песню в избранное из Мои заказы и из
+                // истории"): кнопка "➕ В избранное" в OrderRow уже была
+                // готова (как и handleAddFavorite ниже) — не хватало только
+                // этих двух свойств, чтобы она показалась в обоих списках
+                // (эта секция рендерит и "Мои заказы", и "Историю" —
+                // переключение между ними меняет только сам список orders).
+                // Показывается у каждой песни без исключений.
+                onFavorite={handleAddFavorite}
+                favoriteBusy={favoriteBusyOrderId === o.id}
+                reorder={ordersTab === "history" && canOrder}
+                onReordered={refreshOrders}
+                reorderPickedId={reorderPickedId}
+                onReorderPick={setReorderPickedId}
+              />
+            ))}
+          </ul>
+        )}
+          </>)}
+          </div>
+        ) : null}
       </section>
 
       {/* "Мои заказы / Избранное / История" (запрос 2026-10-28): над "Групповой стол". */}
