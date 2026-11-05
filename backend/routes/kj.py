@@ -1218,6 +1218,7 @@ def list_categories(club_id):
     denied = _ensure_own_club(club_id)
     if denied:
         return denied
+    category_service.reset_extra_categories_for_day(club_id)
     categories = category_service.list_categories(club_id)
     return api_ok([c.to_dict() for c in categories])
 
