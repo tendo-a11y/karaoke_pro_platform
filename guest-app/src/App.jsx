@@ -3815,6 +3815,7 @@ export default function App() {
       window.removeEventListener("scroll", place, true);
     };
   }, [guideTarget]);
+  const [extraCatsOpen, setExtraCatsOpen] = useState(true);
   const songListsOpen = songListsTab != null;
   const turnToastShownRef = useRef(new Set());
   useEffect(() => {
@@ -4769,17 +4770,22 @@ export default function App() {
             aria-label="Дополнительные категории"
             style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, gridColumn: "1 / -1", margin: "8px 0" }}
           >
-            {services.filter((s) => s.section === "extra").map((s) => (
+            {services.filter((s) => s.section === "extra" && (extraCatsOpen || String(serviceId) === String(s.id))).map((s) => (
               <button
                 key={s.id}
                 type="button"
                 className={`link-btn${String(serviceId) === String(s.id) ? " finder-modes__active" : ""}`}
                 style={{ height: 46, boxSizing: "border-box", margin: 0, padding: "4px 8px", display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center", lineHeight: 1.15, whiteSpace: "normal" }}
-                onClick={() => setServiceId(String(s.id))}
+                onClick={() => { setServiceId(String(s.id)); setExtraCatsOpen(false); }}
               >
                 {s.name} — {s.price} лей
               </button>
             ))}
+          </div>
+        ) : null}
+        {!extraCatsOpen && services.some((s) => s.section === "extra") ? (
+          <div style={{ gridColumn: "1 / -1", margin: "4px 0 8px" }}>
+            <button type="button" className="link-btn" onClick={() => setExtraCatsOpen(true)}>Другая категория</button>
           </div>
         ) : null}
         </div>
