@@ -4533,6 +4533,11 @@ export default function App() {
           </button>
         </header>
         <ScreenshotOrderPanel token={session.token} services={services} onNeedGoogle={async () => { if (await googleGateDue()) { scheduleGoogleGate(); setGoogleGate("short"); return true; } return false; }} />
+        <div style={{ textAlign: "center", marginTop: 16 }}>
+          <button type="button" className="btn-link" onClick={() => setView("home")}>
+            ← Назад
+          </button>
+        </div>
       </div>
     );
   }
