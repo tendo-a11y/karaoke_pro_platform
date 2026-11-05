@@ -370,6 +370,18 @@ def preview_receipt(club_id: int, table_no: int) -> dict | None:
         .all()
     )
     orders = [o for o in orders if o.id not in waiting_ids]
+    # ДОБАВЛЕНО (2026-11): песни, которые не входят в сумму (бонусные, ждущие места) — тоже должны быть в пречеке и в счётчике "Песен", чтобы число совпадало со списком сыгранных.
+    billed_ids = {o.id for o in orders}
+    unbilled_orders = [
+        o for o in Order.query.filter(
+            Order.club_id == club_id,
+            Order.table_no == table_no,
+            Order.status == STATUS_PLAYING,
+            Order.created_at >= since,
+            Order.settled_at.is_(None),
+        ).order_by(Order.created_at.asc(), Order.id.asc()).all()
+        if o.id not in billed_ids
+    ]
 
     service_ids = {o.service_id for o in orders if o.service_id is not None}
     services_by_id = {}
@@ -437,9 +449,25 @@ def preview_receipt(club_id: int, table_no: int) -> dict | None:
             "paid": paid,
         })
 
+    for order in unbilled_orders:
+        svc = db.session.get(Service, order.service_id) if order.service_id else None
+        items.append({
+            "order_id": order.id,
+            "service_id": order.service_id,
+            "pending_category_at": None,
+            "song_title": order.song_title,
+            "artist": order.artist,
+            "category": svc.name if svc is not None else "Без категории",
+            "price": 0.0,
+            "guest_name": None,
+            "guest_type": order.guest_type,
+            "sung": True,
+            "paid": True,
+        })
+
     return {
         "table_no": table_no,
-        "song_count": len(orders),
+        "song_count": len(orders) + len(unbilled_orders),
         "categories": list(categories.values()),
         "guests": list(guests.values()),
         "items": items,
