@@ -3997,7 +3997,7 @@ function GuestCard({ token, clubId, guestId, onBack, onChanged }) {
           <p className="empty-hint">
             Стол: {tableLabel(guest.table_no)}
             {guest.last_song_title && (
-              <> · последняя песня: {guest.last_song_title}{guest.last_artist ? ` — ${guest.last_artist}` : ""}</>
+              <> · последняя песня ({guest.last_song_sung ? "✅ спета" : "⏳ ещё не спета"}): {guest.last_song_title}{guest.last_artist ? ` — ${guest.last_artist}` : ""}</>
             )}
           </p>
           <div className="guest-kj-name">
