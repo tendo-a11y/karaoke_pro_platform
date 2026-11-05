@@ -55,6 +55,9 @@ class Club(db.Model):
     # автоматически). Всё, что до этого, — прошлый вечер.
     evening_closed_at = db.Column(db.DateTime(timezone=True), nullable=True)
 
+    # День, за который уже выключены дополнительные категории (в новый день выключаем заново).
+    extra_categories_reset_day = db.Column(db.Date, nullable=True)
+
     # Перенос полей старой Venue (handlers/admin.py: venue_add_*/venue_show_details/
     # venue_contacts_list) — контактные данные клуба и число столов. В старой
     # SQLite были NOT NULL (заполнялись при создании venue пошаговой формой),
