@@ -23,7 +23,7 @@ from datetime import date, datetime, time, timedelta, timezone
 
 from auth import is_guest_app_open
 from extensions import db
-from models import Favorite, GuestAccount, GuestStatus, Order, STATUS_COMPLETED, Service, TableGroupMember, VipClient, GuestKjName
+from models import Favorite, GuestAccount, GuestStatus, Order, STATUS_COMPLETED, STATUS_PLAYING, Service, TableGroupMember, VipClient, GuestKjName
 
 WINDOW_EVENING_DAYS = 1
 WINDOW_WEEK_DAYS = 7
@@ -48,6 +48,7 @@ def _empty_entry(guest_id: int) -> dict:
     return {
         "guest_id": guest_id,
         "last_song_title": None,
+        "last_song_sung": False,
         "last_artist": None,
         "last_activity_at": None,
         "latest_table_no": None,
@@ -91,6 +92,7 @@ def _collect_order_stats(club_id: int, since_month: datetime, since_week: dateti
             entry["last_activity_at"] = order.created_at
             entry["latest_table_no"] = order.table_no
             entry["last_song_title"] = order.song_title
+            entry["last_song_sung"] = order.status in (STATUS_PLAYING, STATUS_COMPLETED)
             entry["last_artist"] = order.artist
         entry["orders_month"] += 1
         if order.created_at >= since_week:
@@ -166,6 +168,7 @@ def list_guests(club_id: int, guest_type_filter: str | None = None) -> list[dict
             "display_name": account.display_name if account else None,
             "kj_name": kj_names.get(gid),
             "last_song_title": entry["last_song_title"],
+            "last_song_sung": entry["last_song_sung"],
             "last_artist": entry["last_artist"],
             "last_activity_at": entry["last_activity_at"].isoformat() if entry["last_activity_at"] else None,
             "orders_evening": entry["orders_evening"],
@@ -221,6 +224,7 @@ def get_guest_detail(club_id: int, guest_id: int) -> dict:
         # VIP-клиентов (vip_service.list_clients).
         "photo_data_url": account.photo_data_url if account else None,
         "last_song_title": entry["last_song_title"],
+        "last_song_sung": entry["last_song_sung"],
         "last_artist": entry["last_artist"],
         "last_activity_at": entry["last_activity_at"].isoformat() if entry["last_activity_at"] else None,
         "orders_evening": entry["orders_evening"],
