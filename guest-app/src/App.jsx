@@ -2911,12 +2911,12 @@ function ScreenshotOrderPanel({ token, services, autoFocus, onFocused, onNeedGoo
       </label>
       <div className="finder-modes" role="group" aria-label="Что нужно">
         {karaokeSvc && (
-          <button ref={karaokeBtnRef} type="button" className={`link-btn${serviceId === String(karaokeSvc.id) ? " finder-modes__active" : ""}`} disabled={busy || !pendingImage} onClick={() => handlePick(karaokeSvc.id, `🎤 Петь караоке — ${karaokeSvc.price} лей`)}>
+          <button ref={karaokeBtnRef} type="button" className={`link-btn${serviceId === String(karaokeSvc.id) ? " finder-modes__active" : ""}`} style={{ borderColor: "#ffb020", color: "#ffb020", borderWidth: 2 }} disabled={busy || !pendingImage} onClick={() => handlePick(karaokeSvc.id, `🎤 Петь караоке — ${karaokeSvc.price} лей`)}>
             🎤 Петь караоке — {karaokeSvc.price} лей
           </button>
         )}
         {listenSvc && (
-          <button ref={listenBtnRef} type="button" className={`link-btn${serviceId === String(listenSvc.id) ? " finder-modes__active" : ""}`} disabled={busy || !pendingImage} onClick={() => handlePick(listenSvc.id, `🎧 Слушать музыку — ${listenSvc.price} лей`)}>
+          <button ref={listenBtnRef} type="button" className={`link-btn${serviceId === String(listenSvc.id) ? " finder-modes__active" : ""}`} style={{ borderColor: "#60a5fa", color: "#60a5fa", borderWidth: 2 }} disabled={busy || !pendingImage} onClick={() => handlePick(listenSvc.id, `🎧 Слушать музыку — ${listenSvc.price} лей`)}>
             🎧 Слушать музыку — {listenSvc.price} лей
           </button>
         )}
