@@ -487,7 +487,7 @@ function ChatAlertToggle() {
 const SECTION_KEYS = ["main", "extra"];
 const SECTION_TITLES = { main: "Основные", extra: "Дополнительные" };
 
-function ServiceSelect({ services, value, onChange, disabled, highlight = false, onOpen, onOpenChange, onCancel, onLinkSubmit, onManualPick, gate }) {
+function ServiceSelect({ services, value, onChange, disabled, highlight = false, onOpen, onOpenChange, onCancel, onLinkSubmit, onManualPick, gate, quickPick = false }) {
   // Свой список выбора категории вместо системного (запрос пользователя
   // 2026-10): в раскрытом списке у каждой категории кнопка "❓", которая
   // открывает карточку категории поверх экрана (название, цена, описание,
@@ -505,6 +505,8 @@ function ServiceSelect({ services, value, onChange, disabled, highlight = false,
   const selected = services.find((s) => String(s.id) === String(value));
   const card = services.find((s) => String(s.id) === String(cardId));
   const isCrazy = (s) => (s.name || "").trim().toUpperCase() === "CRAZY";
+  // Избранное: KARAOKE и EXCLUSIVE показываются кнопками "Петь караоке" и "Слушать песню".
+  const quickOf = (s) => quickPick && /^(KARAOKE|EXCLUSIVE)$/i.test((s.name || "").trim());
   const labelOf = (s) => `${s.name}${s.is_free ? " (бесплатно)" : ` — ${s.price}`}`;
 
   // EXCLUSIVE (категория для заказов по ссылке): после нажатия не закрываем меню,
@@ -607,10 +609,10 @@ function ServiceSelect({ services, value, onChange, disabled, highlight = false,
                   key={s.id}
                   type="button"
                   className={`link-btn${selected && selected.id === s.id ? " finder-modes__active" : ""}`}
-                  style={{ width: "100%", height: 56, boxSizing: "border-box", margin: 0, padding: "6px 8px", display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center", lineHeight: 1.2, whiteSpace: "normal", ...(s.display_color ? { color: s.display_color } : {}) }}
+                  style={{ width: "100%", height: 56, boxSizing: "border-box", margin: 0, padding: "6px 8px", display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center", lineHeight: 1.2, whiteSpace: "normal", ...(s.display_color ? { color: s.display_color } : {}), ...(quickOf(s) ? { border: "2px solid #94a3b8", borderRadius: 12, fontWeight: 700, background: "transparent" } : {}) }}
                   onClick={() => choose(s)}
                 >
-                  {labelOf(s)}
+                  {quickOf(s) ? (/karaoke/i.test(s.name || "") ? "Петь караоке" : "Слушать песню") : labelOf(s)}
                 </button>
               ))}
             </div>
@@ -1464,6 +1466,7 @@ function FavoritesPanel({ token, services, onOrdered, orderingDisabled, embedded
               {f.artist && <div className="order-row__artist">🎤 {f.artist}</div>}
               {services.length > 0 && (
                 <ServiceSelect
+                  quickPick
                   services={services}
                   value={serviceSelections[f.id] || ""}
                   onChange={(v) => {
