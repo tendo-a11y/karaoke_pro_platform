@@ -4950,6 +4950,9 @@ export default function App() {
               // Слушать песню (категория по ссылке/100 лей): показываем её плашку с ценой, как при выборе в форме.
               const quickSvc = services.find((x) => String(x.id) === String(sid));
               if (quickSvc && quickSvc.link_default) setInternetHint({ name: quickSvc.name, price: quickSvc.price, fromLink: false });
+              // Петь караоке (обычное, 35 лей): плашка сразу, как для 100 лей.
+              const isKaraokeSvc = quickSvc && (quickSvc.name === "KARAOKE" || quickSvc.description === "Обычное караоке");
+              if (isKaraokeSvc && fav.artist && String(fav.artist).trim()) setInternetHint({ name: quickSvc.description || quickSvc.name, price: quickSvc.price, fromLink: false });
               const panel = document.querySelector(".order-form-panel");
               if (panel) panel.scrollIntoView({ behavior: "smooth", block: "start" });
             }}
