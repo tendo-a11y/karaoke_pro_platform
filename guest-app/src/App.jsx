@@ -506,7 +506,7 @@ function ServiceSelect({ services, value, onChange, disabled, highlight = false,
   const card = services.find((s) => String(s.id) === String(cardId));
   const isCrazy = (s) => (s.name || "").trim().toUpperCase() === "CRAZY";
   // Избранное: KARAOKE и EXCLUSIVE показываются кнопками "Петь караоке" и "Слушать песню".
-  const quickOf = (s) => quickPick && /^(KARAOKE|EXCLUSIVE)$/i.test((s.name || "").trim());
+  const quickOf = (s) => quickPick && /^(KARAOKE|EX\w*CLUSIVE)$/i.test((s.name || "").trim());
   const labelOf = (s) => `${s.name}${s.is_free ? " (бесплатно)" : ` — ${s.price}`}`;
 
   // EXCLUSIVE (категория для заказов по ссылке): после нажатия не закрываем меню,
