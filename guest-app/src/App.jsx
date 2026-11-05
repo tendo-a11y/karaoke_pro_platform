@@ -1342,7 +1342,7 @@ function VipHistoryPanel({ token, embedded = false }) {
   );
 }
 
-function FavoritesPanel({ token, services, onOrdered, orderingDisabled, embedded = false, onPickingChange }) {
+function FavoritesPanel({ token, services, onOrdered, orderingDisabled, embedded = false, onPickingChange, onQuickPick }) {
   const [favorites, setFavorites] = useState([]);
   const [error, setError] = useState(null);
   const [orderMessage, setOrderMessage] = useState(null);
@@ -1470,6 +1470,12 @@ function FavoritesPanel({ token, services, onOrdered, orderingDisabled, embedded
                   services={services}
                   value={serviceSelections[f.id] || ""}
                   onChange={(v) => {
+                    // Кнопки "Петь караоке" / "Слушать песню": песня и категория уходят в большую форму заказа, дальше стандартный путь.
+                    const pickedSvc = services.find((x) => String(x.id) === String(v));
+                    if (v && pickedSvc && onQuickPick && /^(KARAOKE|EX\w*CLUSIVE)$/i.test((pickedSvc.name || "").trim())) {
+                      onQuickPick(f, v);
+                      return;
+                    }
                     setServiceSelections((prev) => ({ ...prev, [f.id]: v }));
                     // Выбор категории сразу отправляет заказ (запрос 2026-10).
                     const tsel = toneSelections[f.id];
@@ -4935,6 +4941,15 @@ export default function App() {
             onOrdered={refreshOrders}
             orderingDisabled={!canOrder}
             onPickingChange={setFavPicking}
+            onQuickPick={(fav, sid) => {
+              setSongTitle(fav.song_title || "");
+              setArtist(fav.artist || "");
+              setSongUrl(null);
+              setOrderExtra(null);
+              setServiceId(String(sid));
+              const panel = document.querySelector(".order-form-panel");
+              if (panel) panel.scrollIntoView({ behavior: "smooth", block: "start" });
+            }}
             embedded
           />
         ) : null}
