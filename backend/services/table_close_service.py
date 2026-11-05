@@ -929,6 +929,11 @@ def close_all_tables(club_id: int, kj) -> CloseAllResult:
         Service.query.filter_by(club_id=club_id, temp_hidden=True).update(
             {"temp_hidden": False}, synchronize_session=False
         )
+        # ДОБАВЛЕНО (запрос пользователя): дополнительные категории на новом вечере скрыты,
+        # KJ включает их сам, если нужна конкретная категория.
+        Service.query.filter_by(club_id=club_id, section="extra").update(
+            {"is_enabled": False}, synchronize_session=False
+        )
         # ДОБАВЛЕНО (2026-10, запрос пользователя): "Закрыть все столы"
         # полностью завершает вечер — следующий вечер начинается с чистого
         # листа (например, пометки "уже заказана сегодня").
