@@ -3758,6 +3758,8 @@ export default function App() {
   const [songListsTab, setSongListsTab] = useState(null);
   // Активная очередь по умолчанию свёрнута; открывается по треугольнику (запрос 2026-10-28).
   const [queueOpen, setQueueOpen] = useState(false);
+  // Закрыли очередь — закрываем и открытый список песен, иначе весь экран остаётся скрытым.
+  useEffect(() => { if (!queueOpen) setSongListsTab(null); }, [queueOpen]);
   // Активная очередь закрывается, если нажали на что-то вне её раздела (запрос 2026-10-28).
   const queueSectionRef = useRef(null);
   // Пока гость не сделал первый заказ, видна только форма "Заказать песню" (запрос 2026-10-28).
