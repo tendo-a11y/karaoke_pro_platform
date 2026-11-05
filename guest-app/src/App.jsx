@@ -4533,8 +4533,8 @@ export default function App() {
           </button>
         </header>
         <ScreenshotOrderPanel token={session.token} services={services} onNeedGoogle={async () => { if (await googleGateDue()) { scheduleGoogleGate(); setGoogleGate("short"); return true; } return false; }} />
-        <div style={{ textAlign: "center", marginTop: 16 }}>
-          <button type="button" className="btn-link" onClick={() => setView("home")}>
+        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12, padding: "0 4px" }}>
+          <button type="button" className="btn-link" onClick={() => setView("home")} style={{ background: "transparent", color: "var(--accent)", border: "1px solid var(--accent)", borderRadius: 999, padding: "6px 12px", fontSize: 13, fontWeight: 600, whiteSpace: "nowrap" }}>
             ← Назад
           </button>
         </div>
