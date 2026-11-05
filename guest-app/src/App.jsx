@@ -4947,6 +4947,9 @@ export default function App() {
               setSongUrl(null);
               setOrderExtra(null);
               setServiceId(String(sid));
+              // Слушать песню (категория по ссылке/100 лей): показываем её плашку с ценой, как при выборе в форме.
+              const quickSvc = services.find((x) => String(x.id) === String(sid));
+              if (quickSvc && quickSvc.link_default) setInternetHint({ name: quickSvc.name, price: quickSvc.price, fromLink: false });
               const panel = document.querySelector(".order-form-panel");
               if (panel) panel.scrollIntoView({ behavior: "smooth", block: "start" });
             }}
