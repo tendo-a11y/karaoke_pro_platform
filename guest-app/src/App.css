@@ -1362,3 +1362,19 @@ button.step-blink-fill { animation: button-fill-blink 2s ease-in-out infinite; }
   grid-column: 1 / -1; justify-self: end; width: auto; margin: 0; padding: 2px 10px;
   border: none; background: none; color: var(--accent); font-size: 14px;
 }
+
+
+/* Кнопки под заказом (В избранное, Заменить песню, Поставить первой, Отменить заказ):
+   две ровные колонки внутри карточки, текст переносится, ничего не вылезает за края. */
+.order-row__actions {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; width: 100%; box-sizing: border-box;
+}
+.order-row__actions > * { min-width: 0; margin: 0; }
+.order-row__actions .link-btn {
+  width: 100%; box-sizing: border-box; margin: 0; padding: 8px 6px;
+  border: 1px solid var(--accent); border-radius: 10px; background: rgba(255, 176, 32, 0.08);
+  font-size: 14px; line-height: 1.2; text-align: center; white-space: normal; overflow-wrap: anywhere;
+}
+.order-row__actions .link-btn--danger { border-color: var(--danger, #e5484d); background: rgba(229, 72, 77, 0.08); }
+.order-row__actions .empty-hint,
+.order-row__actions > span { grid-column: 1 / -1; margin: 0; }
