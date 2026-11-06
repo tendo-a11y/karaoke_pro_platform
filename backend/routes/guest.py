@@ -1168,6 +1168,34 @@ def cancel_unplayed_orders():
     })
 
 
+def _guest_labels_for_orders(orders, club_id):
+    """ДОБАВЛЕНО (2026-11, запрос пользователя): в "Мои заказы" видны заказы всего стола — каждому гостю подпись: имя, если он его задал, иначе "Гость 1", "Гость 2" по порядку."""
+    from models import GuestAccount
+    ids_in_order = []
+    for o in orders:
+        if o.telegram_user_id not in ids_in_order:
+            ids_in_order.append(o.telegram_user_id)
+    accounts = {}
+    if ids_in_order:
+        accounts = {
+            a.telegram_user_id: a for a in GuestAccount.query.filter(
+                GuestAccount.club_id == club_id, GuestAccount.telegram_user_id.in_(ids_in_order),
+            ).all()
+        }
+    labels = {}
+    n = 0
+    for gid in ids_in_order:
+        acc = accounts.get(gid)
+        if gid == -1:
+            labels[gid] = "Ведущий"
+        elif acc is not None and acc.display_name:
+            labels[gid] = acc.display_name
+        else:
+            n += 1
+            labels[gid] = f"Гость {n}"
+    return labels
+
+
 @bp.get("/orders")
 @require_guest
 def list_my_orders():
@@ -1259,6 +1287,13 @@ def list_my_orders():
         # они остаются только во вкладке "История" (?days=N, ветка ниже),
         # где как раз и есть место уже сыгранному.
         query = query.filter(Order.status != STATUS_COMPLETED)
+        if g.table_no is not None:
+            from sqlalchemy import or_
+            query = Order.query.filter(
+                Order.club_id == g.club_id,
+                Order.status.notin_([STATUS_REJECTED, STATUS_ERROR, STATUS_COMPLETED]),
+                or_(Order.telegram_user_id == g.guest_id, Order.table_no == g.table_no),
+            )
         # session_started_at может быть None только если в токене почему-то
         # нет iat (в токенах, выпущенных issue_guest_token, он есть всегда) —
         # тогда ведём себя как без фильтра вовсе, а не роняем запрос 500-й.
@@ -1305,12 +1340,18 @@ def list_my_orders():
             }
 
     result = []
+    labels = _guest_labels_for_orders(orders, g.club_id)
     for order in orders:
         data = order.to_dict()
-        data["can_replace"] = vdj_service.can_replace_order(order, vdj)
+        mine = order.telegram_user_id == g.guest_id
+        data["is_mine"] = mine
+        data["guest_label"] = labels.get(order.telegram_user_id)
+        if not mine:
+            data["telegram_user_id"] = None
+        data["can_replace"] = mine and vdj_service.can_replace_order(order, vdj)
         data["waiting_position"] = waiting_positions.get(order.id)
         data["queue_position"] = queue_positions.get(order.id)
-        data["pending_change_request"] = pending_requests_by_order.get(order.id)
+        data["pending_change_request"] = pending_requests_by_order.get(order.id) if mine else None
         result.append(data)
     return api_ok(result)
 
