@@ -473,7 +473,7 @@ def preview_receipt(club_id: int, table_no: int) -> dict | None:
             "guest_name": None,
             "guest_type": order.guest_type,
             "sung": False,
-            "paid": True,
+            "paid": False,
         })
 
     for order in unbilled_orders:
