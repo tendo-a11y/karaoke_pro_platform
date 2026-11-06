@@ -1364,6 +1364,17 @@ function FavoritesPanel({ token, services, onOrdered, orderingDisabled, embedded
   // умолчанию и раскрывается по нажатию на заголовок (тот же приём, что и
   // у "Финансы" ниже, .collapsible-header).
   const [open, setOpen] = useState(false);
+  // ДОБАВЛЕНО (2026-11): галочки для массового выбора и список песен, раскрытых кнопкой "Заказать".
+  const [checkedFav, setCheckedFav] = useState({});
+  const [openFavIds, setOpenFavIds] = useState([]);
+  function toggleOpenFav(id) {
+    if (openFavIds.includes(id)) {
+      setOpenFavIds([]);
+      return;
+    }
+    const checkedIds = favorites.filter((x) => checkedFav[x.id]).map((x) => x.id);
+    setOpenFavIds(checkedIds.includes(id) && checkedIds.length > 0 ? checkedIds : [id]);
+  }
 
   const refresh = useCallback(async () => {
     try {
@@ -1463,8 +1474,20 @@ function FavoritesPanel({ token, services, onOrdered, orderingDisabled, embedded
         <ul className="order-list">
           {favorites.map((f) => (
             <li key={f.id} className={`order-row${pickingFavId === f.id ? " row-pick-keep" : ""}`}>
-              <div className="order-row__song">🎵 {f.song_title}</div>
+              <div className="order-row__song" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={!!checkedFav[f.id]}
+                  onChange={(e) => setCheckedFav((prev) => ({ ...prev, [f.id]: e.target.checked }))}
+                />
+                <span>🎵 {f.song_title}</span>
+                <button type="button" className="link-btn" style={{ marginLeft: "auto" }} onClick={() => toggleOpenFav(f.id)}>
+                  {openFavIds.includes(f.id) ? "Свернуть" : "Заказать"}
+                </button>
+              </div>
               {f.artist && <div className="order-row__artist">🎤 {f.artist}</div>}
+              {openFavIds.includes(f.id) && (
+              <>
               {services.length > 0 && (
                 <ServiceSelect
                   quickPick
@@ -1555,6 +1578,8 @@ function FavoritesPanel({ token, services, onOrdered, orderingDisabled, embedded
                   🗑 Удалить
                 </button>
               </div>
+              </>
+              )}
             </li>
           ))}
         </ul>
