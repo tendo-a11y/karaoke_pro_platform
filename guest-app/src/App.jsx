@@ -992,6 +992,7 @@ function OrderRow({
     <li className={`order-row status-${order.status}${reorder && reorderPickedId === order.id ? " row-pick-keep" : ""}`}>
       <div className="order-row__song">🎵 {order.song_title}</div>
       {order.artist && <div className="order-row__artist">🎤 {order.artist}</div>}
+      {order.guest_label && <div className="order-row__artist">👤 {order.guest_label}{order.is_mine ? " (вы)" : ""}</div>}
       {order.tone ? (
         <div>
           🎚 Тон <span className="tone-badge">{order.tone > 0 ? `+${order.tone}` : order.tone}</span>
