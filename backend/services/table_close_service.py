@@ -445,7 +445,7 @@ def preview_receipt(club_id: int, table_no: int) -> dict | None:
             "price": price,
             "guest_name": account.display_name if account else None,
             "guest_type": order.guest_type,
-            "sung": order.status in (STATUS_PLAYING, STATUS_COMPLETED),
+            "sung": order.status == STATUS_COMPLETED or (order.status == STATUS_PLAYING and order.completion_source == "manual"),
             "paid": paid,
         })
 
