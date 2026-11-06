@@ -92,7 +92,7 @@ def _collect_order_stats(club_id: int, since_month: datetime, since_week: dateti
             entry["last_activity_at"] = order.created_at
             entry["latest_table_no"] = order.table_no
             entry["last_song_title"] = order.song_title
-            entry["last_song_sung"] = order.status in (STATUS_PLAYING, STATUS_COMPLETED)
+            entry["last_song_sung"] = order.status == STATUS_COMPLETED or (order.status == STATUS_PLAYING and order.completion_source == "manual")
             entry["last_artist"] = order.artist
         entry["orders_month"] += 1
         if order.created_at >= since_week:
