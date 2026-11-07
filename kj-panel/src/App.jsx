@@ -795,6 +795,56 @@ function AddManualSongForm({ onSubmit, busy, error }) {
 // стилевые классы (vip-list/vip-row/vip-row__actions) намеренно
 // переиспользованы у VipPanel — та же самая форма "запрос -> Одобрить/
 // Отклонить", нет смысла заводить для неё отдельный набор CSS-классов.
+// ДОБАВЛЕНО (2026-11, запрос пользователя): заявка гостя на отмену или замену — плашка поверх всего экрана.
+function ChangeRequestAlert({ token, clubId, socket }) {
+  const [alert, setAlert] = useState(null);
+
+  useEffect(() => {
+    if (!socket) return undefined;
+    const onCreated = async (changeRequest) => {
+      try {
+        const list = await api.listOrderChangeRequests(token, clubId);
+        setAlert((list || []).find((r) => r.id === changeRequest.id) || changeRequest);
+      } catch {
+        setAlert(changeRequest);
+      }
+    };
+    socket.on("order_change_request_created", onCreated);
+    return () => socket.off("order_change_request_created", onCreated);
+  }, [socket, token, clubId]);
+
+  if (!alert) return null;
+  const song = alert.order_song_title || "песня";
+  const tableText = alert.table_no ? ` (стол ${alert.table_no})` : "";
+  const text =
+    alert.kind === "replace"
+      ? `Гость просит заменить песню «${song}»${alert.new_song_title ? ` на «${alert.new_song_title}»` : ""}${tableText}`
+      : `Гость просит отменить песню «${song}»${tableText}`;
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div style={{ background: "#1d1f25", color: "#fff", border: "2px solid #ffb020", borderRadius: 12, padding: 20, maxWidth: 420, width: "100%" }}>
+        <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 10 }}>🔔 Заявка от гостя</div>
+        <div style={{ fontSize: 16, marginBottom: 16 }}>{text}</div>
+        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+          <button
+            type="button"
+            onClick={() => {
+              setAlert(null);
+              document.querySelector(".order-change-requests-panel")?.scrollIntoView({ behavior: "smooth", block: "center" });
+            }}
+          >
+            Открыть
+          </button>
+          <button type="button" className="link-btn" onClick={() => setAlert(null)}>
+            Закрыть
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function OrderChangeRequestsPanel({ token, clubId, socket }) {
   const [pending, setPending] = useState(null);
   const [actionError, setActionError] = useState(null);
@@ -6139,7 +6189,8 @@ export default function App() {
           <SuggestionPanel token={token} clubId={me.club_id} />
           <GeneralChatToggle token={token} />
           <EntryNoticeEditor token={token} />
-          <OrderChangeRequestsPanel token={token} clubId={me.club_id} socket={socketInstance} />
+          <ChangeRequestAlert token={token} clubId={me.club_id} socket={socketInstance} />
+        <OrderChangeRequestsPanel token={token} clubId={me.club_id} socket={socketInstance} />
           <TableCloseRequestsPanel token={token} clubId={me.club_id} socket={socketInstance} />
           <VipRequestsPanel token={token} clubId={me.club_id} socket={socketInstance} />
           <VipTopupRequestsPanel token={token} clubId={me.club_id} socket={socketInstance} />
