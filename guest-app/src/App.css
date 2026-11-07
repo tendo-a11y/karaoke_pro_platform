@@ -1378,3 +1378,13 @@ button.step-blink-fill { animation: button-fill-blink 2s ease-in-out infinite; }
 .order-row__actions .link-btn--danger { border-color: var(--danger, #e5484d); background: rgba(229, 72, 77, 0.08); }
 .order-row__actions .empty-hint,
 .order-row__actions > span { grid-column: 1 / -1; margin: 0; }
+
+/* ДОБАВЛЕНО (2026-11): окно "Вход через Google" — весь список (8 пунктов) виден без прокрутки внутри окна. */
+.msg-popup__text:has(ol) {
+  max-height: none;
+  overflow: visible;
+}
+.msg-popup:has(ol) {
+  max-height: calc(100vh - 24px);
+  overflow-y: auto;
+}
