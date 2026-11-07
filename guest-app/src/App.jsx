@@ -3610,6 +3610,8 @@ export default function App() {
   // ДОБАВЛЕНО (2026-10-13, запрос пользователя "сообщения легко пропустить"):
   // новое сообщение от ведущего всплывает окном поверх любого экрана.
   const [chatPopup, setChatPopup] = useState(null);
+  // ДОБАВЛЕНО (2026-11): число непрочитанных сообщений от ведущего — значок на кнопке «Сообщения».
+  const [unreadChat, setUnreadChat] = useState(0);
   const chatSeenKey = session ? `kp_chat_seen_${session.club_id}_${session.guest_id}` : null;
 
   function markChatSeen(id) {
@@ -3630,7 +3632,10 @@ export default function App() {
         const list = await api.listChat(session.token);
         if (cancelled) return;
         const fromKj = (list || []).filter((m) => !m.from_guest);
-        if (!fromKj.length) return;
+        if (!fromKj.length) {
+          setUnreadChat(0);
+          return;
+        }
         const latest = fromKj.reduce((a, b) => (b.id > a.id ? b : a));
         let seen = null;
         try {
@@ -3638,19 +3643,19 @@ export default function App() {
         } catch {
           seen = String(latest.id);
         }
-        if (seen == null) {
-          // Первый запуск — старые сообщения не всплывают.
-          markChatSeen(latest.id);
-          return;
-        }
+        // ИЗМЕНЕНО (2026-11): раньше первый запуск молча помечал все старые сообщения прочитанными, и окно не появлялось. Теперь непрочитанные (в том числе старые) всплывают.
+        const seenNum = seen == null ? 0 : Number(seen);
+        const unread = fromKj.filter((m) => m.id > seenNum).length;
         if (view === "messages") {
+          setUnreadChat(0);
           markChatSeen(latest.id);
           setChatPopup(null);
           return;
         }
+        setUnreadChat(unread);
         // Автоматическое "Вы следующий" / "Приготовьтесь" уже видно зелёной плашкой очереди — окно не всплывает.
         const autoQueue = /^🎤 (Вы следующий|Приготовьтесь)/.test(latest.message_text || "");
-        if (latest.id > Number(seen)) {
+        if (latest.id > seenNum) {
           if (autoQueue) markChatSeen(latest.id);
           else {
             playChatAlert();
@@ -4732,7 +4737,7 @@ export default function App() {
         )}
         <LanguageButton />
         <button type="button" className="btn-link" style={{ display: guestHasOrdered() && !limitedView ? undefined : "none" }} onClick={() => setView("messages")}>
-          ✏️
+          ✏️{unreadChat > 0 && <span style={{ marginLeft: 4, background: "#e5484d", color: "#fff", borderRadius: 999, padding: "0 6px", fontSize: 11 }}>{unreadChat}</span>}
         </button>
       </header>
       )}
