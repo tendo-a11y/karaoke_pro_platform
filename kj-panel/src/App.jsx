@@ -2158,6 +2158,15 @@ function StandardMessagesPanel({ token, clubId }) {
   );
 }
 
+// ДОБАВЛЕНО (2026-11, запрос пользователя): у каждого гостя свой цвет — в списке, в переписке и на полоске слева.
+const CHAT_COLORS = ["#60a5fa", "#f472b6", "#34d399", "#fbbf24", "#a78bfa", "#f87171", "#22d3ee", "#fb923c"];
+function chatColorFor(id) {
+  const s = String(id ?? "");
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+  return CHAT_COLORS[Math.abs(h) % CHAT_COLORS.length];
+}
+
 function KjChatPanel({ token, clubId, socket }) {
   const guestNames = useGuestNames(token, clubId);
   // ДОБАВЛЕНО (2026-10-01, запрос пользователя "кнопка Сообщения,
@@ -2280,10 +2289,10 @@ function KjChatPanel({ token, clubId, socket }) {
         <h2>💬 Сообщения от гостей ({threadList.length})</h2>
         <ul className="vip-list">
           {threadList.map((t) => (
-            <li key={t.guestId} className="vip-row">
+            <li key={t.guestId} className="vip-row" style={{ borderLeft: `4px solid ${chatColorFor(t.guestId)}`, paddingLeft: 8 }}>
               <span>
                 {t.lastMessage.from_guest ? "🆕 " : ""}
-                Стол {tableLabel(t.tableNo)} · гость {guestLabel(guestNames, t.guestId)}: {t.lastMessage.message_text || (t.lastMessage.image_data_url ? "📷 Скриншот" : "")}
+                Стол {tableLabel(t.tableNo)} · <b style={{ color: chatColorFor(t.guestId) }}>гость {guestLabel(guestNames, t.guestId)}</b>: {t.lastMessage.message_text || (t.lastMessage.image_data_url ? "📷 Скриншот" : "")}
                 {t.lastMessage.service_name ? ` (категория: ${t.lastMessage.service_name})` : ""}
               </span>
               <span className="vip-row__actions">
@@ -2316,7 +2325,7 @@ function KjChatPanel({ token, clubId, socket }) {
       <ul className="vip-list">
         {thread.map((m) => (
           <li key={m.id} className="vip-row chat-thread-row">
-            <span>{m.from_guest ? "Гость" : "Вы"}:</span>
+            <span style={{ color: m.from_guest ? chatColorFor(selectedGuestId) : "#ffb020", fontWeight: 700 }}>{m.from_guest ? "Гость" : "Вы"}:</span>
             {m.service_name && <span className="chat-thread-row__category">Категория: {m.service_name}</span>}
             {m.image_data_url && (
               <ZoomableImage src={m.image_data_url} alt="Скриншот от гостя" className="chat-thread-row__image" />
