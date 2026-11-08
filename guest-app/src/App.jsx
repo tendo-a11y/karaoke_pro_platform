@@ -3798,7 +3798,39 @@ export default function App() {
   // Активная очередь закрывается, если нажали на что-то вне её раздела (запрос 2026-10-28).
   const queueSectionRef = useRef(null);
   // Пока гость не сделал первый заказ, видна только форма "Заказать песню" (запрос 2026-10-28).
-  const showFullUi = guestHasOrdered(); const limitedView = showFullUi && !meInfo?.has_permanent_profile && readGuestOrderCount() < 3; const unlockNoticeOpen = showFullUi && !meInfo?.has_permanent_profile && readGuestOrderCount() >= 3 && !isUnlockNoticeSeen();
+    // ДОБАВЛЕНО (2026-11, запрос пользователя): уведомление, когда ведущий включил общий чат Telegram. Показывается один раз, после выключения — снова при следующем включении.
+  const [generalChatPopup, setGeneralChatPopup] = useState(false);
+  useEffect(() => {
+    if (!meInfo) return;
+    const KEY = "kp_general_chat_notified";
+    try {
+      if (!meInfo.chat_enabled) {
+        window.localStorage.setItem(KEY, "0");
+        setGeneralChatPopup(false);
+        return;
+      }
+      if (window.localStorage.getItem(KEY) === "1") return;
+      window.localStorage.setItem(KEY, "1");
+    } catch {
+      if (!meInfo.chat_enabled) return;
+    }
+    setGeneralChatPopup(true);
+  }, [meInfo?.chat_enabled]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const generalChatPopupEl = generalChatPopup ? (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div style={{ background: "#1d1f25", color: "#fff", border: "2px solid #ffb020", borderRadius: 12, padding: 20, maxWidth: 420, width: "100%" }}>
+        <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 10 }}>💬 Общий чат клуба</div>
+        <div style={{ fontSize: 16, marginBottom: 16 }}>Доступен общий чат клуба в Telegram.</div>
+        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap" }}>
+          <a href="https://t.me/voicevocalclub/1" target="_blank" rel="noopener noreferrer" onClick={() => setGeneralChatPopup(false)} style={{ background: "#2e7d32", color: "#fff", borderRadius: 8, padding: "8px 14px", textDecoration: "none", fontWeight: 600 }}>Открыть чат</a>
+          <button type="button" className="link-btn" onClick={() => setGeneralChatPopup(false)}>Закрыть</button>
+        </div>
+      </div>
+    </div>
+  ) : null;
+
+const showFullUi = guestHasOrdered(); const limitedView = showFullUi && !meInfo?.has_permanent_profile && readGuestOrderCount() < 3; const unlockNoticeOpen = showFullUi && !meInfo?.has_permanent_profile && readGuestOrderCount() >= 3 && !isUnlockNoticeSeen();
   useEffect(() => {
     if (!queueOpen) return undefined;
     function onOutside(e) {
@@ -4641,7 +4673,8 @@ export default function App() {
 
   return (
     <div className={`app-shell${favPicking || reorderPickedId != null ? " app-shell--fav-pick" : ""}${categoryPicking ? " app-shell--picking" : ""}${songConfirming || showActivation || categoryStep ? " app-shell--focus" : ""}${songListsOpen ? " app-shell--lists" : ""}`}>
-      {chatPopupEl}
+      {generalChatPopupEl}
+{chatPopupEl}
 {categoryPopupEl}
       {guideBox && guideTarget ? (
         <div className="guide-finger" style={{ left: guideBox.left, top: guideBox.top }} aria-hidden="true">👆</div>
