@@ -1725,7 +1725,7 @@ function GroupApprovalToggle({ token, clubId }) {   const [enabled, setEnabled] 
     }
   }
   return (
-    <section className="order-change-requests-panel">
+    <section className="order-change-requests-panel general-chat-panel">
       <h2>Общий чат (Telegram): {enabled == null ? "…" : enabled ? "Вкл" : "Откл"}</h2>
       {error && <div className="banner banner--error">{error}</div>}
       <button type="button" className="btn-link" disabled={busy || enabled == null} onClick={toggle}>
@@ -1852,7 +1852,7 @@ function EntryNoticeEditor({ token }) {
     }
   }
   return (
-    <section className="order-change-requests-panel">
+    <section className="order-change-requests-panel entry-notice-panel">
       <h2>Плашка на экране входа гостя</h2>
       <textarea
         rows={5}
@@ -2153,7 +2153,7 @@ function StandardMessagesPanel({ token, clubId }) {
   }
 
   return (
-    <section className="order-change-requests-panel">
+    <section className="order-change-requests-panel standard-messages-panel">
       <h2>📝 Дежурные сообщения</h2>
       {error && <div className="banner banner--error">{error}</div>}
       {messages === null ? (
@@ -2402,7 +2402,7 @@ function KjChatPanel({ token, clubId, socket }) {
     .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
 
   return (
-    <section className="order-change-requests-panel">
+    <section className="order-change-requests-panel kj-chat-panel">
       <h2>💬 Переписка — гость {guestLabel(guestNames, selectedGuestId)}</h2>
       <div className="chat-thread-header-actions">
         <button type="button" className="btn-link" onClick={() => setSelectedGuestId(null)}>
