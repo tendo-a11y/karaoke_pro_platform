@@ -124,20 +124,20 @@ def handle_update(update):
     text = (message.get("text") or "").strip()
     if not text or sender.get("is_bot"):
         return
-    logger.info("agent saw message chat_id=%s type=%s username=%s", chat.get("id"), chat.get("type"), chat.get("username"))
+    logger.warning("agent saw message chat_id=%s type=%s username=%s", chat.get("id"), chat.get("type"), chat.get("username"))
     if chat.get("username") != GROUP_USERNAME:
         return
     if not _looks_worth_answering(text):
         return
     if os.environ.get("AGENT_ENABLED") != "1":
-        logger.info("agent dry run: would answer this message in the group")
+        logger.warning("agent dry run: would answer this message in the group")
         return
     reply = _ask_model(text[:MAX_INPUT_CHARS])
     if not reply:
         return
     if reply.startswith(ESCALATE_MARK):
         reply = "Передам ваш вопрос ведущему, он ответит лично."
-        logger.info("agent passed a question to the KJ")
+        logger.warning("agent passed a question to the KJ")
     _call("sendMessage", {
         "chat_id": chat["id"],
         "text": reply[:MAX_REPLY_CHARS],
