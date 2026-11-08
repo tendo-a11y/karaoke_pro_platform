@@ -3656,7 +3656,11 @@ export default function App() {
         // Автоматическое "Вы следующий" / "Приготовьтесь" уже видно зелёной плашкой очереди — окно не всплывает.
         const autoQueue = /^🎤 (Вы следующий|Приготовьтесь)/.test(latest.message_text || "");
         if (latest.id > seenNum) {
-          if (autoQueue) markChatSeen(latest.id);
+          if (autoQueue) {
+            // ДОБАВЛЕНО (2026-11): звук и вибрация и для автоматических сообщений очереди (окно не открывается).
+            playChatAlert();
+            markChatSeen(latest.id);
+          }
           else {
             playChatAlert();
             setChatPopup(latest);
@@ -3884,7 +3888,8 @@ export default function App() {
     if (!text) return;
     setTurnToast(text);
     try {
-      if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+      // ИЗМЕНЕНО (2026-11): звук и вибрация, как у остальных сообщений.
+      playChatAlert();
     } catch {
       // вибрация недоступна — не страшно
     }
