@@ -4634,19 +4634,25 @@ const showFullUi = guestHasOrdered(); const limitedView = showFullUi && !meInfo?
         чат (заглушка), 4) заказ новой песни (заглушка). */}
         <ChatPanel token={session.token} />
 
+        {/* ИЗМЕНЕНО (2026-11): красивая карточка общего чата в Telegram. */}
         {meInfo?.chat_enabled && (
-        <section className="panel">
-          <h2>💬 Общий чат</h2>
-          <a
-            className="btn-link"
-            href="https://t.me/voicevocalclub/1"
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{ display: "inline-block", textDecoration: "none" }}
-          >
-            Открыть чат в Telegram
-          </a>
-        </section>
+          <section style={{ background: "linear-gradient(135deg, #1e3a5f, #0f172a)", border: "1px solid #2b6cb0", borderRadius: 14, padding: 16, margin: "12px 0" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <div style={{ fontSize: 32 }}>💬</div>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 17 }}>Общий чат клуба</div>
+                <div style={{ opacity: 0.8, fontSize: 13 }}>Объявления клуба, заказы песен и общение гостей</div>
+              </div>
+            </div>
+            <a
+              href="https://t.me/voicevocalclub/1"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ display: "block", marginTop: 12, textAlign: "center", background: "#229ED9", color: "#fff", borderRadius: 10, padding: "12px 16px", fontWeight: 700, textDecoration: "none" }}
+            >
+              ✈️ Открыть в Telegram
+            </a>
+          </section>
         )}
 
         <section className="panel">
