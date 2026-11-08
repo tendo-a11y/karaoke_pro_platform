@@ -237,6 +237,7 @@ export const api = {
     request("/api/kj/telegram-channel/description", { method: "PUT", token, body: { text } }),
   publishTelegramPinned: (token, text) =>
     request("/api/kj/telegram-channel/pinned-message", { method: "POST", token, body: { text } }),
+  connectTelegramAgent: (token) => request("/api/kj/telegram-channel/webhook", { method: "POST", token }),
   makeGuestVip: (token, guestId) =>
     request(`/api/kj/guests/${encodeURIComponent(guestId)}/make-vip`, { method: "POST", token }),
   renameGuest: (token, guestId, displayName) =>
