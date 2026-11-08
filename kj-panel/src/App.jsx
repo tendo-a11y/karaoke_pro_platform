@@ -1744,6 +1744,7 @@ function TelegramChannelTools({ token }) {
   const [checkBusy, setCheckBusy] = useState(false);
   const [description, setDescription] = useState("");
   const [pinnedText, setPinnedText] = useState("");
+  const [agentBusy, setAgentBusy] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null);
 
@@ -1766,6 +1767,20 @@ function TelegramChannelTools({ token }) {
       showError(err);
     } finally {
       setCheckBusy(false);
+    }
+  }
+
+  async function connectAgent() {
+    setAgentBusy(true);
+    setMsg(null);
+    try {
+      const data = await api.connectTelegramAgent(token);
+      const err = data.last_error_message ? " Ошибка Telegram: " + data.last_error_message : "";
+      setMsg({ kind: data.last_error_message ? "error" : "ok", text: "Агент подключён к приёму сообщений." + err });
+    } catch (err) {
+      showError(err);
+    } finally {
+      setAgentBusy(false);
     }
   }
 
@@ -1803,6 +1818,9 @@ function TelegramChannelTools({ token }) {
         {checkBusy ? "Проверяем…" : "Проверить бота"}
       </button>
       {checkInfo && <div className="empty-hint" style={{ marginTop: 4 }}>Канал: t.me/voicevocalclub</div>}
+      <button type="button" className="btn-link" disabled={agentBusy} onClick={connectAgent} style={{ marginLeft: 12 }}>
+        {agentBusy ? "Подключаем…" : "Подключить агента к группе"}
+      </button>
 
       <div style={{ marginTop: 14 }}>
         <div className="empty-hint">Описание канала (до 255 символов)</div>
