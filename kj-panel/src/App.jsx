@@ -1731,7 +1731,97 @@ function GroupApprovalToggle({ token, clubId }) {   const [enabled, setEnabled] 
       <button type="button" className="btn-link" disabled={busy || enabled == null} onClick={toggle}>
         {enabled ? "Отключить" : "Включить"}
       </button>
+      <TelegramChannelTools token={token} />
     </section>
+  );
+}
+
+// ДОБАВЛЕНО (2026-11, запрос пользователя): кнопки Telegram-канала клуба —
+// проверка бота и публикация описания / закреплённого сообщения. Публикация
+// только по нажатию кнопки и после подтверждения.
+function TelegramChannelTools({ token }) {
+  const [checkInfo, setCheckInfo] = useState(null);
+  const [checkBusy, setCheckBusy] = useState(false);
+  const [description, setDescription] = useState("");
+  const [pinnedText, setPinnedText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  function showError(err) {
+    setMsg({ kind: "error", text: err instanceof ApiError ? err.message : String(err) });
+  }
+
+  async function checkBot() {
+    setCheckBusy(true);
+    setMsg(null);
+    try {
+      const data = await api.checkTelegramChannel(token);
+      setCheckInfo(data);
+      setMsg({
+        kind: "ok",
+        text: `Бот @${data.bot_username || "?"} подключён к каналу${data.channel_title ? ` «${data.channel_title}»` : ""}. Статус в канале: ${data.bot_status || "?"}.`,
+      });
+    } catch (err) {
+      setCheckInfo(null);
+      showError(err);
+    } finally {
+      setCheckBusy(false);
+    }
+  }
+
+  async function publishDescription() {
+    if (!window.confirm("Опубликовать это описание в Telegram-канале?")) return;
+    setBusy(true);
+    setMsg(null);
+    try {
+      await api.setTelegramChannelDescription(token, description.trim());
+      setMsg({ kind: "ok", text: "Описание канала обновлено." });
+    } catch (err) {
+      showError(err);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function publishPinned() {
+    if (!window.confirm("Отправить это сообщение в канал и закрепить его?")) return;
+    setBusy(true);
+    setMsg(null);
+    try {
+      await api.publishTelegramPinned(token, pinnedText.trim());
+      setMsg({ kind: "ok", text: "Сообщение опубликовано и закреплено." });
+    } catch (err) {
+      showError(err);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid rgba(255,255,255,0.12)" }}>
+      <button type="button" className="btn-link" disabled={checkBusy} onClick={checkBot}>
+        {checkBusy ? "Проверяем…" : "Проверить бота"}
+      </button>
+      {checkInfo && <div className="empty-hint" style={{ marginTop: 4 }}>Канал: t.me/voicevocalclub</div>}
+
+      <div style={{ marginTop: 14 }}>
+        <div className="empty-hint">Описание канала (до 255 символов)</div>
+        <textarea rows={3} maxLength={255} value={description} onChange={(e) => setDescription(e.target.value)} style={{ width: "100%" }} />
+        <button type="button" className="btn-link" disabled={busy || !description.trim()} onClick={publishDescription}>
+          Опубликовать описание
+        </button>
+      </div>
+
+      <div style={{ marginTop: 14 }}>
+        <div className="empty-hint">Закреплённое приветствие (до 4096 символов)</div>
+        <textarea rows={5} maxLength={4096} value={pinnedText} onChange={(e) => setPinnedText(e.target.value)} style={{ width: "100%" }} />
+        <button type="button" className="btn-link" disabled={busy || !pinnedText.trim()} onClick={publishPinned}>
+          Опубликовать и закрепить
+        </button>
+      </div>
+
+      {msg && <div className={msg.kind === "error" ? "banner banner--error" : "empty-hint"} style={{ marginTop: 10 }}>{msg.text}</div>}
+    </div>
   );
 }
 
