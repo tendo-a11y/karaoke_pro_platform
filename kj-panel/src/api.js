@@ -232,6 +232,11 @@ export const api = {
   getGeneralChat: (token) => request("/api/kj/general-chat", { token }),
   setGeneralChat: (token, enabled) =>
     request("/api/kj/general-chat", { method: "PUT", token, body: { enabled } }),
+  checkTelegramChannel: (token) => request("/api/kj/telegram-channel/check", { token }),
+  setTelegramChannelDescription: (token, text) =>
+    request("/api/kj/telegram-channel/description", { method: "PUT", token, body: { text } }),
+  publishTelegramPinned: (token, text) =>
+    request("/api/kj/telegram-channel/pinned-message", { method: "POST", token, body: { text } }),
   makeGuestVip: (token, guestId) =>
     request(`/api/kj/guests/${encodeURIComponent(guestId)}/make-vip`, { method: "POST", token }),
   renameGuest: (token, guestId, displayName) =>
