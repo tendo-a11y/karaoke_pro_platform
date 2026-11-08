@@ -6285,12 +6285,12 @@ export default function App() {
           пополнение баланса были спрятаны внутри вкладки VIP; личного чата
           с гостем у KJ Panel не было вообще. Теперь всё в одном месте. */}
           {/* ИЗМЕНЕНО (2026-11): порядок блоков — 1 Администрация, 2 Улучшения, 3 Общий чат (Telegram), 4 Плашка входа, 5 Дежурные, 6 Сообщения от гостей; заявки ниже. */}
+          <KjChatPanel token={token} clubId={me.club_id} socket={socketInstance} />
           <AdminMessagesPanel token={token} clubId={me.club_id} socket={socketInstance} />
           <SuggestionPanel token={token} clubId={me.club_id} />
           <GeneralChatToggle token={token} />
           <EntryNoticeEditor token={token} />
           <StandardMessagesPanel token={token} clubId={me.club_id} />
-          <KjChatPanel token={token} clubId={me.club_id} socket={socketInstance} />
           <ChangeRequestAlert token={token} clubId={me.club_id} socket={socketInstance} />
           <OrderChangeRequestsPanel token={token} clubId={me.club_id} socket={socketInstance} />
           <TableCloseRequestsPanel token={token} clubId={me.club_id} socket={socketInstance} />
