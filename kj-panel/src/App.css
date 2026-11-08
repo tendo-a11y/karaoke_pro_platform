@@ -1096,3 +1096,30 @@ img { max-width: 100%; }
 /* Размеры в разделе «Гости»: кнопка списков крупнее, заголовок внутри списков — чуть меньше. */
 .guests-panel > section > .btn-link { font-size: 16px; font-weight: 600; padding: 10px 18px; }
 .guests-lists h2 { font-size: 14px; letter-spacing: 0.04em; }
+
+
+/* ДОБАВЛЕНО (2026-11): у каждого блока верхней части панели — свой цвет контура. */
+.admin-messages-panel {
+  border: 1px solid #e5484d;
+  border-left: 3px solid #e5484d;
+}
+.suggestion-panel {
+  border: 1px solid #f5a524;
+  border-left: 3px solid #f5a524;
+}
+.general-chat-panel {
+  border: 1px solid #30a46c;
+  border-left: 3px solid #30a46c;
+}
+.entry-notice-panel {
+  border: 1px solid #3e63dd;
+  border-left: 3px solid #3e63dd;
+}
+.standard-messages-panel {
+  border: 1px solid #8e4ec6;
+  border-left: 3px solid #8e4ec6;
+}
+.kj-chat-panel {
+  border: 1px solid #12a594;
+  border-left: 3px solid #12a594;
+}
