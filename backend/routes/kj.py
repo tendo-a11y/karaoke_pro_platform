@@ -2456,3 +2456,39 @@ def get_bridge_status(club_id):
 @bp.post("/guests/<guest_id>/trusted")
 @require_kj
 def set_guest_trusted(guest_id): parsed_id = _parse_guest_id(guest_id); body = request.get_json(silent=True) or {}; return api_error(400, "VALIDATION_ERROR", "guest_id должен быть числом") if parsed_id is None else api_ok({"guest_id": str(parsed_id), "trusted": guest_status_service.set_trusted(g.club_id, parsed_id, bool(body.get("trusted"))).trusted})
+
+
+# ДОБАВЛЕНО (2026-11, запрос пользователя): Telegram-канал клуба из панели KJ —
+# проверка бота и публикация описания / закреплённого сообщения (только по кнопке).
+@bp.get("/telegram-channel/check")
+@require_kj
+def telegram_channel_check():
+    from services import telegram_channel_service as tcs
+    try:
+        return api_ok(tcs.check_bot())
+    except tcs.TelegramChannelError as exc:
+        return api_error(502, "TELEGRAM_ERROR", str(exc))
+
+
+@bp.put("/telegram-channel/description")
+@require_kj
+def telegram_channel_description():
+    from services import telegram_channel_service as tcs
+    payload = request.get_json(silent=True) or {}
+    try:
+        tcs.set_channel_description(payload.get("text"))
+    except tcs.TelegramChannelError as exc:
+        return api_error(400, "TELEGRAM_ERROR", str(exc))
+    return api_ok({"ok": True})
+
+
+@bp.post("/telegram-channel/pinned-message")
+@require_kj
+def telegram_channel_pinned_message():
+    from services import telegram_channel_service as tcs
+    payload = request.get_json(silent=True) or {}
+    try:
+        message_id = tcs.publish_pinned_message(payload.get("text"))
+    except tcs.TelegramChannelError as exc:
+        return api_error(400, "TELEGRAM_ERROR", str(exc))
+    return api_ok({"message_id": message_id})
