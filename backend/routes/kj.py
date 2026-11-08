@@ -2492,3 +2492,35 @@ def telegram_channel_pinned_message():
     except tcs.TelegramChannelError as exc:
         return api_error(400, "TELEGRAM_ERROR", str(exc))
     return api_ok({"message_id": message_id})
+
+
+# ДОБАВЛЕНО (2026-11): агент клуба в Telegram-группе. Telegram присылает сюда сообщения;
+# секрет проверяем, чтобы чужие не могли слать сюда запросы.
+@bp.post("/telegram-webhook")
+def telegram_webhook():
+    from hmac import compare_digest
+    from services.telegram_channel_service import TelegramChannelError
+    from services import chat_agent_service as cas
+    try:
+        expected = cas.webhook_secret()
+    except TelegramChannelError:
+        return api_error(500, "TELEGRAM_ERROR", "Токен бота не задан на сервере")
+    if not compare_digest(request.headers.get("X-Telegram-Bot-Api-Secret-Token", ""), expected):
+        return api_error(403, "FORBIDDEN", "Неверный секрет")
+    update = request.get_json(silent=True) or {}
+    try:
+        cas.handle_update(update)
+    except Exception:
+        current_app.logger.exception("club agent failed")
+    return api_ok({"ok": True})
+
+
+@bp.post("/telegram-channel/webhook")
+@require_kj
+def telegram_channel_connect_webhook():
+    from services import chat_agent_service as cas
+    from services.telegram_channel_service import TelegramChannelError
+    try:
+        return api_ok(cas.connect_webhook(request.url_root))
+    except TelegramChannelError as exc:
+        return api_error(502, "TELEGRAM_ERROR", str(exc))
