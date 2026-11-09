@@ -739,35 +739,38 @@ const SONG_LIST_SORTS = {
 };
 
 function SongListRow({ song, services, onChoose }) {
-  // Как в «Избранном»: «Заказать» раскрывает кнопки «Петь караоке» / «Слушать песню».
-  // Выбор сразу заполняет заказ и отправляет его (см. listOrder в App).
+  // Строка песни как была; при нажатии «Заказать» (или на название) раскрываются кнопки
+  // «Петь караоке» / «Слушать песню» в стиле «Избранного». Выбор сразу отправляет заказ (см. listOrder в App).
   const [open, setOpen] = useState(false);
   const quick = (services || []).filter((s) => /^(KARAOKE|EX\w*CLUSIVE)$/i.test((s.name || "").trim()));
   return (
-    <li className="order-row song-lists__row">
-      <div className="order-row__song" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <span>🎵 {song.song_title}</span>
+    <li className="song-lists__row">
+      <div className="song-lists__line">
+        <span className="song-lists__title" role="button" tabIndex={0} onClick={() => setOpen((v) => !v)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpen((v) => !v); } }}>
+          {song.song_title}{song.artist ? " — " + song.artist : ""}
+        </span>
         {typeof song.count === "number" && (
           <span className="song-lists__count">{song.count}</span>
         )}
-        <button type="button" className="link-btn" style={{ marginLeft: "auto" }} onClick={() => setOpen((v) => !v)}>
-          {open ? "Свернуть" : "Заказать"}
+        <button type="button" className="link-btn" onClick={() => setOpen((v) => !v)}>
+          Заказать
         </button>
       </div>
-      {song.artist && <div className="order-row__artist">🎤 {song.artist}</div>}
       {open && quick.length > 0 && (
-        <ServiceSelect
-          quickPick
-          services={quick}
-          value=""
-          onChange={(v) => {
-            const svc = quick.find((x) => String(x.id) === String(v));
-            if (!svc) return;
-            setOpen(false);
-            onChoose(song, svc);
-          }}
-          disabled={false}
-        />
+        <div style={{ marginTop: 8 }}>
+          <ServiceSelect
+            quickPick
+            services={quick}
+            value=""
+            onChange={(v) => {
+              const svc = quick.find((x) => String(x.id) === String(v));
+              if (!svc) return;
+              setOpen(false);
+              onChoose(song, svc);
+            }}
+            disabled={false}
+          />
+        </div>
       )}
     </li>
   );
