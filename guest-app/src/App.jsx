@@ -1360,7 +1360,7 @@ function VipHistoryPanel({ token, embedded = false }) {
   );
 }
 
-function FavoritesPanel({ token, services, onOrdered, orderingDisabled, embedded = false, onPickingChange, onQuickPick }) {
+function FavoritesPanel({ token, services, onOrdered, orderingDisabled, embedded = false, onPickingChange, onQuickPick, onClose }) {
   const [favorites, setFavorites] = useState([]);
   const [error, setError] = useState(null);
   const [orderMessage, setOrderMessage] = useState(null);
@@ -1464,7 +1464,10 @@ function FavoritesPanel({ token, services, onOrdered, orderingDisabled, embedded
   return (
     <section className={`favorites-panel pick-scope ${embedded ? "profile-finance" : "panel"}${pickingFavId != null ? " favorites-panel--picking" : ""}`}>
       {embedded ? (
-        <h2>Избранное ({favorites.length})</h2>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+          <h2 style={{ margin: 0 }}>Избранное ({favorites.length})</h2>
+          {onClose ? <button type="button" className="link-btn" onClick={onClose}>Закрыть</button> : null}
+        </div>
       ) : (
       <h2
         className="collapsible-header"
@@ -4904,7 +4907,7 @@ const showFullUi = guestHasOrdered(); const limitedView = showFullUi && !meInfo?
             type="button"
             data-guide="simple-search"
             className={`link-btn${searchStyle === "simple" ? " finder-modes__active" : ""}${guideRunning && guideStep === "mode" && !searchStyleTouched ? " search-style-blink" : ""}${searchStyle === "smart" ? " search-style-glow" : ""}`}
-            onClick={() => setSearchStyle("simple")}
+            onClick={() => { setOrderExtra(null); setSearchStyle("simple"); }}
           >
             <span style={searchStyle === "smart" ? { visibility: "hidden" } : undefined}>Заказ караоке</span>
           </button>
@@ -4913,7 +4916,7 @@ const showFullUi = guestHasOrdered(); const limitedView = showFullUi && !meInfo?
             className={`link-btn${searchStyle === "smart" ? " finder-modes__active" : ""}`}
             aria-label="Поиск по описанию и ссылке"
             aria-expanded={searchStyle === "smart"}
-            onClick={() => setSearchStyle(searchStyle === "smart" ? "simple" : "smart")}
+            onClick={() => { setOrderExtra(null); setSearchStyle(searchStyle === "smart" ? "simple" : "smart"); }}
           >
             +
           </button>
@@ -5093,6 +5096,7 @@ const showFullUi = guestHasOrdered(); const limitedView = showFullUi && !meInfo?
               if (panel) panel.scrollIntoView({ behavior: "smooth", block: "start" });
             }}
             embedded
+            onClose={() => setOrderExtra(null)}
           />
         ) : null}
         {activated && !groupOk ? (
