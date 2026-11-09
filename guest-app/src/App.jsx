@@ -3816,7 +3816,7 @@ export default function App() {
     setSongUrl(null);
     setOrderExtra(null);
     setServiceId(String(listOrder.svc.id));
-    setListOrder({ ...listOrder, step: "send" });
+    setListOrder({ ...listOrder, step: "confirm" });
   }, [listOrder]);
   useEffect(() => {
     if (!listOrder || listOrder.step !== "send") return;
@@ -3826,8 +3826,8 @@ export default function App() {
         setShowFirstOrderNotice(true);
         return;
       }
-      // Плашка с ценой видна не меньше 2,5 секунды, даже если заказ ушёл быстрее.
-      await Promise.all([proceedSubmitOrder(), new Promise((r) => setTimeout(r, 2500))]);
+      // Заказ отправляем только после нажатия «Подтвердить».
+      await proceedSubmitOrder();
       setListOrder(null);
     })();
   }, [listOrder]);
@@ -4767,14 +4767,15 @@ const showFullUi = guestHasOrdered(); const limitedView = showFullUi && !meInfo?
           </div>
         </div>
       )}
-      {listOrder ? (
-        <div className="msg-popup-overlay" role="alertdialog" aria-modal="true">
-          <div className="msg-popup">
-            <div className="msg-popup__title">{listOrder.label}</div>
-            <div className="msg-popup__text">
-              <p><b>{listOrder.song.song_title}</b>{listOrder.song.artist ? " — " + listOrder.song.artist : ""}</p>
-              <p>Цена: <b>{listOrder.svc.price} лей</b></p>
-              <p>Заказ отправляется…</p>
+      {listOrder && listOrder.step === "confirm" ? (
+        <div className="link-confirm-overlay" role="alertdialog" aria-modal="true">
+          <div className="link-confirm-plate">
+            <p>{listOrder.song.artist ? <b>{listOrder.song.artist}</b> : null}{listOrder.song.artist ? " — " : ""}{listOrder.song.song_title}</p>
+            <p>Категория: <b>{listOrder.label}</b></p>
+            <p>Цена {Number(listOrder.svc.price)} лей. Подтвердите заказ или отмените его.</p>
+            <div className="link-confirm-buttons">
+              <button type="button" className="link-confirm-yes" onClick={() => setListOrder({ ...listOrder, step: "send" })}>✅ Подтвердить {Number(listOrder.svc.price)} лей</button>
+              <button type="button" className="link-confirm-cancel" onClick={() => { setListOrder(null); setSongTitle(""); setArtist(""); setSongUrl(null); setServiceId(""); }}>Отмена</button>
             </div>
           </div>
         </div>
