@@ -4767,6 +4767,18 @@ const showFullUi = guestHasOrdered(); const limitedView = showFullUi && !meInfo?
           </div>
         </div>
       )}
+      {listOrder ? (
+        <div className="msg-popup-overlay" role="alertdialog" aria-modal="true">
+          <div className="msg-popup">
+            <div className="msg-popup__title">{listOrder.label}</div>
+            <div className="msg-popup__text">
+              <p><b>{listOrder.song.song_title}</b>{listOrder.song.artist ? " — " + listOrder.song.artist : ""}</p>
+              <p>Цена: <b>{listOrder.svc.price} лей</b></p>
+              <p>Заказ отправляется…</p>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {!googleGate && vipOfferNeeded && (
         <div className="msg-popup-overlay" role="dialog" aria-modal="true">
           <div className="msg-popup">
@@ -5391,15 +5403,6 @@ const showFullUi = guestHasOrdered(); const limitedView = showFullUi && !meInfo?
           onChoose={(song, svc) => { if (svc) setListOrder({ song, svc, label: svc.name === "KARAOKE" || svc.description === "Обычное караоке" ? "Петь караоке" : "Слушать песню", step: "fill" }); }}
           services={services}
         />
-        {listOrder ? (
-          <div className="link-confirm-overlay" role="alertdialog" aria-modal="true">
-            <div className="link-confirm-plate">
-              <p><b>{listOrder.song.song_title}</b>{listOrder.song.artist ? " — " + listOrder.song.artist : ""}</p>
-              <p>{listOrder.label}: <b>{listOrder.svc.price} лей</b></p>
-              <p>Заказ отправляется…</p>
-            </div>
-          </div>
-        ) : null}
         {songListsOpen ? null : !queueVisible ? (
           <p className="empty-hint">Очередь не отображается.</p>
         ) : queue.length === 0 ? (
