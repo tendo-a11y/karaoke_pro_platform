@@ -3826,7 +3826,8 @@ export default function App() {
         setShowFirstOrderNotice(true);
         return;
       }
-      await proceedSubmitOrder();
+      // Плашка с ценой видна не меньше 2,5 секунды, даже если заказ ушёл быстрее.
+      await Promise.all([proceedSubmitOrder(), new Promise((r) => setTimeout(r, 2500))]);
       setListOrder(null);
     })();
   }, [listOrder]);
