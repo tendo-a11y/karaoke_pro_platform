@@ -738,38 +738,42 @@ const SONG_LIST_SORTS = {
   ],
 };
 
-function SongListRow({ song, choices, onChoose }) {
-  // Кнопка «Заказать» (или нажатие на название) открывает выбор: «Петь караоке» или «Слушать песню».
-  // Выбранный вариант сразу заполняет заказ и отправляет его (см. listOrder в App).
-  const [choosing, setChoosing] = useState(false);
+function SongListRow({ song, services, onChoose }) {
+  // Как в «Избранном»: «Заказать» раскрывает кнопки «Петь караоке» / «Слушать песню».
+  // Выбор сразу заполняет заказ и отправляет его (см. listOrder в App).
+  const [open, setOpen] = useState(false);
+  const quick = (services || []).filter((s) => /^(KARAOKE|EX\w*CLUSIVE)$/i.test((s.name || "").trim()));
   return (
-    <li className="song-lists__row">
-      <div className="song-lists__line">
-        <span className="song-lists__title" role="button" tabIndex={0} onClick={() => setChoosing((v) => !v)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setChoosing((v) => !v); } }}>
-          {song.song_title}{song.artist ? " — " + song.artist : ""}
-        </span>
+    <li className="order-row song-lists__row">
+      <div className="order-row__song" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <span>🎵 {song.song_title}</span>
         {typeof song.count === "number" && (
           <span className="song-lists__count">{song.count}</span>
         )}
-        <button type="button" className="link-btn" onClick={() => setChoosing((v) => !v)}>
-          Заказать
+        <button type="button" className="link-btn" style={{ marginLeft: "auto" }} onClick={() => setOpen((v) => !v)}>
+          {open ? "Свернуть" : "Заказать"}
         </button>
       </div>
-      {choosing ? (
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", margin: "6px 0 8px" }}>
-          {choices.map((c) => (
-            <button key={c.key} type="button" className="btn" disabled={!c.svc} onClick={() => { setChoosing(false); onChoose(song, c.svc, c.label); }}>
-              {c.label} — {c.svc ? c.svc.price : "?"} лей
-            </button>
-          ))}
-          <button type="button" className="btn-link" onClick={() => setChoosing(false)}>Отмена</button>
-        </div>
-      ) : null}
+      {song.artist && <div className="order-row__artist">🎤 {song.artist}</div>}
+      {open && quick.length > 0 && (
+        <ServiceSelect
+          quickPick
+          services={quick}
+          value=""
+          onChange={(v) => {
+            const svc = quick.find((x) => String(x.id) === String(v));
+            if (!svc) return;
+            setOpen(false);
+            onChoose(song, svc);
+          }}
+          disabled={false}
+        />
+      )}
     </li>
   );
 }
 
-function SongListsPanel({ token, onPick, onChoose, choices, tab, onTab }) {
+function SongListsPanel({ token, onPick, onChoose, services, tab, onTab }) {
   // Три кнопки в стиле "ИИ-поиск / Ссылка / Скриншот": нажали — открылся
   // список, а активная очередь свернулась; нажали ещё раз — закрылся.
   const [lists, setLists] = useState(null);
@@ -900,7 +904,7 @@ function SongListsPanel({ token, onPick, onChoose, choices, tab, onTab }) {
           {shown.length > 0 && (
             <ol className="song-lists__list" start={tab === "popular" ? page * SONG_LIST_PAGE + 1 : 1}>
               {shown.map((song, i) => (
-                <SongListRow key={`${tab}-${page}-${i}-${song.song_title}`} song={song} choices={choices} onChoose={onChoose} />
+                <SongListRow key={`${tab}-${page}-${i}-${song.song_title}`} song={song} services={services} onChoose={onChoose} />
               ))}
             </ol>
           )}
@@ -5380,11 +5384,8 @@ const showFullUi = guestHasOrdered(); const limitedView = showFullUi && !meInfo?
           tab={songListsTab}
           onTab={setSongListsTab}
           onPick={() => {}}
-          onChoose={(song, svc, label) => { if (svc) setListOrder({ song, svc, label, step: "fill" }); }}
-          choices={[
-            { key: "karaoke", label: "Петь караоке", svc: services.find((x) => x.name === "KARAOKE" || x.description === "Обычное караоке") },
-            { key: "excl", label: "Слушать песню", svc: services.find((x) => /^EX\w*CLUSIVE$/i.test((x.name || "").trim())) },
-          ]}
+          onChoose={(song, svc) => { if (svc) setListOrder({ song, svc, label: svc.name === "KARAOKE" || svc.description === "Обычное караоке" ? "Петь караоке" : "Слушать песню", step: "fill" }); }}
+          services={services}
         />
         {listOrder ? (
           <div className="link-confirm-overlay" role="alertdialog" aria-modal="true">
