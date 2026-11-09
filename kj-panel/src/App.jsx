@@ -796,6 +796,40 @@ function AddManualSongForm({ onSubmit, busy, error }) {
 // переиспользованы у VipPanel — та же самая форма "запрос -> Одобрить/
 // Отклонить", нет смысла заводить для неё отдельный набор CSS-классов.
 // ДОБАВЛЕНО (2026-11, запрос пользователя): заявка гостя на отмену или замену — плашка поверх всего экрана.
+// ДОБАВЛЕНО (2026-11, запрос пользователя): напоминание указать, с какого стола
+// начинается очередь. Пока стол не выбран, плашка видна при каждом открытии панели.
+function QueueStartReminder({ token, clubId, onOpenTables }) {
+  const [needed, setNeeded] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.getTableSettings(token, clubId)
+      .then((data) => {
+        if (!cancelled) setNeeded(!data.queue_start_table);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [token, clubId]);
+
+  if (!needed || dismissed) return null;
+
+  return (
+    <div role="alert" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div style={{ background: "#1d1f25", color: "#fff", border: "2px solid #ffb020", borderRadius: 12, padding: 20, maxWidth: 420, width: "100%" }}>
+        <h2 style={{ marginTop: 0 }}>Укажите начало очереди</h2>
+        <p>Выберите, с какого стола начинается очередь. Пока стол не выбран, очередь может строиться неправильно.</p>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button type="button" className="btn" onClick={() => onOpenTables()}>Выбрать стол</button>
+          <button type="button" className="btn-link" onClick={() => setDismissed(true)}>Позже</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ChangeRequestAlert({ token, clubId, socket }) {
   const [alert, setAlert] = useState(null);
 
@@ -6303,6 +6337,7 @@ export default function App() {
           пополнение баланса были спрятаны внутри вкладки VIP; личного чата
           с гостем у KJ Panel не было вообще. Теперь всё в одном месте. */}
           {/* ИЗМЕНЕНО (2026-11): порядок блоков — 1 Администрация, 2 Улучшения, 3 Общий чат (Telegram), 4 Плашка входа, 5 Дежурные, 6 Сообщения от гостей; заявки ниже. */}
+          <QueueStartReminder token={token} clubId={me.club_id} onOpenTables={() => setView("tables")} />
           <KjChatPanel token={token} clubId={me.club_id} socket={socketInstance} />
           <AdminMessagesPanel token={token} clubId={me.club_id} socket={socketInstance} />
           <SuggestionPanel token={token} clubId={me.club_id} />
