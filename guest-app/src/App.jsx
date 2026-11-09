@@ -3854,12 +3854,18 @@ export default function App() {
         return;
       }
       if (window.localStorage.getItem(KEY) === "1") return;
-      window.localStorage.setItem(KEY, "1");
     } catch {
       if (!meInfo.chat_enabled) return;
     }
-    setGeneralChatPopup(true);
-  }, [meInfo?.chat_enabled]); // eslint-disable-line react-hooks/exhaustive-deps
+    // Показываем только между вторым и третьим заказом и с задержкой 3 минуты после второго заказа,
+    // чтобы не перебить плашку «Теперь вам доступны больше функций».
+    if ((meInfo.orders_count ?? 0) !== 2) return;
+    const timer = setTimeout(() => {
+      try { window.localStorage.setItem(KEY, "1"); } catch { /* браузер не дал сохранить — ничего страшного */ }
+      setGeneralChatPopup(true);
+    }, 3 * 60 * 1000);
+    return () => clearTimeout(timer);
+  }, [meInfo?.chat_enabled, meInfo?.orders_count]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const generalChatPopupEl = generalChatPopup ? (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
