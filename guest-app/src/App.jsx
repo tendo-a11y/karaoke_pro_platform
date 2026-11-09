@@ -738,28 +738,38 @@ const SONG_LIST_SORTS = {
   ],
 };
 
-function SongListRow({ song, onPick }) {
-  // ИЗМЕНЕНО (2026-10, запрос пользователя: "заказ стандартно — с морганием
-  // кнопок"): нажатие "Заказать" подставляет песню в обычную форму заказа
-  // наверху, дальше всё как всегда — категория, тон, "Заказать".
+function SongListRow({ song, choices, onChoose }) {
+  // Кнопка «Заказать» (или нажатие на название) открывает выбор: «Петь караоке» или «Слушать песню».
+  // Выбранный вариант сразу заполняет заказ и отправляет его (см. listOrder в App).
+  const [choosing, setChoosing] = useState(false);
   return (
     <li className="song-lists__row">
       <div className="song-lists__line">
-        <span className="song-lists__title" role="button" tabIndex={0} onClick={() => onPick(song)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onPick(song); } }}>
-          {song.song_title}{song.artist ? ` — ${song.artist}` : ""}
+        <span className="song-lists__title" role="button" tabIndex={0} onClick={() => setChoosing((v) => !v)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setChoosing((v) => !v); } }}>
+          {song.song_title}{song.artist ? " — " + song.artist : ""}
         </span>
         {typeof song.count === "number" && (
           <span className="song-lists__count">{song.count}</span>
         )}
-        <button type="button" className="link-btn" onClick={() => onPick(song)}>
+        <button type="button" className="link-btn" onClick={() => setChoosing((v) => !v)}>
           Заказать
         </button>
       </div>
+      {choosing ? (
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", margin: "6px 0 8px" }}>
+          {choices.map((c) => (
+            <button key={c.key} type="button" className="btn" disabled={!c.svc} onClick={() => { setChoosing(false); onChoose(song, c.svc, c.label); }}>
+              {c.label} — {c.svc ? c.svc.price : "?"} лей
+            </button>
+          ))}
+          <button type="button" className="btn-link" onClick={() => setChoosing(false)}>Отмена</button>
+        </div>
+      ) : null}
     </li>
   );
 }
 
-function SongListsPanel({ token, onPick, tab, onTab }) {
+function SongListsPanel({ token, onPick, onChoose, choices, tab, onTab }) {
   // Три кнопки в стиле "ИИ-поиск / Ссылка / Скриншот": нажали — открылся
   // список, а активная очередь свернулась; нажали ещё раз — закрылся.
   const [lists, setLists] = useState(null);
@@ -890,7 +900,7 @@ function SongListsPanel({ token, onPick, tab, onTab }) {
           {shown.length > 0 && (
             <ol className="song-lists__list" start={tab === "popular" ? page * SONG_LIST_PAGE + 1 : 1}>
               {shown.map((song, i) => (
-                <SongListRow key={`${tab}-${page}-${i}-${song.song_title}`} song={song} onPick={onPick} />
+                <SongListRow key={`${tab}-${page}-${i}-${song.song_title}`} song={song} choices={choices} onChoose={onChoose} />
               ))}
             </ol>
           )}
@@ -3790,7 +3800,29 @@ export default function App() {
   // ДОБАВЛЕНО (2026-10): всплывающее сообщение "скоро ваша очередь" — за
   // две песни и за одну песню до выхода гостя, один раз на песню.
   const [turnToast, setTurnToast] = useState(null);
-  const [listChoice, setListChoice] = useState(null);
+  const [listOrder, setListOrder] = useState(null);
+  // Выбор песни из списка: сначала заполняем форму заказа, потом отправляем заказ сами.
+  useEffect(() => {
+    if (!listOrder || listOrder.step !== "fill") return;
+    setSongTitle(listOrder.song.song_title || "");
+    setArtist(listOrder.song.artist || "");
+    setSongUrl(null);
+    setOrderExtra(null);
+    setServiceId(String(listOrder.svc.id));
+    setListOrder({ ...listOrder, step: "send" });
+  }, [listOrder]);
+  useEffect(() => {
+    if (!listOrder || listOrder.step !== "send") return;
+    (async () => {
+      if (meInfo?.first_order_banner?.enabled && !isFirstOrderNoticeSeen()) {
+        setListOrder(null);
+        setShowFirstOrderNotice(true);
+        return;
+      }
+      await proceedSubmitOrder();
+      setListOrder(null);
+    })();
+  }, [listOrder]);
   const [songListsTab, setSongListsTab] = useState(null);
   // Активная очередь по умолчанию свёрнута; открывается по треугольнику (запрос 2026-10-28).
   const [queueOpen, setQueueOpen] = useState(false);
@@ -5347,37 +5379,22 @@ const showFullUi = guestHasOrdered(); const limitedView = showFullUi && !meInfo?
           token={session.token}
           tab={songListsTab}
           onTab={setSongListsTab}
-          onPick={(song) => setListChoice(song)}
+          onPick={() => {}}
+          onChoose={(song, svc, label) => { if (svc) setListOrder({ song, svc, label, step: "fill" }); }}
+          choices={[
+            { key: "karaoke", label: "Петь караоке", svc: services.find((x) => x.name === "KARAOKE" || x.description === "Обычное караоке") },
+            { key: "excl", label: "Слушать песню", svc: services.find((x) => /^EX\w*CLUSIVE$/i.test((x.name || "").trim())) },
+          ]}
         />
-          {listChoice ? (() => {
-            const karaokeSvc = services.find((x) => x.name === "KARAOKE" || x.description === "Обычное караоке");
-            const exclSvc = services.find((x) => /^EX\w*CLUSIVE$/i.test((x.name || "").trim()));
-            const pickSvc = (svc) => {
-              const song = listChoice;
-              setListChoice(null);
-              if (!svc) return;
-              setSongTitle(song.song_title || "");
-              setArtist(song.artist || "");
-              setSongUrl(null);
-              setOrderExtra(null);
-              setServiceId(String(svc.id));
-              if (svc.link_default) setInternetHint({ name: svc.name, price: svc.price, fromLink: false });
-              const isKaraoke = svc.name === "KARAOKE" || svc.description === "Обычное караоке";
-              if (isKaraoke && song.artist && String(song.artist).trim()) setInternetHint({ name: svc.description || svc.name, price: svc.price, fromLink: false });
-              const panel = document.querySelector(".order-form-panel");
-              if (panel) panel.scrollIntoView({ behavior: "smooth", block: "start" });
-            };
-            return (
-              <div style={{ margin: "8px 0", padding: 10, border: "1px solid var(--accent)", borderRadius: 10 }}>
-                <div>🎵 {listChoice.song_title}{listChoice.artist ? " — " + listChoice.artist : ""}</div>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
-                  <button type="button" className="btn" disabled={!karaokeSvc} onClick={() => pickSvc(karaokeSvc)}>Петь караоке — {karaokeSvc ? karaokeSvc.price : "?"} лей</button>
-                  <button type="button" className="btn" disabled={!exclSvc} onClick={() => pickSvc(exclSvc)}>Слушать песню — {exclSvc ? exclSvc.price : "?"} лей</button>
-                  <button type="button" className="btn-link" onClick={() => setListChoice(null)}>Отмена</button>
-                </div>
-              </div>
-            );
-          })() : null}
+        {listOrder ? (
+          <div className="link-confirm-overlay" role="alertdialog" aria-modal="true">
+            <div className="link-confirm-plate">
+              <p><b>{listOrder.song.song_title}</b>{listOrder.song.artist ? " — " + listOrder.song.artist : ""}</p>
+              <p>{listOrder.label}: <b>{listOrder.svc.price} лей</b></p>
+              <p>Заказ отправляется…</p>
+            </div>
+          </div>
+        ) : null}
         {songListsOpen ? null : !queueVisible ? (
           <p className="empty-hint">Очередь не отображается.</p>
         ) : queue.length === 0 ? (
