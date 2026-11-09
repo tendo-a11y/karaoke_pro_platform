@@ -4768,7 +4768,7 @@ const showFullUi = guestHasOrdered(); const limitedView = showFullUi && !meInfo?
         </div>
       )}
       {listOrder && listOrder.step === "confirm" ? (
-        <div className="link-confirm-overlay" role="alertdialog" aria-modal="true">
+        <div className="link-confirm-overlay msg-popup-overlay" role="alertdialog" aria-modal="true">
           <div className="link-confirm-plate">
             <p>{listOrder.song.artist ? <b>{listOrder.song.artist}</b> : null}{listOrder.song.artist ? " — " : ""}{listOrder.song.song_title}</p>
             <p>Категория: <b>{listOrder.label}</b></p>
