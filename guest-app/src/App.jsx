@@ -3790,6 +3790,7 @@ export default function App() {
   // ДОБАВЛЕНО (2026-10): всплывающее сообщение "скоро ваша очередь" — за
   // две песни и за одну песню до выхода гостя, один раз на песню.
   const [turnToast, setTurnToast] = useState(null);
+  const [listChoice, setListChoice] = useState(null);
   const [songListsTab, setSongListsTab] = useState(null);
   // Активная очередь по умолчанию свёрнута; открывается по треугольнику (запрос 2026-10-28).
   const [queueOpen, setQueueOpen] = useState(false);
@@ -5346,17 +5347,37 @@ const showFullUi = guestHasOrdered(); const limitedView = showFullUi && !meInfo?
           token={session.token}
           tab={songListsTab}
           onTab={setSongListsTab}
-          onPick={(song) => {
-            setSongTitle(song.song_title);
-            setArtist(song.artist || "");
-            setSongUrl(null);
-            setOrderExtra(null);
-            // Выбрали песню из списка — списки закрываем, чтобы открылся шаг заказа (запрос 2026-10).
-            setSongListsTab(null);
-            const panel = document.querySelector(".order-form-panel");
-            if (panel) panel.scrollIntoView({ behavior: "smooth", block: "start" });
-          }}
+          onPick={(song) => setListChoice(song)}
         />
+          {listChoice ? (() => {
+            const karaokeSvc = services.find((x) => x.name === "KARAOKE" || x.description === "Обычное караоке");
+            const exclSvc = services.find((x) => /^EX\w*CLUSIVE$/i.test((x.name || "").trim()));
+            const pickSvc = (svc) => {
+              const song = listChoice;
+              setListChoice(null);
+              if (!svc) return;
+              setSongTitle(song.song_title || "");
+              setArtist(song.artist || "");
+              setSongUrl(null);
+              setOrderExtra(null);
+              setServiceId(String(svc.id));
+              if (svc.link_default) setInternetHint({ name: svc.name, price: svc.price, fromLink: false });
+              const isKaraoke = svc.name === "KARAOKE" || svc.description === "Обычное караоке";
+              if (isKaraoke && song.artist && String(song.artist).trim()) setInternetHint({ name: svc.description || svc.name, price: svc.price, fromLink: false });
+              const panel = document.querySelector(".order-form-panel");
+              if (panel) panel.scrollIntoView({ behavior: "smooth", block: "start" });
+            };
+            return (
+              <div style={{ margin: "8px 0", padding: 10, border: "1px solid var(--accent)", borderRadius: 10 }}>
+                <div>🎵 {listChoice.song_title}{listChoice.artist ? " — " + listChoice.artist : ""}</div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+                  <button type="button" className="btn" disabled={!karaokeSvc} onClick={() => pickSvc(karaokeSvc)}>Петь караоке — {karaokeSvc ? karaokeSvc.price : "?"} лей</button>
+                  <button type="button" className="btn" disabled={!exclSvc} onClick={() => pickSvc(exclSvc)}>Слушать песню — {exclSvc ? exclSvc.price : "?"} лей</button>
+                  <button type="button" className="btn-link" onClick={() => setListChoice(null)}>Отмена</button>
+                </div>
+              </div>
+            );
+          })() : null}
         {songListsOpen ? null : !queueVisible ? (
           <p className="empty-hint">Очередь не отображается.</p>
         ) : queue.length === 0 ? (
