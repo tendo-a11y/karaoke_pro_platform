@@ -4805,13 +4805,13 @@ const showFullUi = guestHasOrdered(); const limitedView = showFullUi && !meInfo?
       {rulesPlate ? (
         <div className="msg-popup-overlay" role="dialog" aria-modal="true" style={{ zIndex: 1100 }}>
           <div className="msg-popup" style={{ maxWidth: 420, padding: 22, fontSize: 18, lineHeight: 1.45 }}>
-            <div className="msg-popup__title" style={{ fontSize: 24, marginBottom: 12 }}>Правила караоке</div>
-            <ul style={{ paddingLeft: 20, margin: "0 0 16px" }}>
-              <li>Песни ставятся в очередь по порядку. Очередь видна в блоке «Активная очередь».</li>
-              <li>С одного стола в очереди может быть 2 песни, при объединённых столах — 4.</li>
-              <li>Плюсовки можно заказывать в любое время.</li>
-              <li>Уважайте других гостей: не мешайте исполнителю и соседним столам.</li>
-            </ul>
+            <div className="msg-popup__title" style={{ fontSize: 24, marginBottom: 12 }}>Правила</div>
+            <div style={{ margin: "0 0 16px" }}>
+              <p style={{ margin: "0 0 10px" }}>На один стол 2 песни.</p>
+              <p style={{ margin: "0 0 10px" }}>Заказы идут <b>СТРОГО по нумерации столов</b>. А не по мере заказов.</p>
+              <p style={{ margin: "0 0 10px" }}>Запрещены для заказа жанры: Тюремная лирика, Блатная романтика.</p>
+              <p style={{ margin: "0 0 10px" }}>С уважением, Администрация</p>
+            </div>
             <label style={{ display: "flex", alignItems: "center", gap: 10, margin: "12px 0 18px", fontSize: 18, fontWeight: 700 }}>
               <input type="checkbox" style={{ width: 22, height: 22 }} checked={rulesDontShow} onChange={(e) => setRulesDontShow(e.target.checked)} />
               Больше не показывать
