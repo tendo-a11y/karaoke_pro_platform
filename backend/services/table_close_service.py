@@ -636,6 +636,14 @@ class DecisionResult:
         self.closed_orders = closed_orders or []
 
 
+def _reset_queue_start_table(club_id: int) -> None:
+    # ДОБАВЛЕНО (запрос пользователя): закрытие любого стола (не только «Закрыть все столы») сбрасывает стол начала очереди —
+    # KJ после этого снова выбирает его, и показывается плашка «Укажите начало очереди».
+    club = db.session.get(Club, club_id)
+    if club is not None:
+        club.queue_start_table = None
+
+
 def approve_request(request_id: int, kj, hide_receipt: bool) -> DecisionResult:
     """
     Подтверждение KJ. Порядок действий важен: сперва считаем чек (нужны ещё
@@ -687,6 +695,7 @@ def approve_request(request_id: int, kj, hide_receipt: bool) -> DecisionResult:
     req.receipt_json = receipt
     req.decided_at = _utcnow()
     req.decided_by = kj.id
+    _reset_queue_start_table(req.club_id)
     db.session.commit()
     emit_table_close_request_decided(req)
 
@@ -798,6 +807,7 @@ def close_table_directly(club_id: int, table_no: int, kj, hide_receipt: bool) ->
         stale.decided_at = _utcnow()
         stale.decided_by = kj.id
 
+    _reset_queue_start_table(club_id)
     db.session.commit()
     emit_table_close_request_decided(req)
     if stale is not None:
@@ -866,6 +876,7 @@ def close_sung_orders(club_id: int, table_no: int, kj) -> DecisionResult:
         order.settled_at = now
         if order.vdj_item_id and not order.vdj_item_id.startswith("closed:"):
             order.vdj_item_id = f"closed:{closed_ts}:{order.vdj_item_id}"[:255]
+    _reset_queue_start_table(club_id)
     db.session.commit()
 
     for order in sung:
@@ -890,6 +901,7 @@ def close_sung_orders(club_id: int, table_no: int, kj) -> DecisionResult:
         decided_by=kj.id,
     )
     db.session.add(req)
+    _reset_queue_start_table(club_id)
     db.session.commit()
     return DecisionResult(outcome="ok", request=req, closed_orders=sung)
 
