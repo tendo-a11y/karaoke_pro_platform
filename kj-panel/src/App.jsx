@@ -5431,12 +5431,17 @@ function OrdersBoard({ token, clubId, socket, onOpenGuest, onOpenTable }) {
   const [queueStartTableSaved, setQueueStartTableSaved] = useState(false);
   const [queueStartTableSet, setQueueStartTableSet] = useState(false);
   const queueStartRef = useRef(null);
+  const [queueMode, setQueueMode] = useState(null);
+  const [queueStartBlink, setQueueStartBlink] = useState(false);
+  const [queueStartPlate, setQueueStartPlate] = useState(false);
+  const acceptAttemptsRef = useRef(0);
 
   async function loadQueueSettings() {
     try {
       const data = await api.getTableSettings(token, clubId);
       setQueueStartTableDraft(String(data.queue_start_table || 1));
       setQueueStartTableSet(Boolean(data.queue_start_table));
+      setQueueMode(data.queue_mode || null);
     } catch {
       // Не критично для этого экрана — просто не покажем поле.
     }
@@ -5527,11 +5532,21 @@ function OrdersBoard({ token, clubId, socket, onOpenGuest, onOpenTable }) {
   }, [socket]);
 
   async function handleAccept(orderId) {
-    if (!queueStartTableSet) {
+    const needsStartTable = queueMode === "sequential" && !queueStartTableSet;
+    if (needsStartTable) {
+      // Первое нажатие — поле мигает и получает фокус; повторное — плашка.
+      acceptAttemptsRef.current += 1;
+      if (acceptAttemptsRef.current >= 2) {
+        setQueueStartPlate(true);
+        return;
+      }
       setActionError("Сначала укажите стол, с которого начинается очередь");
+      setQueueStartBlink(true);
+      setTimeout(() => setQueueStartBlink(false), 6000);
       queueStartRef.current?.focus();
       return;
     }
+    acceptAttemptsRef.current = 0;
     setBusyOrderId(orderId);
     setActionError(null);
     try {
@@ -5668,8 +5683,18 @@ function OrdersBoard({ token, clubId, socket, onOpenGuest, onOpenTable }) {
 
   return (
     <div className="orders-board">
+      {queueStartPlate ? (
+        <div role="dialog" aria-modal="true" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
+          <div style={{ background: "#1e1e1e", border: "1px solid #ffb020", borderRadius: 12, padding: 20, maxWidth: 360, margin: 16 }}>
+            <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 10 }}>Укажите начало очереди</div>
+            <div style={{ marginBottom: 16 }}>Заказ не принимается, пока не указан стол, с которого начинается очередь. Введите номер в поле «Начало очереди (стол)».</div>
+            <button type="button" className="btn btn--accent" onClick={() => { setQueueStartPlate(false); queueStartRef.current?.focus(); }}>Понятно</button>
+          </div>
+        </div>
+      ) : null}
       <div className="orders-board__header">
         <SkipConsentCheckbox />
+        {queueMode === "sequential" ? (
         <form className="table-settings-form orders-board__queue-start" onSubmit={handleSaveQueueStartTable}>
           <label className="table-settings-field">
             <span>Начало очереди (стол)</span>
@@ -5677,6 +5702,7 @@ function OrdersBoard({ token, clubId, socket, onOpenGuest, onOpenTable }) {
               type="number"
               min="1"
               ref={queueStartRef}
+              className={queueStartBlink ? "queue-start-blink" : undefined}
               value={queueStartTableDraft}
               onChange={(e) => {
                 setQueueStartTableDraft(e.target.value);
@@ -5691,6 +5717,7 @@ function OrdersBoard({ token, clubId, socket, onOpenGuest, onOpenTable }) {
           {queueStartTableSaved && <span className="empty-hint">Сохранено.</span>}
           {queueStartTableError && <span className="banner banner--error">{queueStartTableError}</span>}
         </form>
+        ) : null}
         <button
           type="button"
           className="btn btn--danger"
@@ -6337,7 +6364,6 @@ export default function App() {
           пополнение баланса были спрятаны внутри вкладки VIP; личного чата
           с гостем у KJ Panel не было вообще. Теперь всё в одном месте. */}
           {/* ИЗМЕНЕНО (2026-11): порядок блоков — 1 Администрация, 2 Улучшения, 3 Общий чат (Telegram), 4 Плашка входа, 5 Дежурные, 6 Сообщения от гостей; заявки ниже. */}
-          <QueueStartReminder token={token} clubId={me.club_id} onOpenTables={() => setView("tables")} />
           <KjChatPanel token={token} clubId={me.club_id} socket={socketInstance} />
           <AdminMessagesPanel token={token} clubId={me.club_id} socket={socketInstance} />
           <SuggestionPanel token={token} clubId={me.club_id} />
