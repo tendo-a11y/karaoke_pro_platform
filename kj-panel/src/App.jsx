@@ -6354,6 +6354,7 @@ export default function App() {
       <ConnectionOverviewPanel connected={connected} bridgeStatus={bridgeStatus} />
 
       <NewOrderBanner socket={socketInstance} />
+      <ChangeRequestAlert token={token} clubId={me.club_id} socket={socketInstance} />
 
       {view === "messages" ? (
         <main className="app-main">
@@ -6370,7 +6371,6 @@ export default function App() {
           <GeneralChatToggle token={token} />
           <EntryNoticeEditor token={token} />
           <StandardMessagesPanel token={token} clubId={me.club_id} />
-          <ChangeRequestAlert token={token} clubId={me.club_id} socket={socketInstance} />
           <OrderChangeRequestsPanel token={token} clubId={me.club_id} socket={socketInstance} />
           <TableCloseRequestsPanel token={token} clubId={me.club_id} socket={socketInstance} />
           <VipRequestsPanel token={token} clubId={me.club_id} socket={socketInstance} />
