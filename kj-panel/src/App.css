@@ -1134,3 +1134,14 @@ img { max-width: 100%; }
   0%, 100% { box-shadow: 0 0 0 0 rgba(255, 176, 32, 0.9); }
   50% { box-shadow: 0 0 0 6px rgba(255, 176, 32, 0); }
 }
+
+
+/* Поле номера стола начала очереди мигает, когда заказ пытаются принять без него. */
+.queue-start-blink {
+  animation: queue-start-blink 0.7s ease-in-out infinite;
+  border-color: #ffb020 !important;
+}
+@keyframes queue-start-blink {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 176, 32, 0.9); }
+  50% { box-shadow: 0 0 0 6px rgba(255, 176, 32, 0); }
+}
