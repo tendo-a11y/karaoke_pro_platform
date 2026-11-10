@@ -178,7 +178,7 @@ def confirm(order_id):
     # services/table_board_service.py — это только про отображение порядка
     # на карточках, а это отдельная и обязательная для любого режима проверка).
     club = db.session.get(Club, g.kj.club_id)
-    if club is not None and not club.queue_start_table:
+    if club is not None and table_board_service.get_queue_mode(club) == table_board_service.QUEUE_MODE_SEQUENTIAL and not club.queue_start_table:
         return api_error(
             400,
             "QUEUE_START_TABLE_REQUIRED",
