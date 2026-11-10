@@ -1371,7 +1371,7 @@ def get_table_settings(club_id):
         "songs_per_table": club.songs_per_table,
         "crazy_after_queue": club.crazy_after_queue,
         "queue_mode": get_queue_mode(club),
-        "queue_start_table": get_queue_start_table(club),
+        "queue_start_table": (club.queue_start_table or None),
         "guest_queue_visible": bool(club.guest_queue_visible),         "group_approval_required": bool(club.group_approval_required),
     })
 
