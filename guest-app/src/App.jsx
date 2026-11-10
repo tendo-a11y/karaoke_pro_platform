@@ -3810,6 +3810,14 @@ export default function App() {
   // ДОБАВЛЕНО (2026-10): всплывающее сообщение "скоро ваша очередь" — за
   // две песни и за одну песню до выхода гостя, один раз на песню.
   const [turnToast, setTurnToast] = useState(null);
+  const [rulesPlate, setRulesPlate] = useState(false);
+  const [rulesDontShow, setRulesDontShow] = useState(false);
+  function closeRulesPlate() {
+    setRulesPlate(false);
+    if (rulesDontShow) {
+      try { window.localStorage.setItem("kp_rules_hide", "1"); } catch { /* браузер не дал сохранить */ }
+    }
+  }
   const [listOrder, setListOrder] = useState(null);
   // Выбор песни из списка: сначала заполняем форму заказа, потом отправляем заказ сами.
   useEffect(() => {
@@ -4524,6 +4532,11 @@ const showFullUi = guestHasOrdered(); const limitedView = showFullUi && !meInfo?
     storeSession(clubId, activatedSession);
     setSession(activatedSession);
     setShowActivation(false);
+    try {
+      if (window.localStorage.getItem("kp_rules_hide") !== "1") setRulesPlate(true);
+    } catch {
+      setRulesPlate(true);
+    }
     if (profileLogin) {
       setProfileLogin(false);
       setProfileTopOpen(true);
@@ -4786,6 +4799,24 @@ const showFullUi = guestHasOrdered(); const limitedView = showFullUi && !meInfo?
               <button type="button" className="link-confirm-yes" onClick={() => setListOrder({ ...listOrder, step: "send" })}>✅ Подтвердить {Number(listOrder.svc.price)} лей</button>
               <button type="button" className="link-confirm-cancel" onClick={() => { setListOrder(null); setSongTitle(""); setArtist(""); setSongUrl(null); setServiceId(""); }}>Отмена</button>
             </div>
+          </div>
+        </div>
+      ) : null}
+      {rulesPlate ? (
+        <div className="msg-popup-overlay" role="dialog" aria-modal="true" style={{ zIndex: 1100 }}>
+          <div className="msg-popup" style={{ maxWidth: 420, padding: 22, fontSize: 18, lineHeight: 1.45 }}>
+            <div className="msg-popup__title" style={{ fontSize: 24, marginBottom: 12 }}>Правила караоке</div>
+            <ul style={{ paddingLeft: 20, margin: "0 0 16px" }}>
+              <li>Песни ставятся в очередь по порядку. Очередь видна в блоке «Активная очередь».</li>
+              <li>С одного стола в очереди может быть 2 песни, при объединённых столах — 4.</li>
+              <li>Плюсовки можно заказывать в любое время.</li>
+              <li>Уважайте других гостей: не мешайте исполнителю и соседним столам.</li>
+            </ul>
+            <label style={{ display: "flex", alignItems: "center", gap: 10, margin: "12px 0 18px", fontSize: 18, fontWeight: 700 }}>
+              <input type="checkbox" style={{ width: 22, height: 22 }} checked={rulesDontShow} onChange={(e) => setRulesDontShow(e.target.checked)} />
+              Больше не показывать
+            </label>
+            <button type="button" style={{ display: "block", width: "100%", padding: 14, borderRadius: 10, border: "none", fontWeight: 800, fontSize: 20, color: "#fff", background: "#2e7d32", cursor: "pointer" }} onClick={closeRulesPlate}>Понятно</button>
           </div>
         </div>
       ) : null}
