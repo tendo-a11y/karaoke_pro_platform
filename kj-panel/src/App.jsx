@@ -795,7 +795,949 @@ function AddManualSongForm({ onSubmit, busy, error }) {
 // стилевые классы (vip-list/vip-row/vip-row__actions) намеренно
 // переиспользованы у VipPanel — та же самая форма "запрос -> Одобрить/
 // Отклонить", нет смысла заводить для неё отдельный набор CSS-классов.
-// ДОБАВЛЕНО (2026-11, запрос пользователя): общий чат включается сам, когда
+// ДОБАВЛЕНО (2026-11, запрос пользователя): заявка гостя на отмену или замену — плашка поверх всего экрана.
+// ДОБАВЛЕНО (2026-11, запрос пользователя): напоминание указать, с какого стола
+// начинается очередь. Пока стол не выбран, плашка видна при каждом открытии панели.
+function QueueStartReminder({ token, clubId, onOpenTables }) {
+  const [needed, setNeeded] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.getTableSettings(token, clubId)
+      .then((data) => {
+        if (!cancelled) setNeeded(!data.queue_start_table);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [token, clubId]);
+
+  if (!needed || dismissed) return null;
+
+  return (
+    <div role="alert" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div style={{ background: "#1d1f25", color: "#fff", border: "2px solid #ffb020", borderRadius: 12, padding: 20, maxWidth: 420, width: "100%" }}>
+        <h2 style={{ marginTop: 0 }}>Укажите начало очереди</h2>
+        <p>Выберите, с какого стола начинается очередь. Пока стол не выбран, очередь может строиться неправильно.</p>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button type="button" className="btn" onClick={() => onOpenTables()}>Выбрать стол</button>
+          <button type="button" className="btn-link" onClick={() => setDismissed(true)}>Позже</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ChangeRequestAlert({ token, clubId, socket }) {
+  const [alert, setAlert] = useState(null);
+
+  useEffect(() => {
+    if (!socket) return undefined;
+    const onCreated = async (changeRequest) => {
+      try {
+        const list = await api.listOrderChangeRequests(token, clubId);
+        setAlert((list || []).find((r) => r.id === changeRequest.id) || changeRequest);
+      } catch {
+        setAlert(changeRequest);
+      }
+    };
+    socket.on("order_change_request_created", onCreated);
+    return () => socket.off("order_change_request_created", onCreated);
+  }, [socket, token, clubId]);
+
+  if (!alert) return null;
+  const song = alert.order_song_title || "песня";
+  const tableText = alert.table_no ? ` (стол ${alert.table_no})` : "";
+  const text =
+    alert.kind === "replace"
+      ? `Гость просит заменить песню «${song}»${alert.new_song_title ? ` на «${alert.new_song_title}»` : ""}${tableText}`
+      : `Гость просит отменить песню «${song}»${tableText}`;
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div style={{ background: "#1d1f25", color: "#fff", border: "2px solid #ffb020", borderRadius: 12, padding: 20, maxWidth: 420, width: "100%" }}>
+        <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 10 }}>🔔 Заявка от гостя</div>
+        <div style={{ fontSize: 16, marginBottom: 16 }}>{text}</div>
+        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+          <button
+            type="button"
+            onClick={() => {
+              setAlert(null);
+              document.querySelector(".order-change-requests-panel")?.scrollIntoView({ behavior: "smooth", block: "center" });
+            }}
+          >
+            Открыть
+          </button>
+          <button type="button" className="link-btn" onClick={() => setAlert(null)}>
+            Закрыть
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function OrderChangeRequestsPanel({ token, clubId, socket }) {
+  const [pending, setPending] = useState(null);
+  const [actionError, setActionError] = useState(null);
+  const [busyKey, setBusyKey] = useState(null);
+
+  async function reload() {
+    try {
+      const data = await api.listOrderChangeRequests(token, clubId);
+      setPending(data);
+    } catch {
+      // Тихо — отдельная панель не должна ломать показ основного экрана
+      // заказов из-за временной ошибки её собственной загрузки; при
+      // следующем действии (approve/reject) ошибка всё равно всплывёт.
+    }
+  }
+
+  useEffect(() => {
+    reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clubId]);
+
+  useEffect(() => {
+    if (!socket) return undefined;
+    const onCreated = (changeRequest) => {
+      setPending((prev) => {
+        const list = prev || [];
+        return list.some((r) => r.id === changeRequest.id) ? list : [...list, changeRequest];
+      });
+    };
+    // ДОБАВЛЕНО (2026-09-23, жалоба пользователя "не одобрить не отклонить
+    // нельзя" — заявка уже обработана): раньше решение по заявке, принятое
+    // в одной вкладке/на одном устройстве, никак не доходило до других
+    // открытых панелей — там заявка навсегда оставалась в списке "🔔
+    // Заявки от гостей", а любой клик по Одобрить/Отклонить получал 409
+    // ALREADY_DECIDED (см. sockets.py::emit_order_change_request_decided).
+    // Слушаем то же событие и просто убираем заявку из списка.
+    const onDecided = (changeRequest) => {
+      setPending((prev) => (prev || []).filter((r) => r.id !== changeRequest.id));
+    };
+    socket.on("order_change_request_created", onCreated);
+    socket.on("order_change_request_decided", onDecided);
+    return () => {
+      socket.off("order_change_request_created", onCreated);
+      socket.off("order_change_request_decided", onDecided);
+    };
+  }, [socket]);
+
+  async function handleApprove(requestId) {
+    setBusyKey(requestId);
+    setActionError(null);
+    try {
+      await api.approveOrderChangeRequest(token, requestId);
+      await reload();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+      // Заявку мог уже решить кто-то другой (другая вкладка/устройство) —
+      // без перезагрузки списка она осталась бы висеть в нём навсегда,
+      // раз за разом отвечая той же ошибкой на любой клик (см. докстринг
+      // emit_order_change_request_decided выше).
+      if (err instanceof ApiError && err.code === "ALREADY_DECIDED") {
+        await reload();
+      }
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  async function handleReject(requestId) {
+    setBusyKey(requestId);
+    setActionError(null);
+    try {
+      await api.rejectOrderChangeRequest(token, requestId);
+      await reload();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+      if (err instanceof ApiError && err.code === "ALREADY_DECIDED") {
+        await reload();
+      }
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  if (!pending || pending.length === 0) return null;
+
+  return (
+    <section className="order-change-requests-panel">
+      <h2>🔔 Заявки от гостей ({pending.length})</h2>
+      {actionError && <div className="banner banner--error">{actionError}</div>}
+      <ul className="vip-list">
+        {pending.map((r) => (
+          <li key={r.id} className="vip-row">
+            <span>
+              {r.kind === "cancel" ? "❌ Отменить" : "🔁 Заменить"} — стол {tableLabel(r.table_no)}:{" "}
+              {r.order_song_title}
+              {r.order_artist ? ` (${r.order_artist})` : ""}
+              {r.kind === "replace" && (
+                <>
+                  {" "}→ {r.new_song_title}
+                  {r.new_artist ? ` (${r.new_artist})` : ""}
+                </>
+              )}
+            </span>
+            <span className="vip-row__actions">
+              <button
+                type="button" className="btn btn--accent" disabled={busyKey === r.id}
+                onClick={() => handleApprove(r.id)}
+              >
+                Одобрить
+              </button>
+              <button
+                type="button" className="btn btn--reject" disabled={busyKey === r.id}
+                onClick={() => handleReject(r.id)}
+              >
+                Отклонить
+              </button>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+// ДОБАВЛЕНО (запрос пользователя 2026-09-27, "закрыть стол по инициативе
+// гостя-админа" — корневое исправление бага "первый гость навсегда админ
+// стола", см. докстринг backend/models.py::TableCloseRequest). Гость-админ
+// группового стола отправляет заявку на закрытие (кнопка "🔒 Закрыть стол"
+// в Guest App), а KJ подтверждает или отклоняет её здесь — тот же паттерн,
+// что и OrderChangeRequestsPanel выше (список + сокет-события created/
+// decided), плюс чекбокс "Не показывать чек" на подтверждении: чек всё
+// равно считается и сохраняется на бэкенде, просто не раздаётся гостям
+// через поллинг /api/guest/me, если чекбокс отмечен.
+function TableCloseRequestsPanel({ token, clubId, socket }) {
+  const [pending, setPending] = useState(null);
+  const [actionError, setActionError] = useState(null);
+  const [busyKey, setBusyKey] = useState(null);
+  // По умолчанию чек гостю НЕ показываем; показываем только при галочке «Показать чек».
+  const [showReceiptByRequest, setShowReceiptByRequest] = useState({});
+
+  async function reload() {
+    try {
+      const data = await api.listTableCloseRequests(token, clubId);
+      setPending(data);
+    } catch {
+      // Тихо — как и OrderChangeRequestsPanel выше: отдельная панель не
+      // должна ломать показ основного экрана заказов из-за временной
+      // ошибки её собственной загрузки.
+    }
+  }
+
+  useEffect(() => {
+    reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clubId]);
+
+  useEffect(() => {
+    if (!socket) return undefined;
+    const onCreated = (closeRequest) => {
+      setPending((prev) => {
+        const list = prev || [];
+        return list.some((r) => r.id === closeRequest.id) ? list : [...list, closeRequest];
+      });
+    };
+    const onDecided = (closeRequest) => {
+      setPending((prev) => (prev || []).filter((r) => r.id !== closeRequest.id));
+    };
+    socket.on("table_close_request_created", onCreated);
+    socket.on("table_close_request_decided", onDecided);
+    return () => {
+      socket.off("table_close_request_created", onCreated);
+      socket.off("table_close_request_decided", onDecided);
+    };
+  }, [socket]);
+
+  async function handleApprove(requestId) {
+    setBusyKey(requestId);
+    setActionError(null);
+    try {
+      await api.approveTableCloseRequest(token, requestId, !showReceiptByRequest[requestId]);
+      await reload();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+      // Заявку мог уже решить кто-то другой (другая вкладка/устройство) —
+      // без перезагрузки списка она осталась бы висеть в нём навсегда.
+      if (err instanceof ApiError && err.code === "ALREADY_DECIDED") {
+        await reload();
+      }
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  async function handleReject(requestId) {
+    setBusyKey(requestId);
+    setActionError(null);
+    try {
+      await api.rejectTableCloseRequest(token, requestId);
+      await reload();
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : String(err));
+      if (err instanceof ApiError && err.code === "ALREADY_DECIDED") {
+        await reload();
+      }
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  if (!pending || pending.length === 0) return null;
+
+  return (
+    <section className="table-close-requests-panel">
+      <h2>🔒 Заявки на закрытие стола ({pending.length})</h2>
+      {actionError && <div className="banner banner--error">{actionError}</div>}
+      <ul className="vip-list">
+        {pending.map((r) => (
+          <li key={r.id} className="vip-row">
+            <span>Стол {tableLabel(r.table_no)}</span>
+            <span className="vip-row__actions">
+              <label className="table-close-hide-receipt">
+                <input
+                  type="checkbox"
+                  checked={!!showReceiptByRequest[r.id]}
+                  onChange={(e) =>
+                    setShowReceiptByRequest((prev) => ({ ...prev, [r.id]: e.target.checked }))
+                  }
+                />
+                Показать чек
+              </label>
+              <button
+                type="button" className="btn btn--accent" disabled={busyKey === r.id}
+                onClick={() => handleApprove(r.id)}
+              >
+                Подтвердить
+              </button>
+              <button
+                type="button" className="btn btn--reject" disabled={busyKey === r.id}
+                onClick={() => handleReject(r.id)}
+              >
+                Отклонить
+              </button>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+// Block D KJ Pro — заявки на VIP-статус (аудит handlers/kj.py:1291-1401,
+// vip_request_approve/reject) + список VIP-клиентов с ручными операциями
+// над балансом/кэшбэком (kj.py:2133-2229). ТЗ п.45 (финальная единая
+// модель входа): ручное назначение VIP "из ничего" без заявки гостя, и
+// одноразовый access_code, который оно выдавало, — удалены целиком вместе
+// со всем механизмом access_code/redeem (см. отчёт по п.45 и routes/kj.py
+// ::list_vip_clients). VIP теперь появляется только через заявку гостя,
+// уже подтвердившего личность через Google, + одобрение здесь.
+// ДОБАВЛЕНО (2026-10, запрос пользователя): статистика своего клуба.
+// Экран пока СКРЫТ — кнопка "Статистика" видна только если панель открыта
+// по адресу с ?stats=1 (решение пользователя: "подготовить, проверить, но
+// не включать, пока всё не закончим").
+// Статистика включена для всех KJ (запрос пользователя 2026-10-09: "показываем").
+const STATS_ENABLED = true;
+
+// Вкладки внутри кнопки «Настройки клуба» (запрос 2026-10-30).
+const SETTINGS_TABS = [
+  { key: "tables", label: "🪑 Столы" },
+  { key: "categories", label: "🎚 Категории" },
+  { key: "stats", label: "Статистика" },
+  { key: "vip", label: "⭐ VIP" },
+  { key: "guests", label: "👥 Гости" },
+];
+
+
+function statsDay(offsetDays) {
+  // "Клубный день" начинается в 08:00 — до утра считается вчерашний вечер.
+  const d = new Date(Date.now() - 8 * 3600 * 1000);
+  d.setDate(d.getDate() + offsetDays);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+const STATS_PERIODS = [
+  { key: "today", label: "Сегодня", from: () => statsDay(0), to: () => statsDay(0) },
+  { key: "yesterday", label: "Вчера", from: () => statsDay(-1), to: () => statsDay(-1) },
+  { key: "week", label: "7 дней", from: () => statsDay(-6), to: () => statsDay(0) },
+  { key: "month", label: "30 дней", from: () => statsDay(-29), to: () => statsDay(0) },
+];
+
+function statsMoney(value) {
+  return Number(value || 0).toLocaleString("ru-RU", { maximumFractionDigits: 2 });
+}
+
+function StatsDelta({ current, previous }) {
+  if (!previous) return <span className="stats-delta">—</span>;
+  const diff = Math.round(((current - previous) / previous) * 100);
+  const cls = diff > 0 ? "stats-delta stats-delta--up" : diff < 0 ? "stats-delta stats-delta--down" : "stats-delta";
+  return <span className={cls}>{diff > 0 ? "+" : ""}{diff}%</span>;
+}
+
+function StatsTiles({ items }) {
+  return (
+    <div className="stats-tiles">
+      {items.map((item) => (
+        <div key={item.label} className="stats-tile">
+          <div className="stats-tile__value">{item.value}</div>
+          <div className="stats-tile__label">{item.label}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function StatsTable({ head, rows, empty }) {
+  if (!rows || rows.length === 0) return <p className="empty-hint">{empty || "Нет данных за период."}</p>;
+  return (
+    <table className="stats-table">
+      <thead>
+        <tr>{head.map((h) => <th key={h}>{h}</th>)}</tr>
+      </thead>
+      <tbody>
+        {rows.map((row, i) => (
+          <tr key={i}>{row.map((cell, j) => <td key={j}>{cell}</td>)}</tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+function StatsBars({ rows }) {
+  const max = Math.max(1, ...rows.map((r) => r.count));
+  return (
+    <div className="stats-bars">
+      {rows.map((r) => (
+        <div key={r.label} className="stats-bars__row">
+          <span className="stats-bars__label">{r.label}</span>
+          <span className="stats-bars__track">
+            <span className="stats-bars__fill" style={{ width: `${(r.count / max) * 100}%` }} />
+          </span>
+          <span className="stats-bars__count">{r.count}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ДОБАВЛЕНО (2026-10-09, запрос пользователя): очистка статистики за
+// день/неделю/месяц/год с двойным подтверждением. Очищается только в этой
+// панели — в других (и в чеках/балансах) всё остаётся.
+const CLEAR_PERIODS = [
+  { key: "day", label: "За день" },
+  { key: "week", label: "За неделю" },
+  { key: "month", label: "За месяц" },
+  { key: "year", label: "За год" },
+];
+
+function ClearStatsControl({ onClear }) {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+
+  async function choose(p) {
+    if (!window.confirm(`Очистить статистику: ${p.label.toLowerCase()}? Она пропадёт только здесь.`)) return;
+    if (!window.confirm("Точно очистить? Вернуть будет нельзя.")) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await onClear(p.key);
+      setOpen(false);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="clear-stats">
+      {!open ? (
+        <button type="button" className="btn-link clear-stats__toggle" onClick={() => setOpen(true)}>
+          🗑 Очистить
+        </button>
+      ) : (
+        <div className="guest-type-filters clear-stats__row">
+          {CLEAR_PERIODS.map((p) => (
+            <button key={p.key} type="button" className="btn-link" disabled={busy} onClick={() => choose(p)}>
+              {p.label}
+            </button>
+          ))}
+          <button type="button" className="btn-link" disabled={busy} onClick={() => setOpen(false)}>
+            Отмена
+          </button>
+        </div>
+      )}
+      {error && <div className="banner banner--error">{error}</div>}
+    </div>
+  );
+}
+
+function StatsPanel({ token, clubId }) {
+  const [period, setPeriod] = useState("today");
+  const [from, setFrom] = useState(statsDay(0));
+  const [to, setTo] = useState(statsDay(0));
+  const [data, setData] = useState(null);
+  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+  // Все чеки клуба за текущие сутки клуба (2026-10-13).
+  const [evening, setEvening] = useState(null);
+  useEffect(() => {
+    api.getEveningReceipts(token, clubId).then(setEvening).catch(() => setEvening(null));
+  }, [token, clubId, reloadKey]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    api.getClubStats(token, clubId, from, to)
+      .then((result) => {
+        if (cancelled) return;
+        setData(result);
+        setError(null);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err instanceof ApiError ? err.message : String(err));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token, clubId, from, to, reloadKey]);
+
+  function choosePeriod(p) {
+    setPeriod(p.key);
+    setFrom(p.from());
+    setTo(p.to());
+  }
+
+  const ev = data?.evening;
+  const cmp = data?.compare;
+
+  return (
+    <main className="app-main stats-panel">
+      <section>
+        <h2>Статистика клуба</h2>
+        <ClearStatsControl
+          onClear={async (period) => {
+            await api.clearClubStats(token, clubId, period);
+            setReloadKey((k) => k + 1);
+          }}
+        />
+        <div className="guest-type-filters">
+          {STATS_PERIODS.map((p) => (
+            <button
+              key={p.key}
+              type="button"
+              className={`btn-link${period === p.key ? " guest-type-filters__active" : ""}`}
+              onClick={() => choosePeriod(p)}
+            >
+              {p.label}
+            </button>
+          ))}
+          <label className="stats-date">
+            с <input type="date" value={from} onChange={(e) => { setPeriod("custom"); setFrom(e.target.value); }} />
+          </label>
+          <label className="stats-date">
+            по <input type="date" value={to} onChange={(e) => { setPeriod("custom"); setTo(e.target.value); }} />
+          </label>
+        </div>
+        <p className="empty-hint">
+          Вечер считается с 08:00 до 08:00 — песни после полуночи относятся к тому же вечеру. Суммы — по ценам категорий
+          спетых песен.
+        </p>
+        {error && <div className="banner banner--error">{error}</div>}
+        {loading && !data && <p className="empty-hint">Загрузка…</p>}
+      </section>
+
+      <section>
+        <h2>Все чеки за вечер</h2>
+        {!evening && <p className="empty-hint">Загрузка…</p>}
+        {evening && evening.categories.length === 0 && <p className="empty-hint">За этот вечер чеков нет.</p>}
+        {evening && evening.categories.length > 0 && (
+          <>
+            <StatsTable
+              head={["Категория", "Песен", "Сумма"]}
+              rows={[
+                ...evening.categories.map((c) => [c.category, c.count, statsMoney(c.sum)]),
+                [
+                  <b>Итого</b>,
+                  <b>{evening.song_count}</b>,
+                  <b>{statsMoney(evening.total)}</b>,
+                ],
+              ]}
+            />
+
+            <StatsTiles
+              items={[
+                { label: "Песен", value: evening.song_count },
+                { label: "Итого", value: statsMoney(evening.total) },
+                { label: "К оплате на месте", value: statsMoney(evening.payable_total) },
+                { label: "Чеков", value: evening.receipts.length },
+                { label: "От VIP", value: statsMoney(evening.vip_total) },
+              ]}
+            />
+            <h3>Все чеки за вечер ({evening.receipts.length})</h3>
+            {evening.receipts.map((r) => (
+              <details key={r.id} className="receipt-item">
+                <summary>
+                  Стол {tableLabel(r.table_no)} ·{" "}
+                  <b style={{ color: receiptTimeColor(r.id) }}>
+                    {new Date(r.decided_at).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}
+                  </b>{" "}
+                  · песен:{" "}
+                  {r.receipt?.song_count ?? 0} · итого: {statsMoney(r.receipt?.total ?? 0)} · к оплате:{" "}
+                  {statsMoney(r.receipt?.payable_total ?? 0)}
+                  {payableNote(r.receipt?.total ?? 0, r.receipt?.payable_total ?? 0)}
+                  {r.hide_receipt ? " · гостю не показан" : ""}
+                </summary>
+                {r.receipt?.items && r.receipt.items.length > 0 && (
+                  <ul className="precheck__items">
+                    {r.receipt.items.map((it, idx) => (
+                      <li key={idx} className="precheck__item">
+                        <span>
+                          {it.song_title}{it.artist ? ` — ${it.artist}` : ""}
+                          <span className="empty-hint">
+                            {" "}· {it.category}{it.guest_name ? ` · ${it.guest_name}` : ""}
+                            {it.paid ? " · оплачено с VIP" : ""}
+                          </span>
+                        </span>
+                        <b>{statsMoney(it.price)}</b>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </details>
+            ))}
+          </>
+        )}
+        <p className="empty-hint">Сутки клуба — с 08:00 до 08:00, как в «Сегодня» выше.</p>
+      </section>
+
+      {data && (
+        <>
+          <section>
+            <h2>Сравнение с прошлым периодом</h2>
+            <p className="empty-hint">Прошлый период: {cmp.previous_from} — {cmp.previous_to}</p>
+            <StatsTable
+              head={["", "Сейчас", "Было", "Изменение"]}
+              rows={[
+                ["Спето песен", cmp.current.sung, cmp.previous.sung, <StatsDelta current={cmp.current.sung} previous={cmp.previous.sung} />],
+                ["Сумма", statsMoney(cmp.current.revenue), statsMoney(cmp.previous.revenue), <StatsDelta current={cmp.current.revenue} previous={cmp.previous.revenue} />],
+                ["Гостей пело", cmp.current.guests, cmp.previous.guests, <StatsDelta current={cmp.current.guests} previous={cmp.previous.guests} />],
+              ]}
+            />
+          </section>
+
+          <section>
+            <h2>Гости</h2>
+            <StatsTiles
+              items={[
+                { label: "Всего в базе", value: data.guests.total },
+                { label: "VIP", value: data.guests.vip },
+                { label: "Обычных", value: data.guests.regular },
+                { label: "Были за период", value: data.guests.active_in_period },
+                { label: "Новых", value: data.guests.new_in_period },
+                { label: "Вернулись", value: data.guests.returning_in_period },
+              ]}
+            />
+            <h3>Топ гостей по песням</h3>
+            <StatsTable
+              head={["Гость", "Песен", "Сумма"]}
+              rows={data.guests.top_by_songs.map((g) => [g.name, g.songs, statsMoney(g.sum)])}
+            />
+            <h3>Топ гостей по сумме</h3>
+            <StatsTable
+              head={["Гость", "Песен", "Сумма"]}
+              rows={data.guests.top_by_sum.map((g) => [g.name, g.songs, statsMoney(g.sum)])}
+            />
+            <h3>VIP, которых не было больше {data.guests.lapsed_vip_days} дней</h3>
+            <StatsTable
+              head={["Гость", "Последний визит", "Баланс"]}
+              rows={data.guests.lapsed_vips.map((g) => [
+                g.name,
+                g.last_visit ? new Date(g.last_visit).toLocaleDateString("ru-RU") : "ни разу не заказывал",
+                statsMoney(g.balance),
+              ])}
+              empty="Все VIP приходили недавно."
+            />
+          </section>
+
+          <section>
+            <h2>VIP</h2>
+            <StatsTiles
+              items={[
+                { label: "VIP-гостей", value: data.vip.count },
+                { label: "На балансах сейчас", value: statsMoney(data.vip.balance_total) },
+                { label: "Пополнено за период", value: statsMoney(data.vip.topups) },
+                { label: "Потрачено за период", value: statsMoney(data.vip.spent) },
+                { label: "Заявок стать VIP", value: data.vip.requests },
+                { label: "Одобрено", value: data.vip.requests_approved },
+              ]}
+            />
+          </section>
+
+          <section>
+            <h2>Песни по категориям</h2>
+            <StatsTable
+              head={["Категория", "Песен", "Сумма"]}
+              rows={[
+                ...data.songs.by_category.map((c) => [c.name, c.songs, statsMoney(c.sum)]),
+                ...(data.songs.by_category.length > 0 ? [[<b>Итого</b>, <b>{ev.sung}</b>, <b>{statsMoney(ev.revenue)}</b>]] : []),
+              ]}
+            />
+          </section>
+
+
+        </>
+      )}
+    </main>
+  );
+}
+
+// ДОБАВЛЕНО (2026-10, запрос пользователя): KJ управляет списками гостя
+// над живой очередью — "История за час", "Популярные", "Новинки".
+const SONG_ADMIN_TABS = [
+  { key: "recent", label: "История за час" },
+  { key: "popular", label: "Популярные" },
+  { key: "new", label: "Новинки" },
+  { key: "duet", label: "Дуэты" },
+];
+
+function SongListsAdminPanel({ token }) {
+  const [tab, setTab] = useState("recent");
+  const [data, setData] = useState(null);
+  const [error, setError] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [newTitle, setNewTitle] = useState("");
+  const [newArtist, setNewArtist] = useState("");
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkText, setBulkText] = useState("");
+  const [bulkReport, setBulkReport] = useState(null);
+
+  const load = useCallback(async () => {
+    try {
+      setData(await api.getSongListsAdmin(token));
+      setError(null);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : String(err));
+    }
+  }, [token]);
+
+  useEffect(() => {
+    load();
+    window.addEventListener("kj-queue-start-saved", load);
+    return () => window.removeEventListener("kj-queue-start-saved", load);
+  }, [load]);
+
+  async function run(action) {
+    setBusy(true);
+    setError(null);
+    try {
+      await action();
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function removeItem(song) {
+    if (tab === "new" || tab === "duet") return run(() => api.setNewSong(token, song.song_title, song.artist, false, tab));
+    if (tab === "popular") {
+      return run(() => api.hideSongListItem(token, { kind: "popular", song_title: song.song_title, artist: song.artist || null }));
+    }
+    return run(() => api.hideSongListItem(token, { kind: "history", order_id: song.order_id }));
+  }
+
+  const items = (data && data[tab]) || [];
+  const label = (s) => (s.artist ? `${s.song_title} — ${s.artist}` : s.song_title);
+
+  return (
+    <main className="app-main">
+      <section>
+        <h2>Списки для гостей</h2>
+        <p className="empty-hint">
+          То, что гость видит над активной очередью. Крестик убирает песню у гостей. В чеках и статистике ничего не меняется.
+        </p>
+        <div className="guest-type-filters">
+          {SONG_ADMIN_TABS.map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              className={`btn-link${tab === t.key ? " guest-type-filters__active" : ""}`}
+              onClick={() => setTab(t.key)}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+        {error && <div className="banner banner--error">{error}</div>}
+        {!data && !error && <p className="empty-hint">Загрузка…</p>}
+        {(tab === "new" || tab === "duet") && (
+          <div className="song-admin__bulk">
+            <button
+              type="button"
+              className="btn-link"
+              disabled={busy}
+              onClick={() => { setBulkOpen((v) => !v); setBulkReport(null); }}
+            >
+              {bulkOpen ? "Скрыть окно списком" : "Добавить списком"}
+            </button>
+            {bulkOpen && (
+              <div>
+                <textarea
+                  rows={8}
+                  style={{ width: "100%" }}
+                  placeholder={"Название — Исполнитель\nкаждая песня с новой строки"}
+                  value={bulkText}
+                  onChange={(e) => setBulkText(e.target.value)}
+                />
+                <button
+                  type="button"
+                  className="btn-link"
+                  disabled={busy || !bulkText.trim()}
+                  onClick={() => run(async () => {
+                    const res = await api.bulkAddNewSongs(token, bulkText.split("\n"), tab);
+                    setBulkReport(res);
+                    if (res.added.length) setBulkText("");
+                  })}
+                >
+                  {tab === "duet" ? "Добавить все в дуэты" : "Добавить все в новинки"}
+                </button>
+                {bulkReport && (
+                  <p className="empty-hint">
+                    Добавлено: {bulkReport.added.length}.
+                    {bulkReport.skipped.length ? " Пропущено (уже есть в списках или повтор): " + bulkReport.skipped.join("; ") + "." : ""}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+        {(tab === "new" || tab === "duet") && (
+          <form
+            className="song-admin__add"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!newTitle.trim()) return;
+              run(async () => {
+                await api.setNewSong(token, newTitle.trim(), newArtist.trim() || null, true, tab);
+                setNewTitle("");
+                setNewArtist("");
+              });
+            }}
+          >
+            <input type="text" placeholder="Название песни" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} />
+            <input type="text" placeholder="Исполнитель" value={newArtist} onChange={(e) => setNewArtist(e.target.value)} />
+            <button type="submit" className="btn-link" disabled={busy || !newTitle.trim()}>
+              {tab === "duet" ? "Добавить в дуэты" : "Добавить в новинки"}
+            </button>
+          </form>
+        )}
+        {data && items.length === 0 && <p className="empty-hint">Список пуст.</p>}
+        {items.length > 0 && (
+          <ol className="song-admin__list">
+            {items.map((s, i) => (
+              <li key={`${tab}-${s.order_id ?? s.id ?? i}-${s.song_title}`} className="song-admin__row">
+                <span>{label(s)}</span>
+                {tab === "popular" && s.count ? <span className="empty-hint"> · {s.count} раз</span> : null}
+                <button
+                  type="button"
+                  className="song-admin__remove"
+                  title="Убрать у гостей"
+                  disabled={busy}
+                  onClick={() => removeItem(s)}
+                >
+                  ✕
+                </button>
+              </li>
+            ))}
+          </ol>
+        )}
+        {tab === "popular" && data && data.hidden_popular.length > 0 && (
+          <>
+            <h3>
+              Скрытые из «Популярных»{" "}
+              <button
+                type="button"
+                className="btn-link"
+                disabled={busy}
+                onClick={() => {
+                  if (window.confirm("Удалить все скрытые песни из «Популярных» без возможности восстановления?")) {
+                    run(() => api.clearPopularHidden(token));
+                  }
+                }}
+              >
+                Очистить
+              </button>
+            </h3>
+            <ul className="song-admin__list">
+              {data.hidden_popular.map((h) => (
+                <li key={h.id} className="song-admin__row">
+                  <span>{label(h)}</span>
+                  <button type="button" className="btn-link" disabled={busy} onClick={() => run(() => api.unhideSongListItem(token, h.id))}>
+                    Вернуть
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+      </section>
+    </main>
+  );
+}
+
+// ДОБАВЛЕНО (2026-10): переключатель "Общий чат" (ссылка на группу в
+// Telegram у гостя) — Вкл/Откл.
+// ДОБАВЛЕНО (2026-10-15, запрос пользователя): справа от "Активная очередь
+// VirtualDJ" — показывать ли живую очередь гостям. Меняет только
+// guest_queue_visible (патч-семантика бэкенда, см. api.updateTableSettings).
+function GuestQueueToggle({ token, clubId }) {
+  const [visible, setVisible] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    api.getTableSettings(token, clubId)
+      .then((data) => setVisible(data.guest_queue_visible !== false))
+      .catch((err) => setError(err instanceof ApiError ? err.message : String(err)));
+  }, [token, clubId]);
+
+  async function toggle() {
+    setBusy(true);
+    setError(null);
+    try {
+      const data = await api.updateTableSettings(token, clubId, { guest_queue_visible: !visible });
+      setVisible(data.guest_queue_visible !== false);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+      <button type="button" className="btn-link" disabled={busy || visible == null} onClick={toggle}>
+        Показывать очередь гостям: {visible == null ? "…" : visible ? "Вкл" : "Выкл"}
+      </button>
+      {error && <span className="banner banner--error">{error}</span>}
+    </span>
+  );
+}
+
+function GroupApprovalToggle({ token, clubId }) {   const [enabled, setEnabled] = useState(null);   const [busy, setBusy] = useState(false);   const [error, setError] = useState(null);    useEffect(() => {     api.getTableSettings(token, clubId)       .then((data) => setEnabled(data.group_approval_required === true))       .catch((err) => setError(err instanceof ApiError ? err.message : String(err)));   }, [token, clubId]);    async function toggle() {     setBusy(true);     setError(null);     try {       const data = await api.updateTableSettings(token, clubId, { group_approval_required: !enabled });       setEnabled(data.group_approval_required === true);     } catch (err) {       setError(err instanceof ApiError ? err.message : String(err));     } finally {       setBusy(false);     }   }    return (     <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>       <button type="button" className="btn-link" disabled={busy || enabled == null} onClick={toggle}>         Одобрять присаживание за групповой стол: {enabled == null ? "…" : enabled ? "Вкл" : "Выкл"}       </button>       {error && <span className="banner banner--error">{error}</span>}     </span>   ); }  // ДОБАВЛЕНО (2026-11, запрос пользователя): общий чат включается сам, когда
 // нужное количество столов (задаёт KJ, по умолчанию 5) сделали по 2 заказа за вечер.
 function ChatAutoToggle({ token, clubId }) {
   const [enabled, setEnabled] = useState(null);
