@@ -123,6 +123,8 @@ class Club(db.Model):
     # список). Переключается KJ справа от "Активная очередь VirtualDJ".
     guest_queue_visible = db.Column(db.Boolean, nullable=False, default=True, server_default=db.true())
     group_approval_required = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
+    # Автовключение общего чата, когда 5 столов сделали по 2 заказа за вечер (настраивает KJ, по умолчанию выключено).
+    chat_auto_enabled = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
     # Плашка на экране входа (стол + Google), меняется в KJ (запрос 2026-10-27). None — текст по умолчанию.
     entry_notice = db.Column(db.Text, nullable=True)
     # Крейзи-предложение (запрос 2026-10-30): после скольких песен в очереди клуба гостям предлагают песню вне очереди. None — выключено.
