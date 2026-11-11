@@ -4796,7 +4796,7 @@ function OrdersBoard({ token, clubId, socket, onOpenGuest, onOpenTable }) {
           <div style={{ background: "#1e1e1e", border: "1px solid #ffb020", borderRadius: 12, padding: 20, maxWidth: 360, margin: 16 }}>
             <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 10 }}>Укажите начало очереди</div>
             <div style={{ marginBottom: 16 }}>Заказ не принимается, пока не указан стол, с которого начинается очередь. Введите номер в поле «Начало очереди (стол)».</div>
-            <button type="button" className="btn btn--accent" onClick={() => { setQueueStartPlate(false); queueStartRef.current?.focus(); }}>Понятно</button>
+            <button type="button" className="btn btn--accent" onClick={() => { setQueueStartPlate(false); setQueueStartBlink(true); setTimeout(() => setQueueStartBlink(false), 6000); queueStartRef.current?.focus(); }}>Понятно</button>
           </div>
         </div>
       ) : null}
