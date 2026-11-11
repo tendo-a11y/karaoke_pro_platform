@@ -1373,6 +1373,7 @@ def get_table_settings(club_id):
         "queue_mode": get_queue_mode(club),
         "queue_start_table": (club.queue_start_table or None),
         "guest_queue_visible": bool(club.guest_queue_visible),         "group_approval_required": bool(club.group_approval_required),
+        "chat_auto_enabled": bool(club.chat_auto_enabled),
     })
 
 
@@ -1423,6 +1424,12 @@ def update_table_settings(club_id):
         if not isinstance(value, bool):
             return api_error(400, "VALIDATION_ERROR", "group_approval_required должен быть true или false")
         updates["group_approval_required"] = value
+
+    if "chat_auto_enabled" in payload:
+        value = payload.get("chat_auto_enabled")
+        if not isinstance(value, bool):
+            return api_error(400, "VALIDATION_ERROR", "chat_auto_enabled должен быть true или false")
+        updates["chat_auto_enabled"] = value
 
     if "queue_start_table" in payload:
         value = payload.get("queue_start_table")
