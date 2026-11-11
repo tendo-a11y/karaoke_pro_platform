@@ -386,6 +386,7 @@ def create_order():
     )
     db.session.add(order)
     db.session.commit()
+    _maybe_auto_enable_chat(g.club_id)
 
     emit_order_created(order)
 
@@ -397,6 +398,33 @@ def create_order():
     data = order.to_dict()
     data["queue_position"] = table_board_service.get_club_queue_positions(g.club_id).get(order.id)
     return api_ok(data, status_code=201)
+
+
+def _maybe_auto_enable_chat(club_id: int) -> None:
+    """Общий чат включается сам, когда 5 столов сделали по 2 заказа за вечер.
+    Работает только если KJ включил автоматику (Club.chat_auto_enabled)."""
+    club = db.session.get(Club, club_id)
+    if club is None or not club.chat_auto_enabled or club.chat_enabled:
+        return
+    from services import cashback_service
+
+    since = cashback_service.evening_start(club, datetime.now(timezone.utc))
+    rows = (
+        db.session.query(Order.table_no, db.func.count(Order.id))
+        .filter(
+            Order.club_id == club_id,
+            Order.table_no.isnot(None),
+            Order.created_at >= since,
+            Order.status != STATUS_REJECTED,
+        )
+        .group_by(Order.table_no)
+        .all()
+    )
+    busy_tables = sum(1 for _table_no, count in rows if count >= 2)
+    if busy_tables >= 5:
+        club.chat_enabled = True
+        db.session.commit()
+
 
 
 @bp.get("/services")
