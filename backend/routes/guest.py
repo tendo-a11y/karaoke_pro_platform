@@ -421,7 +421,7 @@ def _maybe_auto_enable_chat(club_id: int) -> None:
         .all()
     )
     busy_tables = sum(1 for _table_no, count in rows if count >= 2)
-    if busy_tables >= 5:
+    if busy_tables >= (club.chat_auto_tables or 5):
         club.chat_enabled = True
         db.session.commit()
 
