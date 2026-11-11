@@ -3865,9 +3865,9 @@ export default function App() {
     } catch {
       if (!meInfo.chat_enabled) return;
     }
-    // Показываем только между вторым и третьим заказом и с задержкой 3 минуты после второго заказа,
+    // Показываем после второго заказа с задержкой 3 минуты (один раз на устройство), чтобы плашки не наслаивались,
     // чтобы не перебить плашку «Теперь вам доступны больше функций».
-    if ((meInfo.orders_count ?? 0) !== 2) return;
+    if ((meInfo.orders_count ?? 0) < 2) return;
     const timer = setTimeout(() => {
       try { window.localStorage.setItem(KEY, "1"); } catch { /* браузер не дал сохранить — ничего страшного */ }
       setGeneralChatPopup(true);
@@ -3880,6 +3880,10 @@ export default function App() {
       <div style={{ background: "#1d1f25", color: "#fff", border: "2px solid #ffb020", borderRadius: 12, padding: 20, maxWidth: 420, width: "100%" }}>
         <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 10 }}>💬 Общий чат клуба</div>
         <div style={{ fontSize: 16, marginBottom: 16 }}>Доступен общий чат клуба в Telegram.</div>
+        <details style={{ fontSize: 14, marginBottom: 16 }}>
+          <summary style={{ cursor: "pointer" }}>Подробнее</summary>
+          <div style={{ marginTop: 8 }}>Вы можете спокойно общаться, знакомиться, петь совместно песни. За последствия общения в этом чате вне караоке-клуба Администрация ответственности не несёт.</div>
+        </details>
         <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap" }}>
           <a href="https://t.me/voicevocalclub/1" target="_blank" rel="noopener noreferrer" onClick={() => setGeneralChatPopup(false)} style={{ background: "#2e7d32", color: "#fff", borderRadius: 8, padding: "8px 14px", textDecoration: "none", fontWeight: 600 }}>Открыть чат</a>
           <button type="button" className="link-btn" onClick={() => setGeneralChatPopup(false)}>Закрыть</button>
