@@ -1601,6 +1601,12 @@ def _notify_guest_turn_soon(club_id: int, guest_id: int, queue_view: list[dict])
         if sent_at < now - timedelta(hours=6):
             _TURN_NOTICE_SENT.pop(key, None)
 
+    # Если KJ выключил показ очереди гостям, напоминания о песнях тоже не отправляем.
+    from models import Club as _Club
+    club_row = db.session.get(_Club, club_id)
+    if club_row is not None and not club_row.guest_queue_visible:
+        return
+
     texts = []
     for index, item in enumerate(queue_view):
         if not item.get("is_mine") or index not in (1, 2):
