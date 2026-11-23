@@ -1728,11 +1728,20 @@ function isExclusiveCategory(s) {
 
 // Значок YouTube рядом с кнопкой "Ссылка" (запрос 2026-10-27): красная плашка с белым треугольником.
 function YoutubeBadge() {
+  // Нажатие на значок открывает сам YouTube в новой вкладке, чтобы гость нашёл песню и скопировал ссылку.
   return (
-    <svg className="youtube-badge" viewBox="0 0 24 17" width="26" height="18" aria-label="YouTube" role="img" style={{ verticalAlign: "middle", marginLeft: 6 }}>
-      <rect width="24" height="17" rx="4" fill="#FF0000" />
-      <path d="M9.5 4.6v7.8L16 8.5z" fill="#FFFFFF" />
-    </svg>
+    <span
+      role="link"
+      tabIndex={0}
+      aria-label="Открыть YouTube"
+      onClick={(e) => { e.stopPropagation(); e.preventDefault(); window.open("https://www.youtube.com", "_blank", "noopener,noreferrer"); }}
+      style={{ display: "inline-flex", cursor: "pointer", verticalAlign: "middle", marginLeft: 6 }}
+    >
+      <svg className="youtube-badge" viewBox="0 0 24 17" width="26" height="18" aria-hidden="true">
+        <rect width="24" height="17" rx="4" fill="#FF0000" />
+        <path d="M9.5 4.6v7.8L16 8.5z" fill="#FFFFFF" />
+      </svg>
+    </span>
   );
 }
 
