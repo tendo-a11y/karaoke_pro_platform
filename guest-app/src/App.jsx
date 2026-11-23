@@ -1728,20 +1728,52 @@ function isExclusiveCategory(s) {
 
 // Значок YouTube рядом с кнопкой "Ссылка" (запрос 2026-10-27): красная плашка с белым треугольником.
 function YoutubeBadge() {
-  // Нажатие на значок открывает сам YouTube в новой вкладке, чтобы гость нашёл песню и скопировал ссылку.
-  return (
-    <span
-      role="link"
-      tabIndex={0}
-      aria-label="Открыть YouTube"
-      onClick={(e) => { e.stopPropagation(); e.preventDefault(); window.open("https://www.youtube.com", "_blank", "noopener,noreferrer"); }}
-      style={{ display: "inline-flex", cursor: "pointer", verticalAlign: "middle", marginLeft: 6 }}
+  // Нажатие на значок открывает плашку с подсказкой, а "Далее" ведёт в YouTube:
+  // на Android — в Chrome, на iPhone — в Safari (браузер по умолчанию).
+  const [plateOpen, setPlateOpen] = useState(false);
+  const isAndroid = typeof navigator !== "undefined" && /android/i.test(navigator.userAgent || "");
+  function goYoutube() {
+    setPlateOpen(false);
+    if (isAndroid) {
+      window.location.href = "intent://www.youtube.com/#Intent;scheme=https;package=com.android.chrome;end";
+    } else {
+      window.open("https://www.youtube.com", "_blank", "noopener,noreferrer");
+    }
+  }
+  const plate = plateOpen ? createPortal(
+    <div
+      role="dialog"
+      aria-modal="true"
+      onClick={(e) => e.stopPropagation()}
+      style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
     >
-      <svg className="youtube-badge" viewBox="0 0 24 17" width="26" height="18" aria-hidden="true">
-        <rect width="24" height="17" rx="4" fill="#FF0000" />
-        <path d="M9.5 4.6v7.8L16 8.5z" fill="#FFFFFF" />
-      </svg>
-    </span>
+      <div style={{ background: "#1d1f25", color: "#fff", border: "2px solid #ffb020", borderRadius: 12, padding: 20, maxWidth: 420, width: "100%" }}>
+        <div style={{ fontSize: 16, marginBottom: 16, lineHeight: 1.45 }}>
+          Откройте YouTube в браузере (не в приложении). Найдите песню, скопируйте адрес из строки браузера и вставьте его в поле «Вставьте ссылку на песню с YouTube».
+        </div>
+        <button type="button" onClick={goYoutube} style={{ background: "#2e7d32", color: "#fff", border: "none", borderRadius: 8, padding: "10px 16px", fontWeight: 600, width: "100%", fontSize: 16, cursor: "pointer" }}>
+          Далее
+        </button>
+      </div>
+    </div>,
+    document.body
+  ) : null;
+  return (
+    <>
+      <span
+        role="link"
+        tabIndex={0}
+        aria-label="Открыть YouTube"
+        onClick={(e) => { e.stopPropagation(); e.preventDefault(); setPlateOpen(true); }}
+        style={{ display: "inline-flex", cursor: "pointer", verticalAlign: "middle", marginLeft: 6 }}
+      >
+        <svg className="youtube-badge" viewBox="0 0 24 17" width="26" height="18" aria-hidden="true">
+          <rect width="24" height="17" rx="4" fill="#FF0000" />
+          <path d="M9.5 4.6v7.8L16 8.5z" fill="#FFFFFF" />
+        </svg>
+      </span>
+      {plate}
+    </>
   );
 }
 
