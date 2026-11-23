@@ -1728,17 +1728,32 @@ function isExclusiveCategory(s) {
 
 // Значок YouTube рядом с кнопкой "Ссылка" (запрос 2026-10-27): красная плашка с белым треугольником.
 function YoutubeBadge() {
-  // Нажатие на значок открывает плашку с подсказкой, а "Далее" ведёт в YouTube:
-  // на Android — в Chrome, на iPhone — в Safari (браузер по умолчанию).
+  // Плашка с подсказкой перед YouTube. Галочка "Больше не показывать" запоминается на телефоне:
+  // тогда при следующем нажатии сразу открывается YouTube.
+  const HIDE_KEY = "kp_youtube_hint_hide";
   const [plateOpen, setPlateOpen] = useState(false);
+  const [dontShow, setDontShow] = useState(false);
   const isAndroid = typeof navigator !== "undefined" && /android/i.test(navigator.userAgent || "");
-  function goYoutube() {
+  function isHidden() {
+    try { return window.localStorage.getItem(HIDE_KEY) === "1"; } catch { return false; }
+  }
+  function openYoutube() {
     setPlateOpen(false);
     if (isAndroid) {
       window.location.href = "intent://www.youtube.com/#Intent;scheme=https;package=com.android.chrome;end";
     } else {
       window.open("https://www.youtube.com", "_blank", "noopener,noreferrer");
     }
+  }
+  function onBadgeClick(e) {
+    e.stopPropagation();
+    e.preventDefault();
+    if (isHidden()) openYoutube();
+    else { setDontShow(false); setPlateOpen(true); }
+  }
+  function onFind() {
+    if (dontShow) { try { window.localStorage.setItem(HIDE_KEY, "1"); } catch { /* браузер не дал сохранить */ } }
+    openYoutube();
   }
   const plate = plateOpen ? createPortal(
     <div
@@ -1748,11 +1763,15 @@ function YoutubeBadge() {
       style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
     >
       <div style={{ background: "#1d1f25", color: "#fff", border: "2px solid #ffb020", borderRadius: 12, padding: 20, maxWidth: 420, width: "100%" }}>
-        <div style={{ fontSize: 16, marginBottom: 16, lineHeight: 1.45 }}>
+        <div style={{ fontSize: 16, marginBottom: 14, lineHeight: 1.45 }}>
           Откройте YouTube в браузере (не в приложении). Найдите песню, скопируйте адрес из строки браузера и вставьте его в поле «Вставьте ссылку на песню с YouTube».
         </div>
-        <button type="button" onClick={goYoutube} style={{ background: "#2e7d32", color: "#fff", border: "none", borderRadius: 8, padding: "10px 16px", fontWeight: 600, width: "100%", fontSize: 16, cursor: "pointer" }}>
-          Далее
+        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, marginBottom: 14, cursor: "pointer" }}>
+          <input type="checkbox" checked={dontShow} onChange={(e) => setDontShow(e.target.checked)} />
+          Больше не показывать
+        </label>
+        <button type="button" onClick={onFind} style={{ background: "#2e7d32", color: "#fff", border: "none", borderRadius: 8, padding: "10px 16px", fontWeight: 600, width: "100%", fontSize: 16, cursor: "pointer" }}>
+          Найти песню
         </button>
       </div>
     </div>,
@@ -1764,7 +1783,7 @@ function YoutubeBadge() {
         role="link"
         tabIndex={0}
         aria-label="Открыть YouTube"
-        onClick={(e) => { e.stopPropagation(); e.preventDefault(); setPlateOpen(true); }}
+        onClick={onBadgeClick}
         style={{ display: "inline-flex", cursor: "pointer", verticalAlign: "middle", marginLeft: 6 }}
       >
         <svg className="youtube-badge" viewBox="0 0 24 17" width="26" height="18" aria-hidden="true">
