@@ -1807,6 +1807,19 @@ function YoutubeBadge() {
         <div style={{ fontSize: 16, marginBottom: 14, lineHeight: 1.45 }}>
           Откройте YouTube в браузере (не в приложении). Найдите песню, скопируйте адрес из строки браузера и вставьте его в поле «Вставьте ссылку на песню с YouTube».
         </div>
+        {/* Подсказка с картинками: где скопировать ссылку и куда вставить. */}
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: 13, color: "#9ca3af", marginBottom: 6 }}>1. Скопируйте адрес в строке браузера:</div>
+          <div style={{ fontSize: 22, textAlign: "center", color: "#ffb020", lineHeight: 1 }}>👇</div>
+          <div style={{ background: "#3c4043", borderRadius: 20, padding: "9px 14px", color: "#e8eaed", fontSize: 14, border: "2px solid #ffb020", marginBottom: 12, wordBreak: "break-all" }}>
+            🔒 youtube.com/watch?v=… 
+          </div>
+          <div style={{ fontSize: 13, color: "#9ca3af", marginBottom: 6 }}>2. Вставьте его сюда, в приложение:</div>
+          <div style={{ fontSize: 22, textAlign: "center", color: "#ffb020", lineHeight: 1 }}>👇</div>
+          <div style={{ background: "#0f1115", borderRadius: 10, padding: "10px 12px", color: "#9ca3af", fontSize: 14, border: "2px solid #ffb020" }}>
+            🔗 Вставьте ссылку на песню с YouTube
+          </div>
+        </div>
         <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, marginBottom: 14, cursor: "pointer" }}>
           <input type="checkbox" checked={dontShow} onChange={(e) => setDontShow(e.target.checked)} />
           Больше не показывать
