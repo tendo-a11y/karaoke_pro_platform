@@ -651,6 +651,7 @@ function ServiceSelect({ services, value, onChange, disabled, highlight = false,
           {linkService && linkMode === "link" && (
             <form className="service-picker__linkbox" onSubmit={submitLink}>
               <div className="service-picker__linkhint">{linkService.name}: вставьте ссылку на песню с YouTube</div>
+              <PasteFromYoutubeButton onPaste={(txt) => { setLinkText(txt); setLinkError(null); clearTimeout(linkAutoTimer.current); linkAutoTimer.current = setTimeout(() => sendLink(txt), 300); }} />
               <input
                 ref={linkFieldRef}
                 type="url"
@@ -1727,6 +1728,45 @@ function isExclusiveCategory(s) {
 }
 
 // Значок YouTube рядом с кнопкой "Ссылка" (запрос 2026-10-27): красная плашка с белым треугольником.
+// Время, когда гость ушёл в YouTube: по возврату в приложение показываем кнопку вставки.
+let youtubeOpenedAt = 0;
+
+// Большая кнопка "Вставить скопированную ссылку": появляется, когда гость вернулся из YouTube.
+function PasteFromYoutubeButton({ onPaste }) {
+  const [show, setShow] = useState(false);
+  const [msg, setMsg] = useState(null);
+  useEffect(() => {
+    function onVisible() {
+      if (document.visibilityState === "visible" && youtubeOpenedAt && Date.now() - youtubeOpenedAt > 1500) setShow(true);
+    }
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, []);
+  if (!show) return null;
+  async function paste() {
+    try {
+      const txt = (await navigator.clipboard.readText()).trim();
+      if (/^https?:\/\/(www\.|m\.|music\.)?(youtube\.com|youtu\.be)\/\S+/i.test(txt)) {
+        setShow(false);
+        setMsg(null);
+        onPaste(txt);
+      } else {
+        setMsg("В буфере пока нет ссылки с YouTube. Скопируйте адрес в браузере и нажмите кнопку снова.");
+      }
+    } catch {
+      setMsg("Не удалось вставить. Вставьте ссылку вручную в поле ниже.");
+    }
+  }
+  return (
+    <div>
+      <button type="button" onClick={paste} style={{ display: "block", width: "100%", padding: "16px", borderRadius: 12, border: "none", background: "#ffb020", color: "#1d1f25", fontWeight: 800, fontSize: 18, cursor: "pointer", margin: "8px 0" }}>
+        📋 Вставить скопированную ссылку
+      </button>
+      {msg && <div style={{ fontSize: 14, color: "#ffb020", marginBottom: 8 }}>{msg}</div>}
+    </div>
+  );
+}
+
 function YoutubeBadge() {
   // Плашка с подсказкой перед YouTube. Галочка "Больше не показывать" запоминается на телефоне:
   // тогда при следующем нажатии сразу открывается YouTube.
@@ -1738,6 +1778,7 @@ function YoutubeBadge() {
     try { return window.localStorage.getItem(HIDE_KEY) === "1"; } catch { return false; }
   }
   function openYoutube() {
+    youtubeOpenedAt = Date.now();
     setPlateOpen(false);
     if (isAndroid) {
       window.location.href = "intent://www.youtube.com/#Intent;scheme=https;package=com.android.chrome;end";
