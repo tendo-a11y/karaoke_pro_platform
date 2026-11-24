@@ -5355,6 +5355,11 @@ function OrdersBoardSlot({ slot, categories, busy, onAccept, onReject, onComplet
         {slot.queue_position != null && (
           <div className="table-slot__queue-position">№{slot.queue_position}</div>
         )}
+        {slot.created_at && (
+          <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 2 }}>
+            {new Date(slot.created_at).toLocaleString("ru-RU", { timeZone: "Europe/Chisinau", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+          </div>
+        )}
         <div className="table-slot__song">{slot.song_title}</div>
         {slot.artist && <div className="table-slot__artist">{slot.artist}</div>}
         {slot.is_karaoke ? <div className="tone-badge">Караоке</div> : null}
