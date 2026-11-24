@@ -419,6 +419,7 @@ def _slot_dict(order: Order, queue_positions: dict | None = None) -> dict:
         "guest_song_text": order.guest_song_text,
         "tone": order.tone,
         "song_url": order.song_url, "is_karaoke": bool(order.is_karaoke),
+        "created_at": order.created_at.isoformat() if order.created_at else None,
     }
     # ДОБАВЛЕНО (2026-09-24, режим очереди QUEUE_MODE_SEQUENTIAL) — номер
     # места в общем круговом порядке клуба. Ключ появляется в ответе,
