@@ -27,6 +27,8 @@ VirtualDJ. Это осознанно: реальный протокол упра
 import logging
 import os
 import sys
+import threading
+import time
 
 import socketio
 
@@ -112,6 +114,32 @@ def _dispatch(command, data):
     return {"error": f"Неизвестная команда: {command}"}
 
 
+# ДОБАВЛЕНО (2026-11-26, запрос пользователя): раз в 15 секунд мост сообщает серверу,
+# отвечает ли VirtualDJ (индикатор "Мост → VirtualDJ" в панели KJ). Команды не меняются.
+STATUS_INTERVAL_SECONDS = 15
+
+
+def _vdj_reachable():
+    try:
+        if hasattr(DRIVER, '_karaoke_count'):
+            DRIVER._karaoke_count()
+        else:
+            DRIVER.get_queue()
+        return True
+    except Exception:  # noqa: BLE001 — любая ошибка = VirtualDJ не отвечает
+        return False
+
+
+def _status_loop():
+    while True:
+        if sio.connected:
+            try:
+                sio.emit('bridge_vdj_status', {'reachable': _vdj_reachable()}, namespace='/bridge')
+            except Exception:  # noqa: BLE001
+                logger.exception('Не удалось отправить статус VirtualDJ')
+        time.sleep(STATUS_INTERVAL_SECONDS)
+
+
 def main():
     if not CLUB_ID or not BRIDGE_TOKEN:
         logger.error(
@@ -132,6 +160,7 @@ def main():
         logger.error("Не удалось подключиться к Backend — проверь BRIDGE_BACKEND_URL/BRIDGE_TOKEN")
         sys.exit(1)
 
+    threading.Thread(target=_status_loop, daemon=True).start()
     sio.wait()
 
 
