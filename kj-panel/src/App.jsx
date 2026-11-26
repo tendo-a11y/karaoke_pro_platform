@@ -5988,12 +5988,17 @@ const HELP_SECTIONS = [
 ];
 
 // ДОБАВЛЕНО (2026-11-26, запрос пользователя): раздел помощи по панели KJ.
-function HelpPanel() {
+function HelpPanel({ target }) {
+  useEffect(() => {
+    if (!target) return;
+    const el = document.getElementById("help-" + target);
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [target]);
   return (
     <div className="help-panel">
       <h2>❓ Помощь по панели KJ</h2>
       {HELP_SECTIONS.map((s) => (
-        <section key={s.title} className="help-section">
+        <section key={s.title} id={"help-" + s.title} className="help-section">
           <h3>{s.title}</h3>
           {s.intro && <p className="empty-hint">{s.intro}</p>}
           {s.items.length > 0 && (
@@ -6006,6 +6011,28 @@ function HelpPanel() {
         </section>
       ))}
     </div>
+  );
+}
+
+// ДОБАВЛЕНО (2026-11-26): знак ❓ рядом с разделом открывает помощь по нему.
+const HELP_TARGET_BY_KEY = {
+  tables: "Настройки клуба: Столы",
+  categories: "Категории",
+  vip: "VIP",
+  guests: "Гости",
+};
+
+function HelpMark({ target, onOpen }) {
+  if (!target) return null;
+  return (
+    <button
+      type="button"
+      title="Помощь по этому разделу"
+      onClick={() => onOpen(target)}
+      style={{ background: "none", border: "none", cursor: "pointer", fontSize: 14, padding: "0 4px", marginLeft: 2 }}
+    >
+      ❓
+    </button>
   );
 }
 
@@ -6225,6 +6252,12 @@ export default function App() {
   // "Добавить песню" перенесена с экрана "Заказы" в свой собственный экран,
   // чтобы разгрузить панель столов).
   const [view, setView] = useState("orders");
+  // ДОБАВЛЕНО (2026-11-26): какой раздел помощи открыть по знаку ❓.
+  const [helpTarget, setHelpTarget] = useState(null);
+  function openHelp(target) {
+    setHelpTarget(target);
+    setView("help");
+  }
   // Доп. ТЗ "KJ Pro", запрос пользователя 2026-09-18: клик по месту на
   // карточке стола проваливается в подробности о гости, тем же компонентом
   // GuestCard, что и вкладка "Гости" (см. GuestsPanel::selectedGuestId
@@ -6532,11 +6565,13 @@ export default function App() {
               ❓ Помощь
             </button>
           )}
+          <HelpMark target="Заказы (доска по столам)" onOpen={openHelp} />
           {view !== "manual" && (
             <button type="button" className="btn-link" onClick={() => setView("manual")}>
               ➕ Добавить
             </button>
           )}
+          <HelpMark target="Добавить песню" onOpen={openHelp} />
           {view !== "messages" && (
             <button
               type="button"
@@ -6549,11 +6584,13 @@ export default function App() {
               ✉️ Сообщения
             </button>
           )}
+          <HelpMark target="Сообщения" onOpen={openHelp} />
           {!SETTINGS_TABS.some((t) => t.key === view) && (
             <button type="button" className="btn-link" onClick={() => setView("tables")}>
               ⚙️ Настройки клуба
             </button>
           )}
+          <HelpMark target="Настройки клуба: Столы" onOpen={openHelp} />
           {SETTINGS_TABS.some((t) => t.key === view) && (
             <div className="settings-subnav">
               {SETTINGS_TABS.filter((t) => STATS_ENABLED || t.key !== "stats").map((t) => (
@@ -6566,6 +6603,7 @@ export default function App() {
                   {t.label}
                 </button>
               ))}
+              <HelpMark target={HELP_TARGET_BY_KEY[view]} onOpen={openHelp} />
             </div>
           )}
         </div>
@@ -6613,7 +6651,7 @@ export default function App() {
       ) : view === "stats" && STATS_ENABLED ? (
         <StatsPanel token={token} clubId={me.club_id} />
       ) : view === "help" ? (
-        <HelpPanel />
+        <HelpPanel target={helpTarget} />
       ) : view === "manual" ? (
         <main className="app-main">
           <section>
