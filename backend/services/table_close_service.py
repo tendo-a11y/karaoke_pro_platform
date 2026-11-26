@@ -170,7 +170,7 @@ def _build_receipt(club_id: int, table_no: int, since, order_ids=None) -> dict:
         query = query.filter(Order.id.in_(list(order_ids)))
     else:
         query = query.filter(Order.created_at >= since, Order.settled_at.is_(None))
-    orders = query.all()
+    orders = query.order_by(Order.created_at.asc(), Order.id.asc()).all()
 
     service_ids = {o.service_id for o in orders if o.service_id is not None}
     services_by_id = {}
@@ -229,6 +229,7 @@ def _build_receipt(club_id: int, table_no: int, since, order_ids=None) -> dict:
         if not paid:
             guest_bucket["paid"] = False
         items.append({
+            "created_at": order.created_at.isoformat() if order.created_at else None,
             "song_title": order.song_title,
             "artist": order.artist,
             "category": name,
@@ -491,6 +492,13 @@ def preview_receipt(club_id: int, table_no: int) -> dict | None:
             "sung": True,
             "paid": True,
         })
+
+    # ДОБАВЛЕНО (2026-11-26): у каждой песни в чеке время заказа; песни идут по времени.
+    _created_at_by_id = {o.id: o.created_at for o in list(orders) + list(unbilled_orders) + list(queued_orders)}
+    for _it in items:
+        _dt = _created_at_by_id.get(_it["order_id"])
+        _it["created_at"] = _dt.isoformat() if _dt else None
+    items.sort(key=lambda _it: (_it["created_at"] or "", _it["order_id"] or 0))
 
     return {
         "table_no": table_no,
