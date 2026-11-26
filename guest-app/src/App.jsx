@@ -1517,7 +1517,8 @@ function FavoritesPanel({ token, services, onOrdered, orderingDisabled, embedded
                   onChange={(v) => {
                     // Кнопки "Петь караоке" / "Слушать песню": песня и категория уходят в большую форму заказа, дальше стандартный путь.
                     const pickedSvc = services.find((x) => String(x.id) === String(v));
-                    if (v && pickedSvc && onQuickPick && /^(KARAOKE|EX\w*CLUSIVE)$/i.test((pickedSvc.name || "").trim())) {
+                    // ДОБАВЛЕНО (2026-11-27): отмеченную галочкой песню «Петь караоке» заказываем сразу, список не закрываем.
+                    if (v && pickedSvc && onQuickPick && (/^EX\w*CLUSIVE$/i.test((pickedSvc.name || "").trim()) || (/^KARAOKE$/i.test((pickedSvc.name || "").trim()) && !checkedFav[f.id]))) {
                       onQuickPick(f, v);
                       return;
                     }
