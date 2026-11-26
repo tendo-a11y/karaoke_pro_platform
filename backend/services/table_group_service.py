@@ -539,8 +539,11 @@ def move_member(club_id: int, from_table_no: int, to_table_no: int, guest_id: in
     if get_membership(club_id, from_table_no, guest_id) is None:
         return MemberMoveResult(outcome="not_a_member")
 
+    # ДОБАВЛЕНО (2026-11-26, запрос пользователя): переносим гостя на пустой стол —
+    # он становится ведущим этого стола (раньше перенос на пустой стол не работал).
     if get_group(club_id, to_table_no) is None:
-        return MemberMoveResult(outcome="destination_not_found")
+        db.session.add(TableGroup(club_id=club_id, table_no=to_table_no, admin_guest_id=guest_id))
+        db.session.flush()
 
     current_count = TableGroupMember.query.filter_by(club_id=club_id, table_no=to_table_no).count()
     if current_count >= max_group_size:
