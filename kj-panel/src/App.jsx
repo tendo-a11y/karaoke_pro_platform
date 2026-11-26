@@ -4817,7 +4817,7 @@ function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged, auto
 
   return (
     <div className="table-group-card">
-      <button type="button" className="btn-link" onClick={onBack}>← К доске</button>
+      <button type="button" className="btn-back-board" onClick={onBack}>← К доске</button>
       {/* ИЗМЕНЕНО (2026-10, запрос пользователя: "кнопку Переместить стол —
       рядом с именем стола"): кнопка и форма переноса теперь сразу у
       заголовка карточки, а не внизу под списком компании. */}
