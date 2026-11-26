@@ -1188,3 +1188,27 @@ img { max-width: 100%; }
 .btn-back-board:hover { background: var(--accent); color: #1a1400; }
 .btn-back-board:active { transform: scale(0.97); }
 @media (pointer: coarse) { .btn-back-board { min-height: 42px; } }
+
+/* ДОБАВЛЕНО (2026-11-26, запрос пользователя): главная кнопка «К доске» — на всю ширину, текст по центру; «Переместить стол» — второстепенная. */
+.btn-back-board {
+  display: flex;
+  width: 100%;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  padding: 12px 16px;
+  margin-bottom: 14px;
+  font-size: 16px;
+  border-radius: 12px;
+  background: var(--accent);
+  color: #1a1400;
+  border: 1px solid var(--accent);
+}
+.btn-back-board:hover { background: var(--accent); color: #1a1400; filter: brightness(1.08); }
+.table-group-card__title .btn--accent {
+  background: var(--panel-alt);
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  font-size: 13px;
+  padding: 6px 12px;
+}
