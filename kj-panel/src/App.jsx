@@ -128,6 +128,12 @@ function newSongKey(title, artist) {
   return `${norm(artist)}|${norm(title)}`;
 }
 
+// ДОБАВЛЕНО (2026-11-26): время заказа в часовом поясе Кишинёва.
+function fmtOrderTime(iso) {
+  if (!iso) return "";
+  return new Date(iso).toLocaleString("ru-RU", { timeZone: "Europe/Chisinau", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+}
+
 function QueueTable({ queue, token, clubId }) {
   const [categories, setCategories] = useState([]);
   // Кнопка "Копировать" у песни: копирует "Исполнитель — Название".
@@ -1406,7 +1412,7 @@ function StatsPanel({ token, clubId }) {
                         <span>
                           {it.song_title}{it.artist ? ` — ${it.artist}` : ""}
                           <span className="empty-hint">
-                            {" "}· {it.category}{it.guest_name ? ` · ${it.guest_name}` : ""}
+                            {" "}· {it.category}{it.guest_name ? ` · ${it.guest_name}` : ""}{it.created_at ? ` · заказ ${fmtOrderTime(it.created_at)}` : ""}
                             {it.paid ? " · оплачено с VIP" : ""}
                           </span>
                         </span>
@@ -4882,7 +4888,7 @@ function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged, auto
                         <span>
                           {it.song_title}{it.artist ? ` — ${it.artist}` : ""}
                           <span className="empty-hint">
-                            {" "}· {it.category}{it.guest_name ? ` · ${it.guest_name}` : ""}
+                            {" "}· {it.category}{it.guest_name ? ` · ${it.guest_name}` : ""}{it.created_at ? ` · заказ ${fmtOrderTime(it.created_at)}` : ""}
                             {it.paid ? " · оплачено с VIP" : ""}
                           </span>
                         </span>
@@ -4920,6 +4926,7 @@ function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged, auto
                     </label>{" "}
                     {o.song_title}{o.artist ? ` — ${o.artist}` : ""}{" "}
                     <span className="empty-hint">#{index + 1}</span>
+                    {o.created_at && <span className="empty-hint">{" "}· заказ {fmtOrderTime(o.created_at)}</span>}
                     {o.priority_requested && (
                       <>
                         {" "}<span className="guest-type-badge">гость просит приоритет</span>{" "}
@@ -5041,7 +5048,7 @@ function TableGroupCard({ token, clubId, tableNo, onBack, onTableNoChanged, auto
                           <span>
                             {it.sung ? "✅" : "⏳"} {it.song_title}{it.artist ? ` — ${it.artist}` : ""}
                             <span className="empty-hint">
-                              {" "}· {it.category}{it.guest_name ? ` · ${it.guest_name}` : ""}
+                              {" "}· {it.category}{it.guest_name ? ` · ${it.guest_name}` : ""}{it.created_at ? ` · заказ ${fmtOrderTime(it.created_at)}` : ""}
                               {it.paid ? " · оплачено с VIP" : ""}
                             </span>
                           </span>
