@@ -5988,22 +5988,43 @@ const HELP_SECTIONS = [
 ];
 
 // ДОБАВЛЕНО (2026-11-26, запрос пользователя): раздел помощи по панели KJ.
-function HelpPanel({ target }) {
-  useEffect(() => {
-    if (!target) return;
-    const el = document.getElementById("help-" + target);
-    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
-  }, [target]);
+// ДОБАВЛЕНО (2026-11-27, запрос пользователя): кнопки помощи повторяют кнопки панели.
+const HELP_GROUPS = [
+  { key: "kj", label: "🧾 Панель KJ", sections: ["Заказы (доска по столам)", "Очередь стола и чеки"] },
+  { key: "add", label: "➕ Добавить", sections: ["Добавить песню"] },
+  { key: "msg", label: "✉️ Сообщения", sections: ["Сообщения"] },
+  { key: "settings", label: "⚙️ Настройки клуба", sections: ["Настройки клуба: Столы", "Категории", "VIP", "Гости"] },
+  { key: "general", label: "📘 Как устроена панель", sections: ["Как устроена панель"] },
+  { key: "bridge", label: "🔌 Мост и VirtualDJ", sections: ["Мост и VirtualDJ"] },
+  { key: "faq", label: "❓ Частые вопросы", sections: ["Частые вопросы"] },
+];
+
+function HelpPanel() {
+  const [groupKey, setGroupKey] = useState("kj");
+  const group = HELP_GROUPS.find((g) => g.key === groupKey) || HELP_GROUPS[0];
+  const shown = HELP_SECTIONS.filter((sec) => group.sections.includes(sec.title));
   return (
     <div className="help-panel">
       <h2>❓ Помощь по панели KJ</h2>
-      {HELP_SECTIONS.map((s) => (
-        <section key={s.title} id={"help-" + s.title} className="help-section">
-          <h3>{s.title}</h3>
-          {s.intro && <p className="empty-hint">{s.intro}</p>}
-          {s.items.length > 0 && (
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
+        {HELP_GROUPS.map((g) => (
+          <button
+            key={g.key}
+            type="button"
+            className={g.key === groupKey ? "btn btn--accent" : "btn"}
+            onClick={() => setGroupKey(g.key)}
+          >
+            {g.label}
+          </button>
+        ))}
+      </div>
+      {shown.map((sec) => (
+        <section key={sec.title} className="help-section">
+          <h3>{sec.title}</h3>
+          {sec.intro && <p className="empty-hint">{sec.intro}</p>}
+          {sec.items.length > 0 && (
             <ul className="help-list">
-              {s.items.map((it) => (
+              {sec.items.map((it) => (
                 <li key={it.name}><b>{it.name}</b> — {it.text}</li>
               ))}
             </ul>
