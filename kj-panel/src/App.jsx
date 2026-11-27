@@ -5993,7 +5993,16 @@ const HELP_GROUPS = [
   { key: "kj", label: "🧾 Панель KJ", sections: ["Заказы (доска по столам)", "Очередь стола и чеки"] },
   { key: "add", label: "➕ Добавить", sections: ["Добавить песню"] },
   { key: "msg", label: "✉️ Сообщения", sections: ["Сообщения"] },
-  { key: "settings", label: "⚙️ Настройки клуба", sections: ["Настройки клуба: Столы", "Категории", "VIP", "Гости"] },
+  {
+    key: "settings",
+    label: "⚙️ Настройки клуба",
+    subs: [
+      { key: "tables", label: "🪑 Столы", sections: ["Настройки клуба: Столы"] },
+      { key: "categories", label: "🎚 Категории", sections: ["Категории"] },
+      { key: "vip", label: "⭐ VIP", sections: ["VIP"] },
+      { key: "guests", label: "👥 Гости", sections: ["Гости"] },
+    ],
+  },
   { key: "general", label: "📘 Как устроена панель", sections: ["Как устроена панель"] },
   { key: "bridge", label: "🔌 Мост и VirtualDJ", sections: ["Мост и VirtualDJ"] },
   { key: "faq", label: "❓ Частые вопросы", sections: ["Частые вопросы"] },
@@ -6001,23 +6010,44 @@ const HELP_GROUPS = [
 
 function HelpPanel() {
   const [groupKey, setGroupKey] = useState("kj");
+  const [subKey, setSubKey] = useState("tables");
   const group = HELP_GROUPS.find((g) => g.key === groupKey) || HELP_GROUPS[0];
-  const shown = HELP_SECTIONS.filter((sec) => group.sections.includes(sec.title));
+  const subs = group.subs || null;
+  const activeSub = subs ? subs.find((x) => x.key === subKey) || subs[0] : null;
+  const shown = HELP_SECTIONS.filter((sec) => (activeSub ? activeSub.sections : group.sections).includes(sec.title));
+  const btnStyle = (active) => ({ className: active ? "btn btn--accent" : "btn" });
   return (
     <div className="help-panel">
       <h2>❓ Помощь по панели KJ</h2>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
         {HELP_GROUPS.map((g) => (
           <button
             key={g.key}
             type="button"
             className={g.key === groupKey ? "btn btn--accent" : "btn"}
-            onClick={() => setGroupKey(g.key)}
+            onClick={() => {
+              setGroupKey(g.key);
+              setSubKey("tables");
+            }}
           >
             {g.label}
           </button>
         ))}
       </div>
+      {subs && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16, paddingLeft: 12 }}>
+          {subs.map((x) => (
+            <button
+              key={x.key}
+              type="button"
+              className={activeSub && x.key === activeSub.key ? "btn btn--accent" : "btn"}
+              onClick={() => setSubKey(x.key)}
+            >
+              {x.label}
+            </button>
+          ))}
+        </div>
+      )}
       {shown.map((sec) => (
         <section key={sec.title} className="help-section">
           <h3>{sec.title}</h3>
