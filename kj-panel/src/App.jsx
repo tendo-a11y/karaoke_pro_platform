@@ -5985,69 +5985,130 @@ const HELP_SECTIONS = [
       { name: "Песни в чеке идут не по порядку", text: "в чеке песни идут по времени заказа." },
     ],
   },
+  {
+    title: "Гость: вход и стол",
+    intro: "Как гость попадает в приложение и садится за стол.",
+    items: [
+      { name: "Номер стола", text: "гость вводит номер стола, который написан на бумажке на столе, или спрашивает у диджея." },
+      { name: "Вход через Google", text: "можно войти через Google. Тогда избранное и история сохраняются на телефоне гостя." },
+      { name: "Вход без Google", text: "вход по номеру стола без регистрации. Заказывать можно и так." },
+      { name: "Язык", text: "переключатель RU / RO / EN / UA вверху приложения." },
+    ],
+  },
+  {
+    title: "Гость: заказ песни",
+    intro: "Как гость заказывает песню.",
+    items: [
+      { name: "Название и исполнитель", text: "гость вводит песню. Без исполнителя приложение попросит его добавить." },
+      { name: "Петь караоке", text: "обычное караоке, 35 лей." },
+      { name: "Слушать песню", text: "песня по ссылке YouTube, 100 лей. Гость открывает YouTube в браузере, копирует адрес песни и вставляет его в поле." },
+      { name: "Интеллектуальный поиск / Простой поиск", text: "интеллектуальный поиск сам подбирает песню, простой ищет по названию." },
+      { name: "Скриншот", text: "гость загружает скриншот песни, приложение её находит." },
+      { name: "Категория", text: "выбирается кнопкой. «Другая категория» возвращает весь список." },
+      { name: "Тон", text: "галочка, чтобы поменять тональность песни." },
+      { name: "Мои заказы", text: "все заказы гостя и их статус: принято, в очереди, спето. Виден номер в очереди." },
+    ],
+  },
+  {
+    title: "Гость: избранное и история",
+    intro: "Избранное и повтор песен.",
+    items: [
+      { name: "Избранное", text: "песни, которые можно заказать в один клик. Гость отмечает галочками несколько песен, нажимает «Заказать» у нужной и выбирает категорию. После «Петь караоке» список остаётся открытым, остальные песни можно заказать дальше." },
+      { name: "В избранное", text: "кнопка под заказом, чтобы сохранить песню в избранное." },
+      { name: "История", text: "заказы за прошлые дни, из них можно повторить песню." },
+      { name: "Удалить все не спетые", text: "убирает собственные заказы, которые ещё не спеты." },
+    ],
+  },
+  {
+    title: "Гость: чат, VIP и групповой стол",
+    intro: "Общение, VIP и сидение за общим столом.",
+    items: [
+      { name: "Чат с ведущим", text: "написать ведущему. Ответ придёт в этом же окне." },
+      { name: "Общий чат клуба", text: "общение гостей клуба." },
+      { name: "Стать VIP", text: "заявка на VIP. VIP платит за песню сразу после того, как ведущий отметил её «Готово»." },
+      { name: "Групповой стол", text: "присаживание за стол, за которым уже сидят. Если у клуба включено одобрение, нужно разрешение ведущего этого стола." },
+      { name: "Переместить", text: "гость может попросить перейти на другой стол." },
+      { name: "Профиль", text: "имя гостя и его фото." },
+    ],
+  },
 ];
 
 // ДОБАВЛЕНО (2026-11-26, запрос пользователя): раздел помощи по панели KJ.
-// ДОБАВЛЕНО (2026-11-27, запрос пользователя): кнопки помощи повторяют кнопки панели.
+// ДОБАВЛЕНО (2026-11-27, запрос пользователя): помощь повторяет кнопки панели KJ и панели гостя.
 const HELP_GROUPS = [
-  { key: "kj", label: "🧾 Панель KJ", sections: ["Заказы (доска по столам)", "Очередь стола и чеки"] },
-  { key: "add", label: "➕ Добавить", sections: ["Добавить песню"] },
-  { key: "msg", label: "✉️ Сообщения", sections: ["Сообщения"] },
   {
-    key: "settings",
-    label: "⚙️ Настройки клуба",
+    key: "kj",
+    label: "🧾 Панель KJ",
     subs: [
-      { key: "tables", label: "🪑 Столы", sections: ["Настройки клуба: Столы"] },
-      { key: "categories", label: "🎚 Категории", sections: ["Категории"] },
-      { key: "vip", label: "⭐ VIP", sections: ["VIP"] },
-      { key: "guests", label: "👥 Гости", sections: ["Гости"] },
+      { key: "orders", label: "← Заказы", sections: ["Заказы (доска по столам)", "Очередь стола и чеки"] },
+      { key: "add", label: "➕ Добавить", sections: ["Добавить песню"] },
+      { key: "msg", label: "✉️ Сообщения", sections: ["Сообщения"] },
+      {
+        key: "settings",
+        label: "⚙️ Настройки клуба",
+        subs: [
+          { key: "tables", label: "🪑 Столы", sections: ["Настройки клуба: Столы"] },
+          { key: "categories", label: "🎚 Категории", sections: ["Категории"] },
+          { key: "vip", label: "⭐ VIP", sections: ["VIP"] },
+          { key: "guests", label: "👥 Гости", sections: ["Гости"] },
+        ],
+      },
+      { key: "general", label: "📘 Как устроена панель", sections: ["Как устроена панель"] },
+      { key: "bridge", label: "🔌 Мост и VirtualDJ", sections: ["Мост и VirtualDJ"] },
+      { key: "faq", label: "❓ Частые вопросы", sections: ["Частые вопросы"] },
     ],
   },
-  { key: "general", label: "📘 Как устроена панель", sections: ["Как устроена панель"] },
-  { key: "bridge", label: "🔌 Мост и VirtualDJ", sections: ["Мост и VirtualDJ"] },
-  { key: "faq", label: "❓ Частые вопросы", sections: ["Частые вопросы"] },
+  {
+    key: "guest",
+    label: "📱 Панель Гость",
+    subs: [
+      { key: "gstart", label: "Вход и стол", sections: ["Гость: вход и стол"] },
+      { key: "gorder", label: "Заказ песни", sections: ["Гость: заказ песни"] },
+      { key: "gfav", label: "Избранное и история", sections: ["Гость: избранное и история"] },
+      { key: "gmore", label: "Чат, VIP и групповой стол", sections: ["Гость: чат, VIP и групповой стол"] },
+    ],
+  },
 ];
 
+function helpLevels(path) {
+  const levels = [];
+  let list = HELP_GROUPS;
+  let depth = 0;
+  let sections = [];
+  while (list) {
+    const pick = list.find((x) => x.key === path[depth]) || list[0];
+    levels.push({ list, pick });
+    if (pick.sections) sections = pick.sections;
+    list = pick.subs || null;
+    depth += 1;
+  }
+  return { levels, sections };
+}
+
 function HelpPanel() {
-  const [groupKey, setGroupKey] = useState("kj");
-  const [subKey, setSubKey] = useState("tables");
-  const group = HELP_GROUPS.find((g) => g.key === groupKey) || HELP_GROUPS[0];
-  const subs = group.subs || null;
-  const activeSub = subs ? subs.find((x) => x.key === subKey) || subs[0] : null;
-  const shown = HELP_SECTIONS.filter((sec) => (activeSub ? activeSub.sections : group.sections).includes(sec.title));
-  const btnStyle = (active) => ({ className: active ? "btn btn--accent" : "btn" });
+  const [path, setPath] = useState(["kj"]);
+  const { levels, sections } = helpLevels(path);
+  const shown = HELP_SECTIONS.filter((sec) => sections.includes(sec.title));
   return (
     <div className="help-panel">
-      <h2>❓ Помощь по панели KJ</h2>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
-        {HELP_GROUPS.map((g) => (
-          <button
-            key={g.key}
-            type="button"
-            className={g.key === groupKey ? "btn btn--accent" : "btn"}
-            onClick={() => {
-              setGroupKey(g.key);
-              setSubKey("tables");
-            }}
-          >
-            {g.label}
-          </button>
-        ))}
-      </div>
-      {subs && (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16, paddingLeft: 12 }}>
-          {subs.map((x) => (
+      <h2>❓ Помощь</h2>
+      {levels.map((lv, depth) => (
+        <div
+          key={depth}
+          style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 10, paddingLeft: depth * 12 }}
+        >
+          {lv.list.map((x) => (
             <button
               key={x.key}
               type="button"
-              className={activeSub && x.key === activeSub.key ? "btn btn--accent" : "btn"}
-              onClick={() => setSubKey(x.key)}
+              className={x.key === lv.pick.key ? "btn btn--accent" : "btn"}
+              onClick={() => setPath([...path.slice(0, depth), x.key])}
             >
               {x.label}
             </button>
           ))}
         </div>
-      )}
+      ))}
       {shown.map((sec) => (
         <section key={sec.title} className="help-section">
           <h3>{sec.title}</h3>
