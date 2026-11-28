@@ -6103,8 +6103,8 @@ function HelpPanel() {
             <button
               key={x.key}
               type="button"
-              className={x.key === lv.pick.key ? "btn btn--accent" : "btn"}
-              style={depth === 0 ? { borderColor: topColor(x.key), color: x.key === lv.pick.key ? "#1a1400" : topColor(x.key), background: x.key === lv.pick.key ? topColor(x.key) : "transparent", fontWeight: 700 } : undefined}
+              className="btn"
+              style={depth === 0 ? { borderColor: topColor(x.key), color: x.key === lv.pick.key ? "#1a1400" : topColor(x.key), background: x.key === lv.pick.key ? topColor(x.key) : "transparent", fontWeight: 700 } : x.key === lv.pick.key ? { borderColor: "#e8eaed", fontWeight: 700 } : undefined}
               onClick={() => setPath([...path.slice(0, depth), x.key])}
             >
               {x.label}
