@@ -6091,6 +6091,7 @@ function HelpPanel() {
   const shown = HELP_SECTIONS.filter((sec) => sections.includes(sec.title));
   // ДОБАВЛЕНО (2026-11-28): две главные кнопки помощи разного цвета — оранжевая «Панель KJ», синяя «Панель Гость».
   const topColor = (key) => (key === "guest" ? "#4da3ff" : "#ffb020");
+  const topTint = (key) => (key === "guest" ? "rgba(77, 163, 255, 0.16)" : "rgba(255, 176, 32, 0.16)");
   return (
     <div className="help-panel">
       <h2>❓ Помощь</h2>
@@ -6104,7 +6105,7 @@ function HelpPanel() {
               key={x.key}
               type="button"
               className="btn"
-              style={depth === 0 ? { borderColor: topColor(x.key), color: x.key === lv.pick.key ? "#1a1400" : topColor(x.key), background: x.key === lv.pick.key ? topColor(x.key) : "transparent", fontWeight: 700 } : x.key === lv.pick.key ? { borderColor: "#e8eaed", fontWeight: 700 } : undefined}
+              style={depth === 0 ? { borderColor: topColor(x.key), color: x.key === lv.pick.key ? "#1a1400" : topColor(x.key), background: x.key === lv.pick.key ? topColor(x.key) : topTint(x.key), fontWeight: 700, padding: "10px 16px", fontSize: 15 } : x.key === lv.pick.key ? { borderColor: "#e8eaed", fontWeight: 700 } : undefined}
               onClick={() => setPath([...path.slice(0, depth), x.key])}
             >
               {x.label}
